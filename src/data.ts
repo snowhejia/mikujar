@@ -4,6 +4,30 @@ function t(h: number, m: number) {
   return h * 60 + m;
 }
 
+/** 与 App 内 localDateString 一致：本地日历日，供侧栏月历聚合 */
+function addDays(base: Date, deltaDays: number): Date {
+  const d = new Date(base.getTime());
+  d.setDate(d.getDate() + deltaDays);
+  return d;
+}
+
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const now = new Date();
+/** 示例笔记落在「今天、昨天、近几天」，刷新页面会随真实日期平移 */
+const D0 = ymdLocal(now);
+const D1 = ymdLocal(addDays(now, -1));
+const D2 = ymdLocal(addDays(now, -2));
+const D3 = ymdLocal(addDays(now, -3));
+const D4 = ymdLocal(addDays(now, -4));
+const D5 = ymdLocal(addDays(now, -5));
+const D7 = ymdLocal(addDays(now, -7));
+
 /**
  * 内置示例：每张卡讲清一个功能；置顶为卷首语。
  * 侧栏另有「学习笔记 / 摘抄本 / 今日小记 / 兴趣爱好」示意用法。
@@ -23,6 +47,7 @@ export const collections: Collection[] = [
           {
             id: "intro-sub-am",
             minutesOfDay: t(9, 0),
+            addedOn: D4,
             text: "【子合集】左侧树形里点开本文件夹——子合集与顶级合集一样按时间线排卡片，只是多了一层归类，适合按场景、项目或心情拆分。",
             media: [
               {
@@ -45,6 +70,7 @@ export const collections: Collection[] = [
           {
             id: "intro-sub-pm",
             minutesOfDay: t(22, 30),
+            addedOn: D5,
             text: "【子合集】白天与夜晚、工作与私事各放一坑，切换文件夹就能换一副脑子看同一天的记录。",
             media: [
               {
@@ -68,6 +94,7 @@ export const collections: Collection[] = [
       {
         id: "intro-verse",
         minutesOfDay: t(5, 20),
+        addedOn: D0,
         pinned: true,
         text: "日子是散落的星子，拾进同一口罐里，便成了自己的银河。",
         media: [
@@ -80,22 +107,26 @@ export const collections: Collection[] = [
       {
         id: "intro-timeline",
         minutesOfDay: t(6, 0),
+        addedOn: D0,
         text: "【时间线】每条笔记落在「今天某一时刻」，像横格纸往下写，不必起标题。适合碎片：一句念头、半行待办、一阵路过的风。",
       },
       {
         id: "intro-pin",
         minutesOfDay: t(6, 2),
+        addedOn: D0,
         text: "【置顶】要紧的一条可钉在列表最上方（置顶区），与普通时间线隔开。卡片右上角「⋯」里可选「置顶 / 取消置顶」。",
       },
       {
         id: "intro-tags",
         minutesOfDay: t(6, 4),
+        addedOn: D0,
         text: "【标签】正文下方的标签单独录入；侧栏「标签」里点选即可筛选。本条带了两个示例标签。",
         tags: ["导览", "功能"],
       },
       {
         id: "intro-media",
         minutesOfDay: t(6, 6),
+        addedOn: D0,
         text: "【附件与轮播】多图会与视频、文件一起在右侧轮播；点缩略图可看大图或播放，底部圆点可切换。「⋯」里可继续添加附件或清空。",
         media: [
           {
@@ -144,38 +175,45 @@ export const collections: Collection[] = [
       {
         id: "intro-related-a",
         minutesOfDay: t(6, 8),
+        addedOn: D0,
         text: "【相关笔记】在「⋯」里打开「相关笔记」，可把其它卡片关联过来，侧栏里双向跳转、添加或解除。本条与下一条已互相关联。",
         relatedRefs: [{ colId: "c1", cardId: "intro-related-b" }],
       },
       {
         id: "intro-related-b",
         minutesOfDay: t(6, 10),
+        addedOn: D0,
         text: "【相关笔记】从侧栏点「查看」会跳到对应笔记；同一条可在多个关联里出现，适合把会议记录与后续跟进串在一起。",
         relatedRefs: [{ colId: "c1", cardId: "intro-related-a" }],
       },
       {
         id: "intro-links",
         minutesOfDay: t(6, 12),
+        addedOn: D0,
         text: "【正文链接】写下的 http(s) 或 www. 地址会变成可点链接，新标签页打开。未编辑时点正文区域进入书写，点链接则直接跳转。\n示例：https://developer.mozilla.org/zh-CN/",
       },
       {
         id: "intro-header-tools",
         minutesOfDay: t(6, 14),
+        addedOn: D1,
         text: "【顶栏图标】右侧放大镜展开搜索；加号即「新建小笔记」，记在当前合集并带上今日日期。正在搜索时也可以继续点加号新建。",
       },
       {
         id: "intro-search",
         minutesOfDay: t(6, 16),
+        addedOn: D1,
         text: "【搜索】可搜笔记正文、标签、附件显示名、合集名称等；结果里点「打开」会跳到对应合集。",
       },
       {
         id: "intro-calendar",
         minutesOfDay: t(6, 18),
-        text: "【日历】侧栏月历点某一天，只看那天写过的东西；未带日期的历史卡片不会出现在日历视图里，新建会自动打上今天。",
+        addedOn: D1,
+        text: "【日历】侧栏月历上有小记号的日期表示那天写过笔记；点某一天，主区只显示该日的卡片（按合集分组）。示例数据已写在「今天、昨天、近几日」，可点点看。",
       },
       {
         id: "intro-hint",
         minutesOfDay: t(6, 20),
+        addedOn: D1,
         text: "【合集说明】标题下面灰色小字就是本合集的说明（hint），双击可改成你自己的介绍——每个罐子都可以有一句开场白。",
       },
     ],
@@ -189,12 +227,14 @@ export const collections: Collection[] = [
       {
         id: "study-1",
         minutesOfDay: t(10, 5),
+        addedOn: D2,
         text: "【用法】上课或读书时先抓「此刻的结论」记下钟点，回去再整理大纲；不必同一天写完。",
         tags: ["方法"],
       },
       {
         id: "study-2",
         minutesOfDay: t(15, 40),
+        addedOn: D2,
         text: "欧拉公式把 e、i、π 系在一行：e^(iπ)+1=0——每次看到都觉得代数与几何在同一张纸上握手。",
         tags: ["数学", "摘抄"],
         media: [
@@ -219,6 +259,7 @@ export const collections: Collection[] = [
       {
         id: "quote-1",
         minutesOfDay: t(20, 15),
+        addedOn: D3,
         text: "「我们活过的刹那，前后皆是永夜。」——费尔南多·佩索阿（可换成你书架上那句）",
         media: [
           {
@@ -246,6 +287,7 @@ export const collections: Collection[] = [
       {
         id: "daily-1",
         minutesOfDay: t(12, 30),
+        addedOn: D0,
         text: "午饭锁定一家小面馆，酸汤开胃，窗外雨丝斜着打玻璃——今天适合慢半拍。",
         tags: ["生活"],
         media: [
@@ -278,6 +320,7 @@ export const collections: Collection[] = [
       {
         id: "hobby-1",
         minutesOfDay: t(18, 0),
+        addedOn: D3,
         text: "【吉他】新和弦 Fmaj7 总算按响了，指尖还疼，但扫下去那一下像在笑。",
         tags: ["音乐"],
         media: [
@@ -294,6 +337,7 @@ export const collections: Collection[] = [
       {
         id: "hobby-2",
         minutesOfDay: t(21, 10),
+        addedOn: D7,
         text: "本周画展「光影与城市」记得带广角；博物馆夜场周五开到九点。",
         tags: ["展览", "待办"],
         media: [

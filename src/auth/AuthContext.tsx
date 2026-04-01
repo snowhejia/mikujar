@@ -6,18 +6,31 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchAuthMe, fetchAuthStatus, loginWithPassword } from "../api/auth";
+import {
+  fetchAuthMe,
+  fetchAuthStatus,
+  loginWithCredentials,
+  type AuthUser,
+} from "../api/auth";
 import { clearAdminToken, getAdminToken, setAdminToken } from "./token";
 
 type AuthContextValue = {
   authReady: boolean;
   writeRequiresLogin: boolean;
+  /** 可编辑笔记、上传附件、管理用户 */
   isAdmin: boolean;
-  login: (password: string) => Promise<{ ok: boolean; error?: string }>;
+  /** 已登录用户信息（未启用登录或脚本模式时可能为 null） */
+  currentUser: AuthUser | null;
+  login: (
+    username: string,
+    password: string
+  ) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   openLogin: () => void;
   loginOpen: boolean;
   setLoginOpen: (open: boolean) => void;
+  /** 登录成功后刷新 /me（改头像后调用） */
+  refreshMe: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -27,8 +40,12 @@ function LoginModal({
   onLogin,
 }: {
   onClose: () => void;
-  onLogin: (password: string) => Promise<{ ok: boolean; error?: string }>;
+  onLogin: (
+    username: string,
+    password: string
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,9 +62,12 @@ function LoginModal({
     setError("");
     setBusy(true);
     try {
-      const r = await onLogin(password);
+      const r = await onLogin(username.trim(), password);
       if (!r.ok) setError(r.error ?? "登录失败");
-      else setPassword("");
+      else {
+        setPassword("");
+        setUsername("");
+      }
     } finally {
       setBusy(false);
     }
@@ -67,9 +87,23 @@ function LoginModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="auth-modal-title" className="auth-modal__title">
-          管理员登录
+          登录
         </h2>
-        <p className="auth-modal__hint">输入管理密码后可编辑并保存到服务器。</p>
+        <p className="auth-modal__hint">
+          使用管理员分配的账号登录。登录后笔记与附件仅保存在您的账号下；未登录时界面为本地示例模板，不会读取他人数据。管理员还可管理用户。
+        </p>
+        <input
+          type="text"
+          className="auth-modal__input"
+          autoComplete="username"
+          placeholder="用户名"
+          value={username}
+          disabled={busy}
+          onChange={(e) => setUsername(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
         <input
           type="password"
           className="auth-modal__input"
@@ -100,7 +134,7 @@ function LoginModal({
             type="button"
             className="auth-modal__btn auth-modal__btn--primary"
             onClick={() => void submit()}
-            disabled={busy || !password.trim()}
+            disabled={busy || !username.trim() || !password}
           >
             {busy ? "…" : "登录"}
           </button>
@@ -114,26 +148,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [writeRequiresLogin, setWriteRequiresLogin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+
+  const refreshMe = useCallback(async () => {
+    if (!writeRequiresLogin) return;
+    const me = await fetchAuthMe();
+    if (me.ok && me.user) {
+      setCurrentUser(me.user);
+      setIsAdmin(me.admin);
+    }
+  }, [writeRequiresLogin]);
 
   const refreshSession = useCallback(async () => {
     const status = await fetchAuthStatus();
     setWriteRequiresLogin(status.writeRequiresLogin);
     if (!status.writeRequiresLogin) {
       setIsAdmin(true);
+      setCurrentUser(null);
       setAuthReady(true);
       return;
     }
     const token = getAdminToken();
     if (!token) {
       setIsAdmin(false);
+      setCurrentUser(null);
       setAuthReady(true);
       return;
     }
-    const ok = await fetchAuthMe();
-    if (ok) setIsAdmin(true);
-    else {
+    const me = await fetchAuthMe();
+    if (me.ok && me.user) {
+      setCurrentUser(me.user);
+      setIsAdmin(me.admin);
+    } else {
       clearAdminToken();
+      setCurrentUser(null);
       setIsAdmin(false);
     }
     setAuthReady(true);
@@ -143,18 +192,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshSession();
   }, [refreshSession]);
 
-  const login = useCallback(async (password: string) => {
-    const r = await loginWithPassword(password);
-    if (!r.ok) return { ok: false, error: r.error };
-    setAdminToken(r.token);
-    setIsAdmin(true);
-    setLoginOpen(false);
-    return { ok: true };
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const r = await loginWithCredentials(username, password);
+      if (!r.ok) return { ok: false, error: r.error };
+      setAdminToken(r.token);
+      setCurrentUser(r.user);
+      setIsAdmin(r.user.role === "admin");
+      setLoginOpen(false);
+      return { ok: true };
+    },
+    []
+  );
 
   const logout = useCallback(() => {
     clearAdminToken();
-    if (writeRequiresLogin) setIsAdmin(false);
+    if (writeRequiresLogin) {
+      setIsAdmin(false);
+      setCurrentUser(null);
+    }
     setLoginOpen(false);
   }, [writeRequiresLogin]);
 
@@ -162,11 +218,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authReady,
     writeRequiresLogin,
     isAdmin,
+    currentUser,
     login,
     logout,
     openLogin: () => setLoginOpen(true),
     loginOpen,
     setLoginOpen,
+    refreshMe,
   };
 
   return (

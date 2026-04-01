@@ -1,6 +1,6 @@
 import COS from "cos-nodejs-sdk-v5";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { dirname } from "path";
+import { dirname, join } from "path";
 
 /** 四项齐全时使用 COS，否则回退本地 DATA_FILE */
 export function storageMode() {
@@ -36,6 +36,26 @@ function cosRegion() {
 
 function cosObjectKey() {
   return process.env.COS_KEY?.trim() || "mikujar/collections.json";
+}
+
+/** 多用户模式下每条笔记 JSON 的对象键前缀（实际文件为 {prefix}/{userId}.json） */
+export function collectionsCosPrefix() {
+  return (
+    process.env.COS_COLLECTIONS_PREFIX?.trim() || "mikujar/collections"
+  ).replace(/\/$/, "");
+}
+
+function sanitizeUserId(userId) {
+  const s = String(userId ?? "").trim();
+  if (!/^[a-zA-Z0-9._-]+$/.test(s)) {
+    throw new Error("无效的用户 id");
+  }
+  return s;
+}
+
+export function collectionsObjectKeyForUser(userId) {
+  const uid = sanitizeUserId(userId);
+  return `${collectionsCosPrefix()}/${uid}.json`;
 }
 
 function isCosNotFound(err) {
@@ -114,9 +134,82 @@ export async function writeCollectionsRaw(localDataFile, jsonUtf8) {
   await writeFile(localDataFile, jsonUtf8, "utf8");
 }
 
+/**
+ * 按用户读取笔记 JSON（COS：`COS_COLLECTIONS_PREFIX`/`{userId}.json`；本地：`{dir}/{userId}.json`）
+ */
+export async function readCollectionsForUser(userId, localCollectionsDir) {
+  const uid = sanitizeUserId(userId);
+  if (storageMode() === "cos") {
+    const key = collectionsObjectKeyForUser(uid);
+    const cos = getCos();
+    const params = {
+      Bucket: cosBucket(),
+      Region: cosRegion(),
+      Key: key,
+    };
+    return new Promise((resolve, reject) => {
+      cos.getObject(params, (err, data) => {
+        if (err) {
+          if (isCosNotFound(err)) {
+            resolve(null);
+            return;
+          }
+          reject(err);
+          return;
+        }
+        try {
+          resolve(bodyToUtf8(data.Body));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  }
+
+  const path = join(localCollectionsDir, `${uid}.json`);
+  try {
+    return await readFile(path, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+/**
+ * 按用户写入笔记 JSON
+ */
+export async function writeCollectionsForUser(
+  userId,
+  localCollectionsDir,
+  jsonUtf8
+) {
+  const uid = sanitizeUserId(userId);
+  if (storageMode() === "cos") {
+    const key = collectionsObjectKeyForUser(uid);
+    const cos = getCos();
+    const params = {
+      Bucket: cosBucket(),
+      Region: cosRegion(),
+      Key: key,
+      Body: Buffer.from(jsonUtf8, "utf8"),
+      ContentType: "application/json; charset=utf-8",
+    };
+    return new Promise((resolve, reject) => {
+      cos.putObject(params, (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    });
+  }
+
+  const path = join(localCollectionsDir, `${uid}.json`);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, jsonUtf8, "utf8");
+}
+
 export function storageLogHint() {
   if (storageMode() === "cos") {
-    return `cos: ${cosBucket()} / ${cosObjectKey()} (${cosRegion()})`;
+    return `cos: ${cosBucket()} / ${cosObjectKey()} legacy + ${collectionsCosPrefix()}/*.json per user (${cosRegion()})`;
   }
   return null;
 }

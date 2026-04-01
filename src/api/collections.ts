@@ -6,9 +6,16 @@ function apiBase(): string {
   return b?.replace(/\/$/, "") ?? "";
 }
 
-/** GET 合集公开，无需凭证 */
+/** GET：多用户模式下需携带登录 JWT（或脚本用的 API_TOKEN + 服务端要求的 userId） */
 function buildHeadersGet(): Record<string, string> {
-  return {};
+  const h: Record<string, string> = {};
+  const token = getAdminToken();
+  if (token) h.Authorization = `Bearer ${token}`;
+  else {
+    const t = (import.meta.env.VITE_API_TOKEN as string | undefined)?.trim();
+    if (t) h.Authorization = `Bearer ${t}`;
+  }
+  return h;
 }
 
 /** PUT：优先会话中的管理员 JWT，其次兼容 VITE_API_TOKEN */

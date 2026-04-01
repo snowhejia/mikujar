@@ -304,6 +304,12 @@
   opacity: 0.5;
 }
 
+.sidebar__tree-row--note-card-drop {
+  background: rgba(59, 130, 246, 0.1);
+  outline: 2px dashed rgba(59, 130, 246, 0.55);
+  outline-offset: -2px;
+}
+
 .sidebar__tree-row--drop-before::before {
   content: "";
   position: absolute;
@@ -674,13 +680,14 @@ textarea.main__hint-editor:focus {
   color: rgba(55, 53, 47, 0.45);
 }
 
+/* 与 .cards 的 gap 一致：避免「同一时间块内」仅 gap，「相邻时间块」却多出一大段 padding 的视觉落差 */
 .timeblock {
-  padding-bottom: 1.5rem;
+  padding-bottom: 0;
   min-width: 0;
 }
 
-.timeblock:last-child {
-  padding-bottom: 0;
+.timeblock + .timeblock {
+  margin-top: 0.75rem;
 }
 
 .cards {
@@ -731,6 +738,41 @@ textarea.main__hint-editor:focus {
 
 .card__inner--split {
   align-items: stretch;
+}
+
+.card__move-rail {
+  flex: 0 0 30px;
+  align-self: stretch;
+  min-height: 100%;
+  background: rgba(55, 53, 47, 0.04);
+  border-right: 1px solid rgba(60, 60, 67, 0.08);
+  border-radius: 12px 0 0 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.card__move-rail:active {
+  cursor: grabbing;
+}
+
+.card--note-dragging {
+  opacity: 0.42;
+}
+
+.card--note-drop-before {
+  box-shadow: inset 0 3px 0 0 rgba(59, 130, 246, 0.85);
+}
+
+.card--note-drop-after {
+  box-shadow: inset 0 -3px 0 0 rgba(59, 130, 246, 0.85);
+}
+
+.card__paper--with-move-rail:not(.card__paper--with-gallery) {
+  border-radius: 0 12px 12px 0;
+}
+
+.card__paper--with-move-rail.card__paper--with-gallery {
+  border-radius: 0;
 }
 
 /* 顶栏固定一行格高，与背景横线周期严格对齐 */
@@ -1557,4 +1599,263 @@ textarea.card__text--readonly {
   .main {
     padding: 1.25rem 1rem 1rem;
   }
+}
+
+.sidebar__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar__users-btn {
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.72);
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.sidebar__users-btn:hover {
+  background: rgba(55, 53, 47, 0.06);
+  border-color: rgba(55, 53, 47, 0.22);
+}
+
+.sidebar__workspace-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sidebar__workspace-sub {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(55, 53, 47, 0.45);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__avatar-hit {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar__avatar-hit--busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.sidebar__avatar-hit:has(.sidebar__avatar-file:disabled) {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.sidebar__avatar-file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0;
+}
+
+.sidebar__avatar-file:disabled {
+  cursor: not-allowed;
+}
+
+.sidebar__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.sidebar__workspace-dot--avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+.sidebar__flash {
+  margin: 6px 8px 0;
+  padding: 0;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.user-admin-modal {
+  max-width: min(560px, calc(100vw - 2rem));
+  max-height: min(85vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.user-admin__new {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.1);
+}
+
+.user-admin__new-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #37352f;
+}
+
+.user-admin__new-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.user-admin__role-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.user-admin__role-select {
+  min-width: 8rem;
+  padding: 8px 10px;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.user-admin__role-select--inline {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 0.8125rem;
+}
+
+/* 勿用 flex:1：会把区域撑满弹窗，行数少时最后一行与「关闭」之间出现大块空白 */
+.user-admin__table-wrap {
+  flex: 0 1 auto;
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  margin: 0 -4px;
+  padding: 0 4px 0;
+}
+
+.user-admin__loading {
+  margin: 0;
+  font-size: 0.875rem;
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.user-admin__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+/* 表头与数据行统一纵向 padding，横线与上下文字的间距一致 */
+.user-admin__table th,
+.user-admin__table td {
+  text-align: left;
+  padding: 9px 8px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
+  vertical-align: middle;
+  line-height: 1.35;
+}
+
+.user-admin__table th {
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.5);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.user-admin__mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+/* 勿在 td 上 display:flex，会破坏行高与横线对齐；用内层包裹 */
+.user-admin__pwd-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.user-admin__pwd-input {
+  width: 6.5rem;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.user-admin__mini-btn {
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: rgba(55, 53, 47, 0.75);
+  white-space: nowrap;
+}
+
+.user-admin__mini-btn:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.user-admin__mini-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.user-admin__mini-btn--danger {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.25);
+}
+
+.user-admin__mini-btn--danger:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.06);
+}
+
+/* 表格末行已有底边线，此处只留窄间距，避免「线下空白」堆叠 */
+.user-admin-modal .auth-modal__actions {
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+  padding-top: 0.45rem;
+  border-top: none;
 }

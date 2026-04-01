@@ -1,6 +1,13 @@
 import { randomBytes } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { basename, join } from "path";
+
+/** @param {string | undefined | null} userId */
+function mediaPathSegment(userId) {
+  if (userId == null || userId === "") return null;
+  const s = String(userId).replace(/[^a-zA-Z0-9._-]/g, "_");
+  return s.length > 0 ? s : null;
+}
 import { parseBuffer } from "music-metadata";
 import {
   buildObjectPublicUrl,
@@ -130,7 +137,10 @@ async function tryExtractEmbeddedAudioCover(buffer, mimeType) {
   }
 }
 
-/** @param {{ buffer: Buffer; mimetype: string; originalname?: string }} file */
+/**
+ * @param {{ buffer: Buffer; mimetype: string; originalname?: string }} file
+ * @param {{ publicUploadsDir: string; userId?: string | null }} opts
+ */
 export async function saveUploadedMedia(file, opts) {
   const mimetype = normalizeMime(file.mimetype);
   const ext = extForStoredFile(mimetype, file.originalname);
@@ -139,6 +149,12 @@ export async function saveUploadedMedia(file, opts) {
   const kind = kindFromMime(mimetype);
   /** 对象键仍用随机名；前端用 name 展示原始文件名 */
   const name = attachmentDisplayName(file.originalname);
+  const sub = mediaPathSegment(opts.userId);
+  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const localBase = sub
+    ? join(opts.publicUploadsDir, sub)
+    : opts.publicUploadsDir;
+  const urlSub = sub ? `${sub}/` : "";
 
   let coverUrl;
   if (kind === "audio") {
@@ -146,28 +162,28 @@ export async function saveUploadedMedia(file, opts) {
     if (cover) {
       const coverFilename = `${token}-cover.${cover.ext}`;
       if (isCosConfigured()) {
-        const coverKey = `${mediaPrefix()}/${coverFilename}`;
+        const coverKey = `${cosSub}/${coverFilename}`;
         await putCosPublicObject(coverKey, cover.buffer, cover.mimeType);
         coverUrl = buildObjectPublicUrl(coverKey);
       } else {
-        await mkdir(opts.publicUploadsDir, { recursive: true });
-        const coverPath = join(opts.publicUploadsDir, coverFilename);
+        await mkdir(localBase, { recursive: true });
+        const coverPath = join(localBase, coverFilename);
         await writeFile(coverPath, cover.buffer);
-        coverUrl = `/uploads/${coverFilename}`;
+        coverUrl = `/uploads/${urlSub}${coverFilename}`;
       }
     }
   }
 
   if (isCosConfigured()) {
-    const key = `${mediaPrefix()}/${filename}`;
+    const key = `${cosSub}/${filename}`;
     await putCosPublicObject(key, file.buffer, mimetype);
     const url = buildObjectPublicUrl(key);
     return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
   }
 
-  await mkdir(opts.publicUploadsDir, { recursive: true });
-  const diskPath = join(opts.publicUploadsDir, filename);
+  await mkdir(localBase, { recursive: true });
+  const diskPath = join(localBase, filename);
   await writeFile(diskPath, file.buffer);
-  const url = `/uploads/${filename}`;
+  const url = `/uploads/${urlSub}${filename}`;
   return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
 }

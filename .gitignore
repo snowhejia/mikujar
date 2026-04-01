@@ -7,3 +7,7 @@ server/public
 *.local
 .DS_Store
 *.tsbuildinfo
+
+# 本地多用户数据（勿提交密码哈希与各用户笔记 JSON）
+server/data/users.json
+server/data/collections/

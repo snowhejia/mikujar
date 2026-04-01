@@ -18,6 +18,15 @@ import { createPortal } from "react-dom";
 import { fetchApiHealth } from "./api/health";
 import { fetchCollectionsFromApi, saveCollectionsToApi } from "./api/collections";
 import { uploadCardMedia } from "./api/upload";
+import { resolveMediaUrl } from "./api/auth";
+import {
+  createUserApi,
+  deleteUserApi,
+  fetchUsersList,
+  updateUserApi,
+  uploadMyAvatar,
+  type PublicUser,
+} from "./api/users";
 import { useAuth } from "./auth/AuthContext";
 import { collections as initialCollections } from "./data";
 import type {
@@ -32,8 +41,9 @@ import "./App.css";
 const DEFAULT_COLLECTION_HINT =
   "欢迎使用 mikujar「未来罐」—— 按一天里的时刻收纳零碎笔记。";
 
-/** 固定 id：今日新建小笔记默认落入此合集 */
-const INBOX_COLLECTION_ID = "inbox";
+function cloneInitialCollections(): Collection[] {
+  return structuredClone(initialCollections) as Collection[];
+}
 
 function localDateString(d = new Date()): string {
   const y = d.getFullYear();
@@ -50,25 +60,6 @@ function walkCollections(
     visit(c);
     if (c.children?.length) walkCollections(c.children, visit);
   }
-}
-
-/** 根级若无收集箱则插入；若收集箱不在首位则提到最前 */
-function ensureInboxFirst(cols: Collection[]): Collection[] {
-  const rootInboxIdx = cols.findIndex((c) => c.id === INBOX_COLLECTION_ID);
-  if (rootInboxIdx >= 0) {
-    if (rootInboxIdx === 0) return cols;
-    const copy = [...cols];
-    const [inb] = copy.splice(rootInboxIdx, 1);
-    return [inb, ...copy];
-  }
-  const inbox: Collection = {
-    id: INBOX_COLLECTION_ID,
-    name: "收集箱",
-    dotColor: "#64748b",
-    blocks: [],
-    hint: "今日随手记默认落在这里；可用侧栏日历查看某天新增的笔记块，再整理到其他合集。",
-  };
-  return [inbox, ...cols];
 }
 
 function collectBlocksOnDate(
@@ -218,6 +209,164 @@ function insertChildCollection(
     }
     return c;
   });
+}
+
+/** 从合集中取出一张小笔记卡片（源时间块若空则删除） */
+function extractCardFromCollections(
+  cols: Collection[],
+  colId: string,
+  blockId: string,
+  cardId: string
+): { next: Collection[]; card: NoteCard | null } {
+  let extracted: NoteCard | null = null;
+  const next = mapCollectionById(cols, colId, (col) => {
+    const newBlocks = col.blocks
+      .map((b) => {
+        if (b.id !== blockId) return b;
+        const idx = b.cards.findIndex((c) => c.id === cardId);
+        if (idx < 0) return b;
+        extracted = b.cards[idx];
+        const newCards = b.cards.filter((c) => c.id !== cardId);
+        return { ...b, cards: newCards };
+      })
+      .filter((b) => b.cards.length > 0);
+    return { ...col, blocks: newBlocks };
+  });
+  return { next, card: extracted };
+}
+
+function insertCardRelativeTo(
+  cols: Collection[],
+  colId: string,
+  blockId: string,
+  card: NoteCard,
+  anchorCardId: string,
+  place: "before" | "after"
+): Collection[] {
+  return mapCollectionById(cols, colId, (col) => ({
+    ...col,
+    blocks: col.blocks.map((b) => {
+      if (b.id !== blockId) return b;
+      const cards = [...b.cards];
+      const ai = cards.findIndex((c) => c.id === anchorCardId);
+      if (ai < 0) return { ...b, cards: [...cards, card] };
+      const insertIdx = place === "before" ? ai : ai + 1;
+      cards.splice(insertIdx, 0, card);
+      return { ...b, cards };
+    }),
+  }));
+}
+
+type NoteCardDragPayload = {
+  colId: string;
+  blockId: string;
+  cardId: string;
+};
+
+type NoteCardDropTarget =
+  | { type: "before"; colId: string; blockId: string; cardId: string }
+  | { type: "after"; colId: string; blockId: string; cardId: string }
+  | { type: "collection"; colId: string };
+
+const NOTE_CARD_DRAG_MIME = "application/x-mikujar-note-card";
+const NOTE_CARD_TEXT_PREFIX = "mikujar-note-card:";
+
+function noteCardDragTypesInclude(dt: DataTransfer): boolean {
+  const want = NOTE_CARD_DRAG_MIME.toLowerCase();
+  return [...dt.types].some((t) => t.toLowerCase() === want);
+}
+
+function readNoteCardDragPayload(e: DragEvent): NoteCardDragPayload | null {
+  const dt = e.dataTransfer;
+  let raw =
+    dt.getData(NOTE_CARD_DRAG_MIME) || dt.getData("text/plain");
+  if (!raw) return null;
+  if (raw.startsWith(NOTE_CARD_TEXT_PREFIX)) {
+    raw = raw.slice(NOTE_CARD_TEXT_PREFIX.length);
+  }
+  try {
+    const o = JSON.parse(raw) as NoteCardDragPayload;
+    if (o?.colId && o?.blockId && o?.cardId) return o;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function applyNoteCardDrop(
+  prev: Collection[],
+  from: NoteCardDragPayload,
+  to: NoteCardDropTarget
+): Collection[] {
+  if (
+    to.type !== "collection" &&
+    from.colId === to.colId &&
+    from.blockId === to.blockId &&
+    (to.type === "before" || to.type === "after") &&
+    from.cardId === to.cardId
+  ) {
+    return prev;
+  }
+  const fromCol = findCollectionById(prev, from.colId);
+  const fromBlock = fromCol?.blocks.find((b) => b.id === from.blockId);
+  if (!fromBlock) return prev;
+
+  const { next, card } = extractCardFromCollections(
+    prev,
+    from.colId,
+    from.blockId,
+    from.cardId
+  );
+  if (!card) return prev;
+
+  if (to.type === "collection") {
+    if (from.colId === to.colId) return prev;
+    return appendBlockWithCard(
+      next,
+      to.colId,
+      card,
+      fromBlock.minutesOfDay,
+      fromBlock.addedOn
+    );
+  }
+  if (to.type === "before") {
+    return insertCardRelativeTo(
+      next,
+      to.colId,
+      to.blockId,
+      card,
+      to.cardId,
+      "before"
+    );
+  }
+  return insertCardRelativeTo(
+    next,
+    to.colId,
+    to.blockId,
+    card,
+    to.cardId,
+    "after"
+  );
+}
+
+function appendBlockWithCard(
+  cols: Collection[],
+  colId: string,
+  card: NoteCard,
+  minutesOfDay: number,
+  addedOn?: string
+): Collection[] {
+  const uid = `b-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const newBlock: NoteBlock = {
+    id: uid,
+    minutesOfDay,
+    ...(addedOn ? { addedOn } : {}),
+    cards: [card],
+  };
+  return mapCollectionById(cols, colId, (col) => ({
+    ...col,
+    blocks: [...col.blocks, newBlock],
+  }));
 }
 
 const COLLECTION_DRAG_MIME = "application/x-note-collection";
@@ -507,42 +656,6 @@ function fileLabelFromUrl(url: string): string {
   } catch {
     return "文件";
   }
-}
-
-/** 按后缀与常见图床推断类型；否则视为普通文件并带展示名 */
-function guessMediaFromUrl(href: string): NoteMediaItem {
-  const path = href.trim().split(/[?#]/)[0].toLowerCase();
-  let host = "";
-  try {
-    host = new URL(href).hostname.toLowerCase();
-  } catch {
-    /* ignore */
-  }
-
-  if (
-    /\.(mp3|m4a|aac|wav|flac|opus|oga|ogg)(\b|\/|$)/i.test(path)
-  ) {
-    return { kind: "audio", url: href };
-  }
-  if (/\.(mp4|webm|ogv|mov|m4v)(\b|\/|$)/i.test(path)) {
-    return { kind: "video", url: href };
-  }
-  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)(\b|\/|$)/i.test(path)) {
-    return { kind: "image", url: href };
-  }
-  if (
-    host.includes("picsum.photos") ||
-    host.includes("unsplash.com") ||
-    host === "i.imgur.com" ||
-    host === "imgur.com" ||
-    host === "www.imgur.com" ||
-    host.endsWith(".imgur.com")
-  ) {
-    return { kind: "image", url: href };
-  }
-
-  const name = fileLabelFromUrl(href);
-  return { kind: "file", url: href, name };
 }
 
 function FileDocIcon({ className }: { className?: string }) {
@@ -1078,13 +1191,26 @@ function CardGallery({
 }
 
 export default function App() {
-  const { isAdmin, authReady, writeRequiresLogin, openLogin, logout } =
-    useAuth();
+  const {
+    isAdmin,
+    authReady,
+    writeRequiresLogin,
+    openLogin,
+    logout,
+    currentUser,
+    refreshMe,
+  } = useAuth();
+
+  const canEdit = useMemo(
+    () => !writeRequiresLogin || Boolean(currentUser),
+    [writeRequiresLogin, currentUser]
+  );
+
   const [collections, setCollections] = useState<Collection[]>(() =>
-    ensureInboxFirst(initialCollections)
+    cloneInitialCollections()
   );
   const [activeId, setActiveId] = useState(
-    () => ensureInboxFirst(initialCollections)[0]?.id ?? ""
+    () => initialCollections[0]?.id ?? ""
   );
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => {
@@ -1132,12 +1258,233 @@ export default function App() {
     null
   );
   const [cardDragOverId, setCardDragOverId] = useState<string | null>(null);
+  /** 正在拖动的小笔记（左侧条），用于半透明与清理放置高亮 */
+  const [draggingNoteCardKey, setDraggingNoteCardKey] = useState<
+    string | null
+  >(null);
+  type CardDropMarker = {
+    colId: string;
+    blockId: string;
+    cardId: string;
+    before: boolean;
+  };
+  const [cardDropMarker, setCardDropMarker] =
+    useState<CardDropMarker | null>(null);
+  const [noteCardDropCollectionId, setNoteCardDropCollectionId] = useState<
+    string | null
+  >(null);
   const cardMediaUploadTargetRef = useRef<{
     colId: string;
     blockId: string;
     cardId: string;
   } | null>(null);
   const cardMediaFileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  /** 小笔记拖动会话：供 dragOver 识别（部分浏览器 types 不可靠） */
+  const noteCardDragActiveRef = useRef(false);
+
+  const [userAdminOpen, setUserAdminOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<PublicUser[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [adminUsersErr, setAdminUsersErr] = useState<string | null>(null);
+  const [newUserUsername, setNewUserUsername] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserDisplayName, setNewUserDisplayName] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"admin" | "user">("user");
+  const [newUserBusy, setNewUserBusy] = useState(false);
+  const [userAdminFormErr, setUserAdminFormErr] = useState<string | null>(
+    null
+  );
+  const [pwdResetByUser, setPwdResetByUser] = useState<Record<string, string>>(
+    {}
+  );
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userAdminOpen || !isAdmin) return;
+    let cancelled = false;
+    setAdminUsersLoading(true);
+    setAdminUsersErr(null);
+    void fetchUsersList()
+      .then((list) => {
+        if (!cancelled) setAdminUsers(list);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setAdminUsersErr(
+            e instanceof Error ? e.message : "无法加载用户列表"
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAdminUsersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userAdminOpen, isAdmin]);
+
+  useEffect(() => {
+    if (!userAdminOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserAdminOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [userAdminOpen]);
+
+  useEffect(() => {
+    if (!sidebarFlash) return;
+    const t = window.setTimeout(() => setSidebarFlash(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [sidebarFlash]);
+
+  const reloadAdminUsers = useCallback(async () => {
+    try {
+      const list = await fetchUsersList();
+      setAdminUsers(list);
+      setAdminUsersErr(null);
+    } catch (e: unknown) {
+      setAdminUsersErr(
+        e instanceof Error ? e.message : "无法加载用户列表"
+      );
+    }
+  }, []);
+
+  const onAvatarFileChange = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file || !writeRequiresLogin) return;
+      if (!mediaUploadMode) {
+        setSidebarFlash(
+          "头像上传需开启服务端媒体存储（COS 或本地 public 目录）"
+        );
+        return;
+      }
+      setAvatarBusy(true);
+      setSidebarFlash(null);
+      try {
+        await uploadMyAvatar(file);
+        await refreshMe();
+        setSidebarFlash("头像已更新");
+      } catch (err: unknown) {
+        setSidebarFlash(
+          err instanceof Error ? err.message : "头像上传失败"
+        );
+      } finally {
+        setAvatarBusy(false);
+      }
+    },
+    [writeRequiresLogin, mediaUploadMode, refreshMe]
+  );
+
+  const submitNewUser = useCallback(async () => {
+    setUserAdminFormErr(null);
+    const u = newUserUsername.trim();
+    const p = newUserPassword;
+    if (!u || !p) {
+      setUserAdminFormErr("请填写用户名与密码");
+      return;
+    }
+    setNewUserBusy(true);
+    try {
+      await createUserApi({
+        username: u,
+        password: p,
+        displayName: newUserDisplayName.trim() || u,
+        role: newUserRole,
+      });
+      setNewUserUsername("");
+      setNewUserPassword("");
+      setNewUserDisplayName("");
+      setNewUserRole("user");
+      await reloadAdminUsers();
+    } catch (e: unknown) {
+      setUserAdminFormErr(
+        e instanceof Error ? e.message : "创建用户失败"
+      );
+    } finally {
+      setNewUserBusy(false);
+    }
+  }, [
+    newUserUsername,
+    newUserPassword,
+    newUserDisplayName,
+    newUserRole,
+    reloadAdminUsers,
+  ]);
+
+  const onDeleteUser = useCallback(
+    async (u: PublicUser) => {
+      if (!window.confirm(`确定删除用户「${u.username}」？`)) return;
+      setRowBusyId(u.id);
+      setUserAdminFormErr(null);
+      try {
+        await deleteUserApi(u.id);
+        if (currentUser?.id === u.id) {
+          logout();
+          setUserAdminOpen(false);
+        } else {
+          await reloadAdminUsers();
+        }
+      } catch (e: unknown) {
+        setUserAdminFormErr(
+          e instanceof Error ? e.message : "删除失败"
+        );
+      } finally {
+        setRowBusyId(null);
+      }
+    },
+    [currentUser?.id, logout, reloadAdminUsers]
+  );
+
+  const onRoleChange = useCallback(
+    async (u: PublicUser, role: "admin" | "user") => {
+      if (u.role === role) return;
+      setRowBusyId(u.id);
+      setUserAdminFormErr(null);
+      try {
+        await updateUserApi(u.id, { role });
+        await reloadAdminUsers();
+        if (currentUser?.id === u.id) await refreshMe();
+      } catch (e: unknown) {
+        setUserAdminFormErr(
+          e instanceof Error ? e.message : "更新角色失败"
+        );
+      } finally {
+        setRowBusyId(null);
+      }
+    },
+    [currentUser?.id, refreshMe, reloadAdminUsers]
+  );
+
+  const applyPasswordReset = useCallback(
+    async (u: PublicUser) => {
+      const pwd = (pwdResetByUser[u.id] ?? "").trim();
+      if (pwd.length < 4) {
+        setUserAdminFormErr("新密码至少 4 位");
+        return;
+      }
+      setRowBusyId(u.id);
+      setUserAdminFormErr(null);
+      try {
+        await updateUserApi(u.id, { password: pwd });
+        setPwdResetByUser((prev) => ({ ...prev, [u.id]: "" }));
+        setUserAdminFormErr(null);
+        await reloadAdminUsers();
+      } catch (e: unknown) {
+        setUserAdminFormErr(
+          e instanceof Error ? e.message : "重置密码失败"
+        );
+      } finally {
+        setRowBusyId(null);
+      }
+    },
+    [pwdResetByUser, reloadAdminUsers]
+  );
 
   useEffect(() => {
     const clear = () => setCardDragOverId(null);
@@ -1146,12 +1493,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
     (async () => {
-      const [data, health] = await Promise.all([
-        fetchCollectionsFromApi(),
-        fetchApiHealth(),
-      ]);
+      const health = await fetchApiHealth();
       if (cancelled) return;
       const mu = health?.mediaUpload;
       if (mu === "cos" || mu === "local") {
@@ -1159,26 +1504,44 @@ export default function App() {
       } else {
         setMediaUploadMode(null);
       }
+      const online = Boolean(health?.ok);
+      if (writeRequiresLogin && !currentUser) {
+        setCollections(cloneInitialCollections());
+        setLoadError(null);
+        setSaveError(null);
+        setApiOnline(online);
+        setRemoteLoaded(true);
+        return;
+      }
+      const data = await fetchCollectionsFromApi();
+      if (cancelled) return;
       if (data !== null) {
-        if (data.length > 0) {
-          setCollections(ensureInboxFirst(data));
-        }
+        setCollections(data);
         setApiOnline(true);
+        setLoadError(null);
       } else {
-        setLoadError(
-          "无法连接服务器，已使用本地示例；启动后端（见项目说明）后刷新即可同步。"
-        );
+        if (writeRequiresLogin && currentUser) {
+          setLoadError(
+            "无法加载您的笔记，请检查网络或重新登录。"
+          );
+          setCollections([]);
+        } else {
+          setLoadError(
+            "无法连接服务器，已使用本地示例；启动后端（见项目说明）后刷新即可同步。"
+          );
+          setApiOnline(online);
+        }
       }
       setRemoteLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authReady, writeRequiresLogin, currentUser?.id]);
 
   useEffect(() => {
     if (!remoteLoaded || !apiOnline || !authReady) return;
-    if (writeRequiresLogin && !isAdmin) return;
+    if (writeRequiresLogin && !currentUser) return;
     const id = window.setTimeout(() => {
       void saveCollectionsToApi(collections).then((ok) => {
         setSaveError(
@@ -1193,7 +1556,7 @@ export default function App() {
     apiOnline,
     authReady,
     writeRequiresLogin,
-    isAdmin,
+    currentUser?.id,
   ]);
 
   const active = useMemo(() => {
@@ -1313,45 +1676,6 @@ export default function App() {
               ...block,
               cards: block.cards.map((card) =>
                 card.id === cardId ? { ...card, text } : card
-              ),
-            };
-          }),
-        }))
-      );
-    },
-    []
-  );
-
-  const addMediaToCard = useCallback(
-    (colId: string, blockId: string, cardId: string, url: string) => {
-      const trimmed = url.trim();
-      let parsed: URL;
-      try {
-        parsed = new URL(trimmed);
-      } catch {
-        window.alert("请输入有效的 http(s) 文件地址");
-        return;
-      }
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        window.alert("仅支持 http 或 https 链接");
-        return;
-      }
-      const href = parsed.href;
-      const item = guessMediaFromUrl(href);
-      setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) =>
-                card.id === cardId
-                  ? {
-                      ...card,
-                      media: [...(card.media ?? []), item],
-                    }
-                  : card
               ),
             };
           }),
@@ -1503,15 +1827,14 @@ export default function App() {
   );
 
   /**
-   * 侧栏选中合集时：记到该合集；仅选中日历某日（按日视图）时记到「收集箱」。
-   * 新块均带 addedOn（今日），便于日历聚合。
+   * 侧栏选中合集时：新块记到该合集并带 addedOn（今日），便于日历聚合。
+   * 选中日历某日（按日浏览）时不允许新建小笔记。
    */
   const addSmallNote = useCallback(() => {
-    if (!isAdmin) return;
-    const targetColId =
-      calendarDay !== null
-        ? INBOX_COLLECTION_ID
-        : (active?.id ?? INBOX_COLLECTION_ID);
+    if (!canEdit) return;
+    if (calendarDay !== null) return;
+    const targetColId = active?.id;
+    if (!targetColId) return;
     const now = new Date();
     const minutesOfDay = now.getHours() * 60 + now.getMinutes();
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1519,9 +1842,8 @@ export default function App() {
     const newCard: NoteCard = { id: cardId, text: "" };
     const day = localDateString(now);
 
-    setCollections((prev) => {
-      const ensured = ensureInboxFirst(prev);
-      return mapCollectionById(ensured, targetColId, (col) => ({
+    setCollections((prev) =>
+      mapCollectionById(prev, targetColId, (col) => ({
         ...col,
         blocks: [
           ...col.blocks,
@@ -1532,13 +1854,13 @@ export default function App() {
             cards: [newCard],
           },
         ],
-      }));
-    });
+      }))
+    );
 
     queueMicrotask(() => {
       document.getElementById(`card-text-${cardId}`)?.focus();
     });
-  }, [isAdmin, calendarDay, active?.id]);
+  }, [canEdit, calendarDay, active?.id]);
 
   const commitCollectionRename = useCallback(() => {
     if (!editingCollectionId) return;
@@ -1569,14 +1891,7 @@ export default function App() {
       dotColor: randomDotColor(),
       blocks: [],
     };
-    setCollections((prev) => {
-      const e = ensureInboxFirst(prev);
-      const inboxIdx = e.findIndex((c) => c.id === INBOX_COLLECTION_ID);
-      const next = [...e];
-      if (inboxIdx === 0) next.splice(1, 0, newCol);
-      else next.push(newCol);
-      return next;
-    });
+    setCollections((prev) => [...prev, newCol]);
     setActiveId(id);
     setDraftCollectionName("新合集");
     setEditingCollectionId(id);
@@ -1605,11 +1920,7 @@ export default function App() {
 
   const removeCollection = useCallback(
     (id: string, displayName: string, hasSubtree: boolean) => {
-      if (!isAdmin) return;
-      if (id === INBOX_COLLECTION_ID) {
-        window.alert("「收集箱」为默认合集，不能删除。");
-        return;
-      }
+      if (!canEdit) return;
       const msg = hasSubtree
         ? `确定删除「${displayName}」及其所有子合集？其中笔记将一并删除，且不可恢复。`
         : `确定删除「${displayName}」？其中笔记将一并删除，且不可恢复。`;
@@ -1635,7 +1946,7 @@ export default function App() {
         });
       }
     },
-    [isAdmin]
+    [canEdit]
   );
 
   const toggleFolderCollapsed = useCallback((folderId: string) => {
@@ -1662,7 +1973,7 @@ export default function App() {
 
   const onCollectionRowDragStart = useCallback(
     (id: string, e: DragEvent) => {
-      if (!isAdmin) {
+      if (!canEdit) {
         e.preventDefault();
         return;
       }
@@ -1676,17 +1987,28 @@ export default function App() {
       e.dataTransfer.effectAllowed = "move";
       setDraggingCollectionId(id);
     },
-    [isAdmin]
+    [canEdit]
   );
 
   const onCollectionRowDragEnd = useCallback(() => {
     setDraggingCollectionId(null);
     setDropIndicator(null);
+    setNoteCardDropCollectionId(null);
   }, []);
 
   const onCollectionRowDragOver = useCallback(
     (id: string, e: DragEvent) => {
-      if (!isAdmin || draggingCollectionId === null) return;
+      if (!canEdit) return;
+      if (
+        noteCardDragActiveRef.current ||
+        noteCardDragTypesInclude(e.dataTransfer)
+      ) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setNoteCardDropCollectionId(id);
+        return;
+      }
+      if (draggingCollectionId === null) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       const el = e.currentTarget as HTMLElement;
@@ -1695,16 +2017,31 @@ export default function App() {
         position: dropPositionFromEvent(e, el),
       });
     },
-    [draggingCollectionId, isAdmin]
+    [draggingCollectionId, canEdit]
   );
 
   const onCollectionRowDrop = useCallback(
     (targetId: string, e: DragEvent) => {
-      if (!isAdmin) {
+      if (!canEdit) {
         e.preventDefault();
         return;
       }
       e.preventDefault();
+      const noteFrom = readNoteCardDragPayload(e);
+      if (noteFrom) {
+        if (noteFrom.colId !== targetId) {
+          setCollections((prev) =>
+            applyNoteCardDrop(prev, noteFrom, {
+              type: "collection",
+              colId: targetId,
+            })
+          );
+        }
+        setNoteCardDropCollectionId(null);
+        setCardDropMarker(null);
+        setDraggingNoteCardKey(null);
+        return;
+      }
       const dragId =
         e.dataTransfer.getData(COLLECTION_DRAG_MIME) ||
         e.dataTransfer.getData("text/plain");
@@ -1724,7 +2061,7 @@ export default function App() {
       setDraggingCollectionId(null);
       setDropIndicator(null);
     },
-    [isAdmin]
+    [canEdit]
   );
 
   useLayoutEffect(() => {
@@ -1817,37 +2154,110 @@ export default function App() {
   ) => {
     const media = (card.media ?? []).filter((m) => m.url?.trim());
     const hasGallery = media.length > 0;
-    const canEdit = isAdmin;
+    const noteKey = `${colId}-${block.id}-${card.id}`;
+    const dropEdgeActive =
+      cardDropMarker !== null &&
+      cardDropMarker.colId === colId &&
+      cardDropMarker.blockId === block.id &&
+      cardDropMarker.cardId === card.id;
     return (
       <li
-        key={`${colId}-${block.id}-${card.id}`}
+        key={noteKey}
         className={
           "card" +
           (cardMenuId === card.id ? " is-menu-open" : "") +
           (cardDragOverId === card.id && canEdit && mediaUploadMode
             ? " card--file-drag-over"
-            : "")
+            : "") +
+          (dropEdgeActive
+            ? cardDropMarker.before
+              ? " card--note-drop-before"
+              : " card--note-drop-after"
+            : "") +
+          (draggingNoteCardKey === noteKey ? " card--note-dragging" : "")
         }
         onDragOver={(e) => {
-          if (!canEdit || !mediaUploadMode) return;
+          if (!canEdit) return;
+          if (noteCardDragActiveRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "move";
+            const rect = e.currentTarget.getBoundingClientRect();
+            const before =
+              e.clientY < rect.top + rect.height * 0.5;
+            setCardDropMarker({
+              colId,
+              blockId: block.id,
+              cardId: card.id,
+              before,
+            });
+            return;
+          }
+          if (!mediaUploadMode) return;
           if (!dataTransferHasFiles(e.dataTransfer)) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "copy";
         }}
         onDragEnter={(e) => {
-          if (!canEdit || !mediaUploadMode) return;
+          if (!canEdit) return;
+          if (noteCardDragActiveRef.current) {
+            e.preventDefault();
+            return;
+          }
+          if (!mediaUploadMode) return;
           if (!dataTransferHasFiles(e.dataTransfer)) return;
           e.preventDefault();
           setCardDragOverId(card.id);
         }}
         onDragLeave={(e) => {
-          if (!canEdit || !mediaUploadMode) return;
+          if (!canEdit) return;
           const rel = e.relatedTarget as Node | null;
           if (rel && e.currentTarget.contains(rel)) return;
+          if (noteCardDragActiveRef.current) {
+            setCardDropMarker((m) =>
+              m &&
+              m.cardId === card.id &&
+              m.blockId === block.id &&
+              m.colId === colId
+                ? null
+                : m
+            );
+            return;
+          }
+          if (!mediaUploadMode) return;
           setCardDragOverId((id) => (id === card.id ? null : id));
         }}
         onDrop={(e) => {
-          if (!canEdit || !mediaUploadMode) return;
+          if (!canEdit) return;
+          const from = readNoteCardDragPayload(e);
+          if (from) {
+            e.preventDefault();
+            e.stopPropagation();
+            setCardDropMarker(null);
+            setNoteCardDropCollectionId(null);
+            const rect = e.currentTarget.getBoundingClientRect();
+            const before =
+              e.clientY < rect.top + rect.height * 0.5;
+            const target = before
+              ? ({
+                  type: "before" as const,
+                  colId,
+                  blockId: block.id,
+                  cardId: card.id,
+                } as const)
+              : ({
+                  type: "after" as const,
+                  colId,
+                  blockId: block.id,
+                  cardId: card.id,
+                } as const);
+            setCollections((prev) =>
+              applyNoteCardDrop(prev, from, target)
+            );
+            setDraggingNoteCardKey(null);
+            return;
+          }
+          if (!mediaUploadMode) return;
           e.preventDefault();
           setCardDragOverId(null);
           const files = filesFromDataTransfer(e.dataTransfer);
@@ -1860,10 +2270,51 @@ export default function App() {
             "card__inner" + (hasGallery ? " card__inner--split" : "")
           }
         >
+          {canEdit ? (
+            <div
+              className="card__move-rail"
+              draggable
+              aria-label="拖动以移动小笔记"
+              title="按住拖到其他卡片旁、时间块末尾或侧栏合集"
+              onDragStart={(e: DragEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                const cardEl = e.currentTarget.closest(
+                  "li.card"
+                ) as HTMLElement | null;
+                if (cardEl) {
+                  const cr = cardEl.getBoundingClientRect();
+                  const ox = Math.round(e.clientX - cr.left);
+                  const oy = Math.round(e.clientY - cr.top);
+                  e.dataTransfer.setDragImage(cardEl, ox, oy);
+                }
+                const payload: NoteCardDragPayload = {
+                  colId,
+                  blockId: block.id,
+                  cardId: card.id,
+                };
+                const json = JSON.stringify(payload);
+                e.dataTransfer.setData(NOTE_CARD_DRAG_MIME, json);
+                e.dataTransfer.setData(
+                  "text/plain",
+                  NOTE_CARD_TEXT_PREFIX + json
+                );
+                e.dataTransfer.effectAllowed = "move";
+                noteCardDragActiveRef.current = true;
+                setDraggingNoteCardKey(noteKey);
+              }}
+              onDragEnd={() => {
+                noteCardDragActiveRef.current = false;
+                setDraggingNoteCardKey(null);
+                setCardDropMarker(null);
+                setNoteCardDropCollectionId(null);
+              }}
+            />
+          ) : null}
           <div
             className={
               "card__paper" +
-              (hasGallery ? " card__paper--with-gallery" : "")
+              (hasGallery ? " card__paper--with-gallery" : "") +
+              (canEdit ? " card__paper--with-move-rail" : "")
             }
           >
             <div className="card__toolbar">
@@ -1894,21 +2345,6 @@ export default function App() {
                       role="menu"
                       aria-orientation="vertical"
                     >
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          const u = window.prompt(
-                            "文件链接（https://…；图片/视频按后缀或常见图床识别，其它显示为文件）"
-                          );
-                          if (u?.trim())
-                            addMediaToCard(colId, block.id, card.id, u);
-                          setCardMenuId(null);
-                        }}
-                      >
-                        添加文件
-                      </button>
                       {mediaUploadMode ? (
                         <button
                           type="button"
@@ -1921,9 +2357,7 @@ export default function App() {
                         >
                           {uploadBusyCardId === card.id
                             ? "上传中…"
-                            : mediaUploadMode === "cos"
-                              ? "本地上传到 COS"
-                              : "本地上传"}
+                            : "添加附件"}
                         </button>
                       ) : null}
                       {hasGallery ? (
@@ -2046,16 +2480,28 @@ export default function App() {
               (c.id === draggingCollectionId
                 ? " sidebar__tree-row--dragging"
                 : "") +
+              (noteCardDropCollectionId === c.id
+                ? " sidebar__tree-row--note-card-drop"
+                : "") +
               dropCls
             }
             style={{ paddingLeft: 8 + depth * 14 }}
-            draggable={isAdmin && editingCollectionId !== c.id}
+            draggable={canEdit && editingCollectionId !== c.id}
             onDragStart={(e) => onCollectionRowDragStart(c.id, e)}
             onDragEnd={onCollectionRowDragEnd}
             onDragOver={(e) => onCollectionRowDragOver(c.id, e)}
+            onDragLeave={(e) => {
+              const rel = e.relatedTarget as Node | null;
+              if (rel && e.currentTarget.contains(rel)) return;
+              if (noteCardDragActiveRef.current) {
+                setNoteCardDropCollectionId((id) =>
+                  id === c.id ? null : id
+                );
+              }
+            }}
             onDrop={(e) => onCollectionRowDrop(c.id, e)}
             onContextMenu={(e) => {
-              if (!isAdmin || editingCollectionId === c.id) return;
+              if (!canEdit || editingCollectionId === c.id) return;
               e.preventDefault();
               setCollectionCtxMenu({
                 x: e.clientX,
@@ -2141,10 +2587,10 @@ export default function App() {
                 <span
                   className="sidebar__name"
                   title={
-                    isAdmin ? "双击修改名称；右键可删除合集" : undefined
+                    canEdit ? "双击修改名称；右键可删除合集" : undefined
                   }
                   onDoubleClick={
-                    isAdmin
+                    canEdit
                       ? (e) => {
                           e.stopPropagation();
                           setDraftCollectionName(c.name);
@@ -2158,7 +2604,7 @@ export default function App() {
               )}
               <span className="sidebar__count">{c.blocks.length}</span>
             </div>
-            {isAdmin ? (
+            {canEdit ? (
               <button
                 type="button"
                 draggable={false}
@@ -2189,24 +2635,90 @@ export default function App() {
         <div className="sidebar__header">
           <div className="sidebar__header-row">
             <div className="sidebar__workspace">
-              <span className="sidebar__workspace-dot" aria-hidden />
-              <span className="sidebar__workspace-name">mikujar</span>
+              {writeRequiresLogin && currentUser ? (
+                <>
+                  <label
+                    className={
+                      "sidebar__avatar-hit" +
+                      (avatarBusy ? " sidebar__avatar-hit--busy" : "")
+                    }
+                    title={
+                      mediaUploadMode
+                        ? "点击更换头像"
+                        : "头像上传需配置媒体存储"
+                    }
+                  >
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="sidebar__avatar-file"
+                      disabled={!mediaUploadMode || avatarBusy}
+                      onChange={onAvatarFileChange}
+                    />
+                    {currentUser.avatarUrl ? (
+                      <img
+                        src={resolveMediaUrl(currentUser.avatarUrl)}
+                        alt=""
+                        className="sidebar__avatar-img"
+                      />
+                    ) : (
+                      <span
+                        className="sidebar__workspace-dot sidebar__workspace-dot--avatar"
+                        aria-hidden
+                      />
+                    )}
+                  </label>
+                  <div className="sidebar__workspace-text">
+                    <span className="sidebar__workspace-name">
+                      {currentUser.displayName || currentUser.username}
+                    </span>
+                    <span className="sidebar__workspace-sub">
+                      mikujar · 未来罐
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="sidebar__workspace-dot" aria-hidden />
+                  <span className="sidebar__workspace-name">mikujar</span>
+                </>
+              )}
             </div>
             {writeRequiresLogin ? (
-              <button
-                type="button"
-                className={
-                  "sidebar__admin-icon-btn" +
-                  (isAdmin ? " sidebar__admin-icon-btn--on" : "")
-                }
-                onClick={isAdmin ? logout : openLogin}
-                aria-label={isAdmin ? "退出管理" : "管理员登录"}
-                title={isAdmin ? "退出管理" : "管理员登录"}
-              >
-                <AdminHeaderIcon mode={isAdmin ? "logout" : "login"} />
-              </button>
+              <div className="sidebar__header-actions">
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="sidebar__users-btn"
+                    onClick={() => setUserAdminOpen(true)}
+                    title="用户管理"
+                  >
+                    用户
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={
+                    "sidebar__admin-icon-btn" +
+                    (currentUser ? " sidebar__admin-icon-btn--on" : "")
+                  }
+                  onClick={currentUser ? logout : openLogin}
+                  aria-label={currentUser ? "退出登录" : "登录"}
+                  title={currentUser ? "退出登录" : "登录"}
+                >
+                  <AdminHeaderIcon
+                    mode={currentUser ? "logout" : "login"}
+                  />
+                </button>
+              </div>
             ) : null}
           </div>
+          {sidebarFlash ? (
+            <p className="sidebar__flash" role="status">
+              {sidebarFlash}
+            </p>
+          ) : null}
         </div>
 
         <div className="sidebar__calendar" aria-label="按日期浏览">
@@ -2285,7 +2797,7 @@ export default function App() {
         <div className="sidebar__collections">
           <div className="sidebar__section-row">
             <p className="sidebar__section">合集</p>
-            {isAdmin ? (
+            {canEdit ? (
               <button
                 type="button"
                 className="sidebar__section-add"
@@ -2310,7 +2822,7 @@ export default function App() {
                 ? formatChineseDayTitle(calendarDay)
                 : active?.name ?? "未选择合集"}
             </h1>
-            {isAdmin && (calendarDay || active) && (
+            {canEdit && active && !calendarDay && (
               <button
                 type="button"
                 className="main__add-note"
@@ -2362,9 +2874,9 @@ export default function App() {
               ) : (
                 <p
                   className="main__hint"
-                  title={isAdmin ? "双击修改说明" : undefined}
+                  title={canEdit ? "双击修改说明" : undefined}
                   onDoubleClick={
-                    isAdmin
+                    canEdit
                       ? () => {
                           const raw = active.hint?.trim();
                           setDraftCollectionHint(
@@ -2390,8 +2902,8 @@ export default function App() {
           {calendarDay ? (
             dayPinned.length === 0 && dayRestBlocks.length === 0 ? (
               <div className="timeline__empty">
-                {isAdmin
-                  ? "这一天还没有带日期的笔记块。在日历视图下「+ 新建小笔记」会写入「收集箱」并记在今日；旧笔记块无日期时不会出现在日历里。"
+                {canEdit
+                  ? "这一天还没有带日期的笔记块。请在侧栏选中合集后再用「+ 新建小笔记」；旧笔记块无日期时不会出现在日历里。"
                   : "这一天没有可显示的笔记块。"}
               </div>
             ) : (
@@ -2448,7 +2960,7 @@ export default function App() {
           ) : listEmpty ? (
             <div className="timeline__empty">
               {timelineEmpty
-                ? isAdmin
+                ? canEdit
                   ? "当前合集里还没有笔记。点击「+ 新建小笔记」会记在当前合集并打在今日日历上。"
                   : "当前合集里还没有笔记。"
                 : "暂无笔记。"}
@@ -2532,6 +3044,184 @@ export default function App() {
               >
                 删除合集
               </button>
+            </div>,
+            document.body
+          )
+        : null}
+      {userAdminOpen && isAdmin
+        ? createPortal(
+            <div
+              className="auth-modal-backdrop"
+              role="presentation"
+              onClick={() => setUserAdminOpen(false)}
+            >
+              <div
+                className="auth-modal user-admin-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="user-admin-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 id="user-admin-title" className="auth-modal__title">
+                  用户管理
+                </h2>
+                <p className="auth-modal__hint">
+                  手动创建账号。登录用户均可编辑自己的笔记与上传附件；管理员额外可在此管理用户。
+                </p>
+                {adminUsersErr || userAdminFormErr ? (
+                  <p className="auth-modal__err" role="alert">
+                    {adminUsersErr ?? userAdminFormErr}
+                  </p>
+                ) : null}
+                <div className="user-admin__new">
+                  <p className="user-admin__new-title">新建用户</p>
+                  <input
+                    type="text"
+                    className="auth-modal__input"
+                    autoComplete="off"
+                    placeholder="用户名"
+                    value={newUserUsername}
+                    disabled={newUserBusy}
+                    onChange={(e) => setNewUserUsername(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    className="auth-modal__input"
+                    autoComplete="new-password"
+                    placeholder="初始密码（至少 4 位）"
+                    value={newUserPassword}
+                    disabled={newUserBusy}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="auth-modal__input"
+                    autoComplete="off"
+                    placeholder="显示名（可选，默认同用户名）"
+                    value={newUserDisplayName}
+                    disabled={newUserBusy}
+                    onChange={(e) => setNewUserDisplayName(e.target.value)}
+                  />
+                  <div className="user-admin__new-row">
+                    <label className="user-admin__role-label">
+                      角色
+                      <select
+                        className="user-admin__role-select"
+                        value={newUserRole}
+                        disabled={newUserBusy}
+                        onChange={(e) =>
+                          setNewUserRole(
+                            e.target.value === "admin" ? "admin" : "user"
+                          )
+                        }
+                      >
+                        <option value="user">普通用户</option>
+                        <option value="admin">管理员</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="auth-modal__btn auth-modal__btn--primary"
+                      disabled={
+                        newUserBusy ||
+                        !newUserUsername.trim() ||
+                        newUserPassword.length < 4
+                      }
+                      onClick={() => void submitNewUser()}
+                    >
+                      {newUserBusy ? "…" : "添加"}
+                    </button>
+                  </div>
+                </div>
+                <div className="user-admin__table-wrap">
+                  {adminUsersLoading ? (
+                    <p className="user-admin__loading">加载中…</p>
+                  ) : (
+                    <table className="user-admin__table">
+                      <thead>
+                        <tr>
+                          <th>显示名</th>
+                          <th>用户名</th>
+                          <th>角色</th>
+                          <th>重置密码</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminUsers.map((u) => (
+                          <tr key={u.id}>
+                            <td>{u.displayName}</td>
+                            <td className="user-admin__mono">{u.username}</td>
+                            <td>
+                              <select
+                                className="user-admin__role-select user-admin__role-select--inline"
+                                value={u.role}
+                                disabled={rowBusyId === u.id}
+                                onChange={(e) =>
+                                  void onRoleChange(
+                                    u,
+                                    e.target.value === "admin"
+                                      ? "admin"
+                                      : "user"
+                                  )
+                                }
+                              >
+                                <option value="user">普通</option>
+                                <option value="admin">管理</option>
+                              </select>
+                            </td>
+                            <td className="user-admin__pwd-cell">
+                              <div className="user-admin__pwd-inner">
+                                <input
+                                  type="password"
+                                  className="user-admin__pwd-input"
+                                  autoComplete="new-password"
+                                  placeholder="新密码"
+                                  value={pwdResetByUser[u.id] ?? ""}
+                                  disabled={rowBusyId === u.id}
+                                  onChange={(e) =>
+                                    setPwdResetByUser((prev) => ({
+                                      ...prev,
+                                      [u.id]: e.target.value,
+                                    }))
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="user-admin__mini-btn"
+                                  disabled={rowBusyId === u.id}
+                                  onClick={() => void applyPasswordReset(u)}
+                                >
+                                  应用
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="user-admin__mini-btn user-admin__mini-btn--danger"
+                                disabled={rowBusyId === u.id}
+                                onClick={() => void onDeleteUser(u)}
+                              >
+                                删除
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="auth-modal__actions">
+                  <button
+                    type="button"
+                    className="auth-modal__btn auth-modal__btn--ghost"
+                    onClick={() => setUserAdminOpen(false)}
+                  >
+                    关闭
+                  </button>
+                </div>
+              </div>
             </div>,
             document.body
           )

@@ -1843,6 +1843,9 @@ export default function App() {
   );
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  /** 未输入内容时是否展开顶栏搜索框（有内容时始终展开） */
+  const [searchBarOpen, setSearchBarOpen] = useState(false);
+  const mainSearchInputRef = useRef<HTMLInputElement>(null);
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -2278,6 +2281,18 @@ export default function App() {
 
   const searchTrim = searchQuery.trim();
   const searchActive = searchTrim.length > 0;
+  const searchExpanded = searchBarOpen || searchActive;
+
+  useLayoutEffect(() => {
+    if (!searchExpanded) return;
+    const id = requestAnimationFrame(() => {
+      if (typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches) {
+        mainSearchInputRef.current?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [searchExpanded]);
+
   const { collectionMatches: searchCollectionMatches, groupedCards: searchGroupedCards } =
     useMemo(
       () => buildSearchResults(collections, searchTrim),
@@ -3505,6 +3520,7 @@ export default function App() {
                   }
                   onClick={() => {
                     setSearchQuery("");
+                    setSearchBarOpen(false);
                     setCalendarDay(cell.dateStr);
                     const [yy, mm] = cell.dateStr.split("-").map(Number);
                     setCalendarViewMonth(new Date(yy, mm - 1, 1));
@@ -3601,43 +3617,90 @@ export default function App() {
                   : active?.name ?? "未选择合集"}
             </h1>
             <div className="main__header-actions">
-              <div className="main__search" role="search">
-                <input
-                  id="app-main-search"
-                  type="search"
-                  className="main__search-input"
-                  placeholder="搜索…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      setSearchQuery("");
-                    }
-                  }}
-                  autoComplete="off"
-                  aria-label="搜索笔记、附件名、合集名"
-                />
-                {searchActive ? (
+              {searchExpanded ? (
+                <div
+                  className="main__search main__search--expanded"
+                  role="search"
+                >
+                  <input
+                    ref={mainSearchInputRef}
+                    id="app-main-search"
+                    type="search"
+                    className="main__search-input"
+                    placeholder="搜索…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setSearchQuery("");
+                        setSearchBarOpen(false);
+                      }
+                    }}
+                    autoComplete="off"
+                    aria-label="搜索笔记、附件名、合集名"
+                  />
                   <button
                     type="button"
                     className="main__search-clear"
-                    aria-label="清除搜索"
-                    onClick={() => setSearchQuery("")}
+                    aria-label={
+                      searchActive ? "清除搜索" : "收起搜索"
+                    }
+                    onClick={() => {
+                      if (searchActive) setSearchQuery("");
+                      else setSearchBarOpen(false);
+                    }}
                   >
                     ×
                   </button>
-                ) : null}
-              </div>
-              {canEdit && active && !calendarDay && !searchActive && (
+                </div>
+              ) : (
                 <button
                   type="button"
-                  className="main__add-note"
-                  onClick={addSmallNote}
+                  className="main__header-icon-btn"
+                  aria-label="打开搜索"
+                  onClick={() => setSearchBarOpen(true)}
                 >
-                  + 新建小笔记
+                  <svg
+                    className="main__header-icon-btn__svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                  </svg>
                 </button>
               )}
+              {canEdit && active && !calendarDay ? (
+                <button
+                  type="button"
+                  className="main__header-icon-btn"
+                  aria-label="新建小笔记"
+                  onClick={addSmallNote}
+                >
+                  <svg
+                    className="main__header-icon-btn__svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
           </div>
           {(loadError || saveError) && (
@@ -3739,6 +3802,7 @@ export default function App() {
                               setActiveId(col.id);
                               setCalendarDay(null);
                               setSearchQuery("");
+                              setSearchBarOpen(false);
                             }}
                           >
                             打开
@@ -3778,6 +3842,7 @@ export default function App() {
                               setActiveId(col.id);
                               setCalendarDay(null);
                               setSearchQuery("");
+                              setSearchBarOpen(false);
                             }}
                           >
                             打开合集
@@ -3798,7 +3863,7 @@ export default function App() {
             dayPinned.length === 0 && dayRestCards.length === 0 ? (
               <div className="timeline__empty">
                 {canEdit
-                  ? "这一天还没有带日期的笔记。请在侧栏选中合集后再用「+ 新建小笔记」；未写日期的卡片不会出现在日历里。"
+                  ? "这一天还没有带日期的笔记。请在侧栏选中合集后再点顶部「加号」新建；未写日期的卡片不会出现在日历里。"
                   : "这一天没有可显示的笔记。"}
               </div>
             ) : (
@@ -3847,7 +3912,7 @@ export default function App() {
             <div className="timeline__empty">
               {timelineEmpty
                 ? canEdit
-                  ? "当前合集里还没有笔记。点击「+ 新建小笔记」会记在当前合集并打在今日日历上。"
+                  ? "当前合集里还没有笔记。点击顶部「加号」会记在当前合集并打在今日日历上。"
                   : "当前合集里还没有笔记。"
                 : "暂无笔记。"}
             </div>
@@ -3952,6 +4017,7 @@ export default function App() {
                 setActiveId(tgtCol);
                 setCalendarDay(null);
                 setSearchQuery("");
+                setSearchBarOpen(false);
                 setMobileNavOpen(false);
                 setRelatedPanel(null);
               }}

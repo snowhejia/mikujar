@@ -334,12 +334,13 @@
   padding-bottom: 6px;
 }
 
-/* 用 Grid 均分行宽；auto-fit 会合并空列，避免 flex 内容宽导致右侧大块留白 */
+/* 标签按文字宽度排列，不拉成等宽格子 */
 .sidebar__tags-cloud {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(2.5rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  justify-items: stretch;
+  align-items: flex-start;
+  justify-content: flex-start;
   overflow-y: auto;
   padding: 0 8px 4px 10px;
   scrollbar-width: thin;
@@ -357,11 +358,10 @@
 .sidebar__tags-chip {
   box-sizing: border-box;
   margin: 0;
-  padding: 4px 6px;
-  width: 100%;
-  max-width: 7rem;
-  min-width: 0;
-  justify-self: center;
+  padding: 4px 9px;
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
   border: 1px solid rgba(55, 53, 47, 0.12);
   border-radius: 6px;
   background: #ffffff;
@@ -371,7 +371,7 @@
   color: rgba(55, 53, 47, 0.78);
   line-height: 1.3;
   cursor: pointer;
-  text-align: center;
+  text-align: left;
   word-break: break-word;
   transition:
     background 0.1s ease,
@@ -1018,6 +1018,46 @@ textarea.main__hint-editor:focus {
   min-height: 0;
   overflow: auto;
   padding-bottom: 0.5rem;
+}
+
+.timeline__add-bottom {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0 1.25rem;
+  margin-top: 0.25rem;
+}
+
+.timeline__add-bottom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 22rem;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.88);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.timeline__add-bottom-btn:hover {
+  background: rgba(55, 53, 47, 0.04);
+  border-color: rgba(55, 53, 47, 0.22);
+}
+
+.timeline__add-bottom-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
 }
 
 .main__header-icon-btn {

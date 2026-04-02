@@ -196,7 +196,7 @@ export const collections: Collection[] = [
         id: "intro-header-tools",
         minutesOfDay: t(6, 14),
         addedOn: D1,
-        text: "【顶栏图标】右侧放大镜展开搜索；加号即「新建小笔记」，记在当前合集并带上今日日期。正在搜索时也可以继续点加号新建。",
+        text: "【顶栏图标】右侧放大镜展开搜索；加号即「新建小笔记」，仅在当前合集时间线显示（搜索或日历按日浏览时不会出现）。列表底部也有同款新建按钮。",
       },
       {
         id: "intro-search",

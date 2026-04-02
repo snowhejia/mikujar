@@ -408,14 +408,9 @@ function previewCardTextOneLine(text: string, maxLen = 72): string {
   return `${line.slice(0, maxLen)}…`;
 }
 
-/** 侧栏角标：本合集及子树内小笔记总张数 */
-function countCardsInCollectionSubtree(c: Collection): number {
-  const own = c.cards.length;
-  const sub = (c.children ?? []).reduce(
-    (n, ch) => n + countCardsInCollectionSubtree(ch),
-    0
-  );
-  return own + sub;
+/** 侧栏角标：仅本合集一层的小笔记张数（子合集内的笔记不计入父行，避免空文件夹拖入子文件夹后父级误显示有笔记） */
+function countSidebarCollectionCardBadge(c: Collection): number {
+  return c.cards.length;
 }
 
 /** 从根到 target 的父级 id（不含 target） */
@@ -2553,6 +2548,7 @@ export default function App() {
   const addSmallNote = useCallback(() => {
     if (!canEdit) return;
     if (calendarDay !== null) return;
+    if (searchQuery.trim().length > 0) return;
     const targetColId = active?.id;
     if (!targetColId) return;
     const now = new Date();
@@ -2577,7 +2573,7 @@ export default function App() {
     queueMicrotask(() => {
       document.getElementById(`card-text-${cardId}`)?.focus();
     });
-  }, [canEdit, calendarDay, active?.id]);
+  }, [canEdit, calendarDay, active?.id, searchQuery]);
 
   const commitCollectionRename = useCallback(() => {
     if (!editingCollectionId) return;
@@ -3324,7 +3320,7 @@ export default function App() {
                 </span>
               )}
               <span className="sidebar__count">
-                {countCardsInCollectionSubtree(c)}
+                {countSidebarCollectionCardBadge(c)}
               </span>
             </div>
             {canEdit ? (
@@ -3684,7 +3680,7 @@ export default function App() {
                   </svg>
                 </button>
               ) : null}
-              {canEdit && active && !calendarDay ? (
+              {canEdit && active && !calendarDay && !searchActive ? (
                 <button
                   type="button"
                   className="main__header-icon-btn"
@@ -3918,7 +3914,7 @@ export default function App() {
             <div className="timeline__empty">
               {timelineEmpty
                 ? canEdit
-                  ? "当前合集里还没有笔记。点击顶部「加号」会记在当前合集并打在今日日历上。"
+                  ? "当前合集里还没有笔记。点顶部「加号」或底部「新建小笔记」会记在当前合集并打在今日日历上。"
                   : "当前合集里还没有笔记。"
                 : "暂无笔记。"}
             </div>
@@ -3949,6 +3945,18 @@ export default function App() {
               </ul>
             </>
           )}
+          {canEdit && active && !calendarDay && !searchActive ? (
+            <div className="timeline__add-bottom">
+              <button
+                type="button"
+                className="timeline__add-bottom-btn"
+                aria-label="新建小笔记"
+                onClick={addSmallNote}
+              >
+                ＋ 新建小笔记
+              </button>
+            </div>
+          ) : null}
         </div>
       </main>
       <input

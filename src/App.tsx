@@ -5291,11 +5291,8 @@ export default function App() {
               >
                 <div className="mobile-quick-capture__field-wrap">
                   <div className="mobile-quick-capture__lined">
-                    {mobileQuickCaptureHead ? (
-                      <div
-                        className="mobile-quick-capture__time-row"
-                        aria-hidden
-                      >
+                    <div className="mobile-quick-capture__head-row">
+                      {mobileQuickCaptureHead ? (
                         <span className="mobile-quick-capture__time">
                           {formatCardTimeLabel({
                             id: "qc",
@@ -5304,8 +5301,17 @@ export default function App() {
                             addedOn: mobileQuickCaptureHead.addedOn,
                           })}
                         </span>
-                      </div>
-                    ) : null}
+                      ) : (
+                        <span className="mobile-quick-capture__head-row-spacer" />
+                      )}
+                      <button
+                        type="button"
+                        className="mobile-quick-capture__submit"
+                        onClick={() => commitMobileQuickCapture()}
+                      >
+                        完成
+                      </button>
+                    </div>
                     <textarea
                       ref={mobileQuickCaptureAreaRef}
                       className="mobile-quick-capture__textarea"
@@ -5327,15 +5333,6 @@ export default function App() {
                         setMobileQuickCaptureText(e.target.value);
                       }}
                     />
-                  </div>
-                  <div className="mobile-quick-capture__toolbar">
-                    <button
-                      type="button"
-                      className="mobile-quick-capture__submit"
-                      onClick={() => commitMobileQuickCapture()}
-                    >
-                      完成
-                    </button>
                   </div>
                 </div>
               </div>

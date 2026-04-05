@@ -403,13 +403,11 @@ export function CardGallery({
                       className="card__gallery-audio-cover"
                       alt=""
                     />
-                    <div
-                      className="card__gallery-audio-cover-scrim"
-                      aria-hidden
-                    />
-                    <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
-                      {current.name ?? fileLabelFromUrl(current.url)}
-                    </span>
+                    <div className="card__gallery-audio-cover-caption">
+                      <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
+                        {current.name ?? fileLabelFromUrl(current.url)}
+                      </span>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -492,13 +490,11 @@ export function CardGallery({
                     className="card__gallery-audio-cover"
                     alt=""
                   />
-                  <div
-                    className="card__gallery-audio-cover-scrim"
-                    aria-hidden
-                  />
-                  <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
-                    {current.name ?? fileLabelFromUrl(current.url)}
-                  </span>
+                  <div className="card__gallery-audio-cover-caption">
+                    <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
+                      {current.name ?? fileLabelFromUrl(current.url)}
+                    </span>
+                  </div>
                 </>
               ) : (
                 <>

@@ -1,3 +1,4 @@
+import { authUsesHttpOnlyCookie } from "../auth/token";
 import { getAppDataMode } from "../appDataModeStorage";
 
 /** Tauri 未配置 `VITE_API_BASE` 时的默认云端 API */
@@ -39,16 +40,18 @@ export function apiBase(): string {
 }
 
 /**
- * 跨域访问绝对地址的 API 时须 `include` 才会带上 httpOnly 登录 Cookie。
- * 走 Vite 同源代理时保持 same-origin 即可。
+ * 仅当启用 `VITE_AUTH_HTTPONLY_COOKIE` 时跨域请求才 `include`（须服务端 CORS `credentials: true`）。
+ * 默认用 Bearer + localStorage 时用 `omit`，避免要求 `Access-Control-Allow-Credentials`（与未配全的 CORS 兼容）。
+ * 走 Vite 同源 `/api` 代理时为 `same-origin`。
  */
 export function apiFetchCredentials(): RequestCredentials {
   const raw = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  if (raw && /^https?:\/\//i.test(raw)) return "include";
-  if (typeof __TAURI_BUILD__ !== "undefined" && __TAURI_BUILD__) {
-    return "include";
-  }
-  return "same-origin";
+  const absoluteRemote =
+    (raw && /^https?:\/\//i.test(raw)) ||
+    (typeof __TAURI_BUILD__ !== "undefined" && __TAURI_BUILD__);
+  if (!absoluteRemote) return "same-origin";
+  if (authUsesHttpOnlyCookie()) return "include";
+  return "omit";
 }
 
 /** 合并 fetch 第二参数，默认带上 {@link apiFetchCredentials} */

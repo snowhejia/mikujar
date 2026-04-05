@@ -1,8 +1,13 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DragEvent, ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { CardGallery } from "./CardGallery";
 import { CardTagsRow } from "./CardTagsRow";
 import { formatCardTimeLabel } from "./cardTimeLabel";
+import {
+  dataTransferHasFiles,
+  filesFromDataTransfer,
+} from "./filesFromDataTransfer";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
 import type { NoteCard, NoteMediaItem } from "./types";
 
@@ -52,6 +57,71 @@ export function CardDetail({
 }: CardDetailProps) {
   const menuId = useMemo(() => detailMenuId(card.id), [card.id]);
   const menuOpen = cardMenuId === menuId;
+  const [fileDragOver, setFileDragOver] = useState(false);
+
+  const attachEnabled =
+    Boolean(canEdit && canAttachMedia && onPasteFiles);
+
+  const onDetailDragOver = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      if (!attachEnabled) return;
+      if (!dataTransferHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    [attachEnabled]
+  );
+
+  const onDetailDragEnter = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      if (!attachEnabled) return;
+      if (!dataTransferHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      setFileDragOver(true);
+    },
+    [attachEnabled]
+  );
+
+  const onDetailDragLeave = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      if (!attachEnabled) return;
+      const rel = e.relatedTarget as Node | null;
+      if (rel && e.currentTarget.contains(rel)) return;
+      setFileDragOver(false);
+    },
+    [attachEnabled]
+  );
+
+  const onDetailDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      if (!attachEnabled || !onPasteFiles) return;
+      if (!dataTransferHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFileDragOver(false);
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length === 0) return;
+      onPasteFiles(files);
+    },
+    [attachEnabled, onPasteFiles]
+  );
+
+  const onDetailPasteCapture = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      if (!attachEnabled || !onPasteFiles) return;
+      const files = filesFromDataTransfer(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onPasteFiles(files);
+    },
+    [attachEnabled, onPasteFiles]
+  );
+
+  useEffect(() => {
+    setFileDragOver(false);
+  }, [card.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -74,12 +144,18 @@ export function CardDetail({
       <div
         className="card-detail-wrap card-detail-wrap--square"
         onMouseDown={(e) => e.stopPropagation()}
+        onDragOver={onDetailDragOver}
+        onDragEnter={onDetailDragEnter}
+        onDragLeave={onDetailDragLeave}
+        onDrop={onDetailDrop}
+        onPasteCapture={onDetailPasteCapture}
       >
         <div
           className={
             "card card--detail-modal" +
             (hasGallery ? " card--detail-modal--has-gallery" : "") +
-            (menuOpen ? " is-menu-open" : "")
+            (menuOpen ? " is-menu-open" : "") +
+            (fileDragOver && attachEnabled ? " card--file-drag-over" : "")
           }
         >
           <div

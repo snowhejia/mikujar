@@ -51,7 +51,10 @@ import { CardRowInner } from "./CardRowInner";
 import { CardTagsRow } from "./CardTagsRow";
 import { CardGallery } from "./CardGallery";
 import { formatCardTimeLabel } from "./cardTimeLabel";
-import { filesFromDataTransfer } from "./filesFromDataTransfer";
+import {
+  dataTransferHasFiles,
+  filesFromDataTransfer,
+} from "./filesFromDataTransfer";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
 import { htmlToPlainText, noteBodyToHtml } from "./noteEditor/plainHtml";
 import type {
@@ -925,13 +928,6 @@ function splitPinnedCards(cards: NoteCard[]): {
   const pinned = cards.filter((c) => c.pinned);
   const rest = cards.filter((c) => !c.pinned);
   return { pinned, rest };
-}
-
-function dataTransferHasFiles(dt: DataTransfer | null): boolean {
-  if (!dt?.types) return false;
-  return [...dt.types].some(
-    (t) => t === "Files" || t.startsWith("image/")
-  );
 }
 
 /** 将上传接口结果转为 NoteMediaItem */

@@ -1,3 +1,10 @@
+export function dataTransferHasFiles(dt: DataTransfer | null): boolean {
+  if (!dt?.types) return false;
+  return [...dt.types].some(
+    (t) => t === "Files" || t.startsWith("image/")
+  );
+}
+
 /** 从剪贴板或拖拽 DataTransfer 取出文件（含截图粘贴等） */
 export function filesFromDataTransfer(dt: DataTransfer | null): File[] {
   if (!dt) return [];

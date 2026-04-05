@@ -62,6 +62,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  min-height: 100dvh;
+  min-height: 100svh;
   background: rgba(250, 250, 249, 0.92);
   backdrop-filter: blur(6px);
 }
@@ -253,9 +258,10 @@
   width: 100%;
   max-width: 100%;
   flex-shrink: 0;
-  padding: 0;
+  /* 底栏整块铺白到屏幕下缘（含 Home 条区），避免键盘与面板之间露底/色差 */
+  padding: 0 0 env(safe-area-inset-bottom, 0px);
   margin: 0;
-  background: transparent;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -263,19 +269,32 @@
   max-height: min(58dvh, calc(100dvh - env(safe-area-inset-top, 0px)));
 }
 
+.mobile-quick-capture__form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
 /* 边框与圆角在外层，避免 WebKit 下 border + background-attachment:local 与行高错位成「宽窄相间」 */
 .mobile-quick-capture__field-wrap {
-  border-radius: 12px;
+  /* 仅顶部圆角：底部贴键盘，不要底圆角 */
+  border-radius: 12px 12px 0 0;
   border: 1px solid rgba(60, 60, 67, 0.08);
+  border-bottom: none;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
   background: #ffffff;
   overflow: hidden;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: 0;
 }
 
 /* 时刻 +「完成」同行；下方正文与 .card__paper 同款 30px 行栅 */
 .mobile-quick-capture__lined {
-  border-radius: 11px;
+  border-radius: 11px 11px 0 0;
   overflow: hidden;
   background: #ffffff;
 }
@@ -2440,13 +2459,16 @@ textarea.main__hint-editor:focus {
   padding: 0 18px calc(var(--note-line-height) * 0.5);
   min-height: calc(3 * var(--note-line-height));
   background-color: #ffffff;
-  background-image: repeating-linear-gradient(
+  /* 与 .mobile-quick-capture__textarea 一致：repeat-y + size 在 iOS 上比 repeating-linear-gradient 更稳，换行处不易漏线 */
+  background-image: linear-gradient(
     to bottom,
-    transparent,
+    transparent 0,
     transparent calc(var(--note-line-height) - 1px),
     var(--note-line-color) calc(var(--note-line-height) - 1px),
     var(--note-line-color) var(--note-line-height)
   );
+  background-size: 100% var(--note-line-height);
+  background-repeat: repeat-y;
   background-position: 0 0;
   background-clip: padding-box;
 }
@@ -3399,6 +3421,12 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 @media (max-width: 900px) {
+  /* 避免窄栏正文被系统放大，行高与 30px 横格错位导致「换行缺线」 */
+  .card {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   /* scrollIntoView / 锚点滚动时预留刘海区，避免顶栏被状态栏挡住 */
   html {
     scroll-padding-top: calc(10px + env(safe-area-inset-top, 0px));
@@ -3410,6 +3438,17 @@ div.card__text--readonly:not(.card__text--preview) {
     height: auto;
     max-height: none;
     overflow: visible;
+  }
+
+  /* 小屏 .app 被改成 block，会盖掉 .app--boot 的 flex，加载态需重新居中 */
+  .app.app--boot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    min-height: 100svh;
+    width: 100%;
   }
 
   .app__mobile-backdrop {
@@ -3965,6 +4004,37 @@ div.card__text--readonly:not(.card__text--preview) {
 
   .card__paper--with-move-rail.card__paper--with-gallery {
     border-radius: 12px 0 0 12px;
+  }
+
+  /* 有附件 + 正文较长：上下布局；短笔记仍左右分栏（见 CardRowInner） */
+  .card__inner--split.card__inner--mobile-gallery-stack {
+    flex-direction: column;
+  }
+
+  .card__inner--split.card__inner--mobile-gallery-stack
+    .card__paper--with-gallery {
+    border-radius: 12px 12px 0 0;
+    border-right: none;
+    border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+  }
+
+  .card__inner--split.card__inner--mobile-gallery-stack
+    .card__paper--with-move-rail.card__paper--with-gallery {
+    border-radius: 12px 12px 0 0;
+  }
+
+  .card__inner--split.card__inner--mobile-gallery-stack .card__gallery {
+    flex: 0 0 auto;
+    max-width: none;
+    width: 100%;
+    min-width: 0;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .card__inner--split.card__inner--mobile-gallery-stack
+    .card__gallery-viewport {
+    min-height: 140px;
+    max-height: min(42vh, 280px);
   }
 }
 

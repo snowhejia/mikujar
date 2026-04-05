@@ -47,6 +47,7 @@ import {
 } from "./localMediaTauri";
 import { migrateCollectionTree } from "./migrateCollections";
 import { CardDetail } from "./CardDetail";
+import { CardRowInner } from "./CardRowInner";
 import { CardTagsRow } from "./CardTagsRow";
 import { CardGallery } from "./CardGallery";
 import { formatCardTimeLabel } from "./cardTimeLabel";
@@ -3295,7 +3296,9 @@ export default function App() {
           void uploadFilesToCard(colId, card.id, files);
         }}
       >
-        <div
+        <CardRowInner
+          hasGallery={hasGallery}
+          textRev={card.text}
           className={
             "card__inner" + (hasGallery ? " card__inner--split" : "")
           }
@@ -3523,7 +3526,7 @@ export default function App() {
               }
             />
           ) : null}
-        </div>
+        </CardRowInner>
       </li>
     );
   };
@@ -3548,7 +3551,9 @@ export default function App() {
             : undefined
         }
       >
-        <div
+        <CardRowInner
+          hasGallery={hasGallery}
+          textRev={card.text}
           className={
             "card__inner" + (hasGallery ? " card__inner--split" : "")
           }
@@ -3635,7 +3640,7 @@ export default function App() {
           {hasGallery ? (
             <CardGallery items={media} />
           ) : null}
-        </div>
+        </CardRowInner>
       </li>
     );
   };
@@ -4967,52 +4972,62 @@ export default function App() {
                 aria-modal="true"
                 aria-label="快速记录"
               >
-                <div className="mobile-quick-capture__field-wrap">
-                  <div className="mobile-quick-capture__lined">
-                    <div className="mobile-quick-capture__head-row">
-                      {mobileQuickCaptureHead ? (
-                        <span className="mobile-quick-capture__time">
-                          {formatCardTimeLabel({
-                            id: "qc",
-                            text: "",
-                            minutesOfDay: mobileQuickCaptureHead.minutesOfDay,
-                            addedOn: mobileQuickCaptureHead.addedOn,
-                          })}
-                        </span>
-                      ) : (
-                        <span className="mobile-quick-capture__head-row-spacer" />
-                      )}
-                      <button
-                        type="button"
-                        className="mobile-quick-capture__submit"
-                        onClick={() => commitMobileQuickCapture()}
-                      >
-                        完成
-                      </button>
+                <form
+                  className="mobile-quick-capture__form"
+                  autoComplete="off"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    commitMobileQuickCapture();
+                  }}
+                >
+                  <div className="mobile-quick-capture__field-wrap">
+                    <div className="mobile-quick-capture__lined">
+                      <div className="mobile-quick-capture__head-row">
+                        {mobileQuickCaptureHead ? (
+                          <span className="mobile-quick-capture__time">
+                            {formatCardTimeLabel({
+                              id: "qc",
+                              text: "",
+                              minutesOfDay:
+                                mobileQuickCaptureHead.minutesOfDay,
+                              addedOn: mobileQuickCaptureHead.addedOn,
+                            })}
+                          </span>
+                        ) : (
+                          <span className="mobile-quick-capture__head-row-spacer" />
+                        )}
+                        <button
+                          type="button"
+                          className="mobile-quick-capture__submit"
+                          onClick={() => commitMobileQuickCapture()}
+                        >
+                          完成
+                        </button>
+                      </div>
+                      <textarea
+                        ref={mobileQuickCaptureAreaRef}
+                        className="mobile-quick-capture__textarea"
+                        value={mobileQuickCaptureText}
+                        autoFocus
+                        autoComplete="off"
+                        autoCapitalize="sentences"
+                        autoCorrect="on"
+                        spellCheck
+                        enterKeyHint="enter"
+                        inputMode="text"
+                        aria-label="笔记内容"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        data-form-type="other"
+                        onChange={(e) => {
+                          mobileQuickCaptureDraftRef.current =
+                            e.target.value;
+                          setMobileQuickCaptureText(e.target.value);
+                        }}
+                      />
                     </div>
-                    <textarea
-                      ref={mobileQuickCaptureAreaRef}
-                      className="mobile-quick-capture__textarea"
-                      value={mobileQuickCaptureText}
-                      autoFocus
-                      name="mikujar_quick_note_body"
-                      autoComplete="off"
-                      autoCapitalize="sentences"
-                      autoCorrect="on"
-                      spellCheck
-                      enterKeyHint="enter"
-                      inputMode="text"
-                      aria-label="笔记内容"
-                      data-lpignore="true"
-                      data-1p-ignore="true"
-                      data-form-type="other"
-                      onChange={(e) => {
-                        mobileQuickCaptureDraftRef.current = e.target.value;
-                        setMobileQuickCaptureText(e.target.value);
-                      }}
-                    />
                   </div>
-                </div>
+                </form>
               </div>
             </div>,
             document.body

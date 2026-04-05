@@ -2614,23 +2614,22 @@ export default function App() {
   const addMediaItemToCard = useCallback(
     (colId: string, cardId: string, item: NoteMediaItem) => {
       let nextMedia: NoteMediaItem[] | undefined;
-      setCollections((prev) => {
-        const col = findCollectionById(prev, colId);
-        const card = col?.cards.find((c) => c.id === cardId);
-        nextMedia = [...(card?.media ?? []), item];
-        return mapCollectionById(prev, colId, (c) => ({
-          ...c,
-          cards: c.cards.map((cd) =>
-            cd.id === cardId ? { ...cd, media: nextMedia } : cd
-          ),
-        }));
-      });
-      if (dataMode !== "local") {
-        Promise.resolve().then(() => {
-          if (nextMedia !== undefined) {
-            void updateCardApi(cardId, { media: nextMedia });
-          }
+      // 必须先同步落盘 React 状态，再 PATCH；否则微任务可能先于 updater 执行，nextMedia 仍为 undefined，附件不会写入服务端
+      flushSync(() => {
+        setCollections((prev) => {
+          const col = findCollectionById(prev, colId);
+          const card = col?.cards.find((c) => c.id === cardId);
+          nextMedia = [...(card?.media ?? []), item];
+          return mapCollectionById(prev, colId, (c) => ({
+            ...c,
+            cards: c.cards.map((cd) =>
+              cd.id === cardId ? { ...cd, media: nextMedia } : cd
+            ),
+          }));
         });
+      });
+      if (dataMode !== "local" && nextMedia !== undefined) {
+        void updateCardApi(cardId, { media: nextMedia });
       }
     },
     [dataMode]
@@ -2749,35 +2748,36 @@ export default function App() {
     (colId: string, cardId: string, item: NoteMediaItem) => {
       void deleteLocalMediaFile(item.url);
       let nextMedia: NoteMediaItem[] | undefined;
-      setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          cards: col.cards.map((card) => {
-            if (card.id !== cardId) return card;
-            const raw = card.media ?? [];
-            const idx = raw.findIndex(
-              (m) =>
-                m.url === item.url &&
-                m.kind === item.kind &&
-                (m.name ?? "") === (item.name ?? "") &&
-                (m.coverUrl ?? "") === (item.coverUrl ?? "")
-            );
-            if (idx < 0) return card;
-            const next = [...raw];
-            next.splice(idx, 1);
-            nextMedia = next;
-            if (next.length === 0) {
-              const { media: _m, ...rest } = card;
-              return rest;
-            }
-            return { ...card, media: next };
-          }),
-        }))
-      );
-      if (dataMode !== "local") {
-        Promise.resolve().then(() => {
-          void updateCardApi(cardId, { media: nextMedia ?? [] });
-        });
+      flushSync(() => {
+        setCollections((prev) =>
+          mapCollectionById(prev, colId, (col) => ({
+            ...col,
+            cards: col.cards.map((card) => {
+              if (card.id !== cardId) return card;
+              const raw = card.media ?? [];
+              const idx = raw.findIndex(
+                (m) =>
+                  m.url === item.url &&
+                  m.kind === item.kind &&
+                  (m.name ?? "") === (item.name ?? "") &&
+                  (m.coverUrl ?? "") === (item.coverUrl ?? "")
+              );
+              if (idx < 0) return card;
+              const next = [...raw];
+              next.splice(idx, 1);
+              nextMedia = next;
+              if (next.length === 0) {
+                const { media: _m, ...rest } = card;
+                return rest;
+              }
+              return { ...card, media: next };
+            }),
+          }))
+        );
+      });
+      // 未找到对应项时不要 PATCH media: []，否则会误清空整张卡附件
+      if (dataMode !== "local" && nextMedia !== undefined) {
+        void updateCardApi(cardId, { media: nextMedia });
       }
     },
     [dataMode]

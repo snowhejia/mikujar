@@ -19,6 +19,15 @@
   min-height: 100dvh;
 }
 
+/* 未登录门闩：仅占位背景，主 UI 不挂载；登录框由 AuthProvider 叠在上面 */
+.app--login-wall {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100%;
+  background: var(--page-bg, var(--vp-c-bg-soft));
+  pointer-events: none;
+}
+
 .app-boot-screen,
 .app-remote-loading-inner {
   display: flex;
@@ -3252,22 +3261,66 @@ div.card__text--readonly:not(.card__text--preview) {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(15, 15, 15, 0.45);
+  background: #ffffff;
+}
+
+.auth-modal-backdrop--blocking {
+  background: #ffffff;
 }
 
 .auth-modal {
   width: 100%;
-  max-width: 360px;
-  padding: 1.25rem 1.35rem;
+  max-width: 380px;
+  padding: 1.5rem 1.5rem 1.35rem;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  box-shadow: 0 16px 56px rgba(15, 23, 42, 0.08);
+}
+
+.auth-modal__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 1.1rem;
+}
+
+.auth-modal__brand-logo {
+  flex-shrink: 0;
+  display: block;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
-  background: #fbfbfa;
-  border: 1px solid rgba(55, 53, 47, 0.12);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  object-fit: contain;
+}
+
+.auth-modal__brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auth-modal__brand-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1c1917;
+  line-height: 1.2;
+}
+
+.auth-modal__brand-slug {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: rgba(55, 53, 47, 0.45);
+  letter-spacing: 0.04em;
 }
 
 .auth-modal__title {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: #37352f;
 }
@@ -3334,6 +3387,15 @@ div.card__text--readonly:not(.card__text--preview) {
   background: #37352f;
   border-color: #37352f;
   color: #fafaf9;
+}
+
+.auth-modal__btn--primary--full {
+  flex: 1;
+  width: 100%;
+}
+
+.auth-modal__actions:has(.auth-modal__btn--primary--full) {
+  justify-content: stretch;
 }
 
 @media (max-width: 900px) {

@@ -1600,10 +1600,10 @@ export default function App() {
     authReady,
     writeRequiresLogin,
     openLogin,
-    setLoginOpen,
     logout,
     currentUser,
     refreshMe,
+    loginWallBlocking,
   } = useAuth();
 
   const { dataMode, setDataMode } = useAppDataMode();
@@ -2132,13 +2132,6 @@ export default function App() {
       cancelled = true;
     };
   }, [authReady, dataMode, writeRequiresLogin, currentUser?.id]);
-
-  /** 浏览器 + 云端 + 要求登录：首屏直接弹出登录，不出现示例笔记 */
-  useEffect(() => {
-    if (!authReady || dataMode !== "remote" || !writeRequiresLogin) return;
-    if (getAdminToken() || isTauri()) return;
-    setLoginOpen(true);
-  }, [authReady, dataMode, writeRequiresLogin, setLoginOpen]);
 
   /** 云端模式下在首次 remote 就绪前盖住主区（含未登录时等健康检查、登录后等 GET 合集） */
   const showRemoteLoading = useMemo(
@@ -3881,6 +3874,16 @@ export default function App() {
           <p>正在准备…</p>
         </div>
       </div>
+    );
+  }
+
+  /** 未登录：不渲染侧栏/时间线，仅全屏底 + 登录层（由 AuthProvider 挂载） */
+  if (loginWallBlocking) {
+    return (
+      <div
+        className="app app--login-wall"
+        aria-hidden="true"
+      />
     );
   }
 

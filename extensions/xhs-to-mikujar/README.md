@@ -1,0 +1,42 @@
+# 未来罐 · 小红书摘录（Chrome 扩展）
+
+在小红书 **笔记详情页** 点击工具栏图标打开弹出窗，自动抓取 **标题、正文、图片** 并显示进度，调用现有后端：
+
+- `POST /api/upload/presign` + COS 直传（与网页一致）
+- `POST /api/collections/:collectionId/cards` 创建笔记
+
+## 安装（开发者模式）
+
+1. Chrome 打开 `chrome://extensions`，打开「开发者模式」。
+2. 「加载已解压的扩展程序」→ 选择本目录 `extensions/xhs-to-mikujar`。
+3. 右键扩展图标 → **选项**，填写 API、Token、合集 ID 并保存。
+
+## 配置说明
+
+| 项 | 说明 |
+|----|------|
+| API 根地址 | 与 `VITE_API_BASE` 相同，无末尾 `/` |
+| Bearer Token | 一般为 Local Storage 的 `mikujar_admin_jwt`；或服务端 `API_TOKEN` |
+| userId | 仅在使用 **API_TOKEN** 时必填（与后端要求一致） |
+| 目标合集 ID | 从 `GET /api/collections` 或网页数据里取对应合集 `id` |
+
+服务端需：**PostgreSQL + 已配置腾讯云 COS**（未配 COS 时预签名会失败）。
+
+## 使用
+
+1. 打开任意 `xiaohongshu.com` 笔记详情页（单篇图文/视频页）。
+2. 若正文抓不到，**刷新页面**再试（SPA 切换有时未重新注入脚本）。
+3. **点击扩展图标**：弹出小窗里会显示**进度条**与**成功/失败**说明（不再依赖系统通知）。
+
+## 视频附件（实验性）
+
+与网上教程「F12 搜 mp4」同源思路：扩展会读取 `performance` 里已加载过的 **`.mp4` 资源**，并尝试 `<video>` 上的直链。
+
+**请先在小红书页面上点播放再暂停**（或播一小段），让浏览器真正请求 mp4，再点扩展保存；否则列表里可能没有视频地址。
+
+若站点改为 **m3u8 流**、无直链 mp4，或链接带短时效鉴权，则会抓不到或下载失败——属正常限制。
+
+## 限制
+
+- 小红书 DOM/CDN 策略可能变更，导致正文或图片抓取失败；图片 CDN 若拒绝跨域拉取，会只保存文字。
+- 扩展无法携带网页的 httpOnly Cookie；若生产仅用 Cookie 登录，请使用 API_TOKEN + userId 或 JWT 存 Local Storage 的部署方式。

@@ -16,6 +16,84 @@ import type { NoteCard, NoteMediaItem } from "./types";
 
 const detailMenuId = (cardId: string) => `__detail__${cardId}`;
 
+const CARD_DETAIL_LAYOUT_KEY = "mikujar-card-detail-layout";
+
+/** 左右分栏：方框 + 正中竖线 */
+function IconDetailLayoutSplit() {
+  return (
+    <svg
+      className="card__detail-layout-toggle-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden={true}
+    >
+      <rect
+        x="2.5"
+        y="2.5"
+        width="11"
+        height="11"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      <line
+        x1="8"
+        y1="3.75"
+        x2="8"
+        y2="12.25"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** 上下分栏：方框 + 正中横线 */
+function IconDetailLayoutStack() {
+  return (
+    <svg
+      className="card__detail-layout-toggle-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden={true}
+    >
+      <rect
+        x="2.5"
+        y="2.5"
+        width="11"
+        height="11"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      <line
+        x1="3.75"
+        y1="8"
+        x2="12.25"
+        y2="8"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function readInitialDetailLayoutStack(): boolean {
+  try {
+    return localStorage.getItem(CARD_DETAIL_LAYOUT_KEY) === "stack";
+  } catch {
+    return false;
+  }
+}
+
 export interface CardDetailProps {
   card: NoteCard;
   colId: string;
@@ -65,6 +143,8 @@ export function CardDetail({
   const menuOpen = cardMenuId === menuId;
   const reminderBesideTime = formatCardReminderBesideTime(card);
   const [fileDragOver, setFileDragOver] = useState(false);
+  /** true = 上下分栏（附件在上、正文在下）；false = 左右分栏 */
+  const [layoutStack, setLayoutStack] = useState(readInitialDetailLayoutStack);
 
   const attachEnabled =
     Boolean(canEdit && canAttachMedia && onPasteFiles);
@@ -130,6 +210,21 @@ export function CardDetail({
     setFileDragOver(false);
   }, [card.id]);
 
+  const toggleDetailLayout = useCallback(() => {
+    setLayoutStack((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(
+          CARD_DETAIL_LAYOUT_KEY,
+          next ? "stack" : "split"
+        );
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -149,7 +244,10 @@ export function CardDetail({
   const panel = (
     <div className="card-detail-overlay" onMouseDown={onClose}>
       <div
-        className="card-detail-wrap card-detail-wrap--square"
+        className={
+          "card-detail-wrap card-detail-wrap--square" +
+          (hasGallery && layoutStack ? " card-detail-wrap--layout-stack" : "")
+        }
         onMouseDown={(e) => e.stopPropagation()}
         onDragOver={onDetailDragOver}
         onDragEnter={onDetailDragEnter}
@@ -161,6 +259,9 @@ export function CardDetail({
           className={
             "card card--detail-modal" +
             (hasGallery ? " card--detail-modal--has-gallery" : "") +
+            (hasGallery && layoutStack
+              ? " card--detail-modal--layout-stack"
+              : "") +
             (menuOpen ? " is-menu-open" : "") +
             (fileDragOver && attachEnabled ? " card--file-drag-over" : "")
           }
@@ -186,6 +287,30 @@ export function CardDetail({
                   ) : null}
                 </span>
                 <div className="card__toolbar-actions">
+                  {hasGallery ? (
+                    <button
+                      type="button"
+                      className="card__detail-layout-toggle"
+                      aria-pressed={layoutStack}
+                      aria-label={
+                        layoutStack
+                          ? "切换为左右分栏"
+                          : "切换为上下分栏（附件在上，正文在下可滚动）"
+                      }
+                      title={
+                        layoutStack
+                          ? "切换为左右分栏"
+                          : "切换为上下分栏（附件在上，正文在下可滚动）"
+                      }
+                      onClick={toggleDetailLayout}
+                    >
+                      {layoutStack ? (
+                        <IconDetailLayoutSplit />
+                      ) : (
+                        <IconDetailLayoutStack />
+                      )}
+                    </button>
+                  ) : null}
                   <div
                     className="card__menu-root"
                     data-card-menu-root={menuId}

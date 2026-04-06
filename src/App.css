@@ -4692,8 +4692,8 @@ div.card__text--readonly:not(.card__text--preview) {
 .card-detail-wrap {
   position: relative;
   width: 100%;
-  max-width: min(920px, calc(100vw - 32px));
-  max-height: min(90vh, 880px);
+  max-width: min(1120px, calc(100vw - 32px));
+  max-height: min(90vh, 960px);
   display: flex;
   flex-direction: column;
   filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.2));
@@ -4701,7 +4701,8 @@ div.card__text--readonly:not(.card__text--preview) {
 
 /* 详情卡片整体正方形；有附件时左文右图，无附件时整面横格纸 */
 .card-detail-wrap--square {
-  --detail-square: min(94vmin, 720px, calc(100vw - 24px), calc(100vh - 40px));
+  /* 大屏略放大，左文右图（视频）两侧更宽；仍受视口与高度约束 */
+  --detail-square: min(96vmin, 960px, calc(100vw - 48px), calc(100vh - 48px));
   width: var(--detail-square);
   height: var(--detail-square);
   max-width: 100%;
@@ -4721,7 +4722,7 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .card--detail-modal {
-  max-height: min(90vh - 40px, 840px);
+  max-height: min(90vh - 40px, 960px);
   overflow: auto;
   margin: 0;
 }
@@ -4820,8 +4821,52 @@ div.card__text--readonly:not(.card__text--preview) {
 
 /* 详情正方形：标签贴在纸张最底一行；去掉底部内边距；正文在 ProseMirror 内滚动 */
 .card-detail-wrap--square .card__paper {
+  padding-left: 0;
+  padding-right: 0;
   padding-bottom: 0;
   min-height: 0;
+  /* 横格不铺在整张纸上：否则滚动发生在 .ProseMirror 内时会出现「字动线不动」 */
+  background-image: none;
+}
+
+/* 顶栏仍占第一行格高，横格与主列表卡片一致；左右留白只作用在内容上，格线通栏 */
+.card-detail-wrap--square .card__toolbar {
+  box-sizing: border-box;
+  padding-left: 18px;
+  padding-right: 18px;
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--note-line-height) - 1px),
+    var(--note-line-color) calc(var(--note-line-height) - 1px),
+    var(--note-line-color) var(--note-line-height)
+  );
+  background-size: 100% var(--note-line-height);
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-clip: border-box;
+  background-origin: border-box;
+}
+
+/* 标签区在滚动层外，单独铺格线（与正文相位可能略有偏差，避免交界处缺线） */
+.card-detail-wrap--square .card__paper > .card__tags-row {
+  box-sizing: border-box;
+  padding-left: 18px;
+  padding-right: 18px;
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--note-line-height) - 1px),
+    var(--note-line-color) calc(var(--note-line-height) - 1px),
+    var(--note-line-color) var(--note-line-height)
+  );
+  background-size: 100% var(--note-line-height);
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-clip: border-box;
+  background-origin: border-box;
 }
 
 .card-detail-wrap--square .card__paper .card__text-editor {
@@ -4840,9 +4885,37 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .card-detail-wrap--square .card__paper .card__text-editor .ProseMirror {
+  box-sizing: border-box;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* 横线通栏顶到纸左缘，正文仍保留左右内边距 */
+  padding-left: 18px;
+  padding-right: 18px;
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--note-line-height) - 1px),
+    var(--note-line-color) calc(var(--note-line-height) - 1px),
+    var(--note-line-color) var(--note-line-height)
+  );
+  background-size: 100% var(--note-line-height);
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-clip: border-box;
+  background-origin: border-box;
+  /* 默认 scroll 时背景相对视口固定，会出现「字动线不动」；与 .mobile-quick-capture__textarea 一致 */
+  background-attachment: local;
+}
+
+.card-detail-wrap--square .card__paper .card__text-editor .ProseMirror::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* 右半：淡灰底，图片/视频原比例居中（contain），余白为灰 */
@@ -4888,6 +4961,111 @@ div.card__text--readonly:not(.card__text--preview) {
 .card--detail-modal--has-gallery .card__gallery-audio-thumb .card__gallery-audio-cover {
   object-fit: contain;
   object-position: center;
+}
+
+/* 详情：上下布局 = 附件上 / 正文下，垂直约各占一半；正文在纸内滚动 */
+.card-detail-wrap--square.card-detail-wrap--layout-stack {
+  width: min(960px, calc(100vw - 48px));
+  height: min(94vh, 1040px);
+  max-height: min(94vh, 1040px);
+}
+
+.card--detail-modal .card__toolbar-actions {
+  gap: 6px;
+}
+
+.card__detail-layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 6px;
+  min-width: 28px;
+  min-height: var(--note-line-height);
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vp-c-text-3);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.card__detail-layout-toggle-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.card__detail-layout-toggle:hover {
+  background: transparent;
+  color: var(--vp-c-text-2);
+}
+
+.card__detail-layout-toggle[aria-pressed="true"] {
+  background: transparent;
+  color: var(--vp-c-text-2);
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery .card__inner--split {
+  flex-direction: column;
+}
+
+/* DOM 顺序仍是「纸 → 画廊」，用 order 把附件放到上半屏 */
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery .card__gallery {
+  order: -1;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  border-radius: 12px 12px 0 0;
+  border-left: none;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery .card__paper--with-gallery {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  border-right: none;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery
+  .card__paper--with-gallery
+  .card__text-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery
+  .card__paper--with-gallery
+  .card__text-editor
+  > div {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery
+  .card__paper--with-gallery
+  .card__text-editor
+  .ProseMirror {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.card--detail-modal--layout-stack.card--detail-modal--has-gallery.is-menu-open
+  .card__paper--with-gallery {
+  overflow: visible;
 }
 
 .card-detail-col-pill {
@@ -4955,6 +5133,15 @@ div.card__text--readonly:not(.card__text--preview) {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
+  .card-detail-wrap--square.card-detail-wrap--layout-stack {
+    height: auto;
+    max-height: 92vh;
+  }
+
+  .card__detail-layout-toggle {
+    display: none;
+  }
+
   .card-detail-wrap--square {
     width: 100%;
     height: auto;
@@ -5005,5 +5192,38 @@ div.card__text--readonly:not(.card__text--preview) {
   .card--detail-modal--has-gallery .card__gallery-viewport {
     flex: 1 1 auto;
     min-height: min(52vw, 280px);
+  }
+
+  /* 窄屏整块 modal 滚动：横格回到纸张上与正文同滚；勿在 ProseMirror 再铺一层（否则像「只剩白底」） */
+  .card-detail-wrap--square .card__paper {
+    background-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--note-line-height) - 1px),
+      var(--note-line-color) calc(var(--note-line-height) - 1px),
+      var(--note-line-color) var(--note-line-height)
+    );
+    background-size: 100% var(--note-line-height);
+    background-repeat: repeat-y;
+    background-position: 0 0;
+    background-clip: border-box;
+    background-origin: border-box;
+  }
+
+  .card-detail-wrap--square .card__toolbar {
+    background-image: none;
+    background-color: transparent;
+  }
+
+  .card-detail-wrap--square .card__paper > .card__tags-row {
+    background-image: none;
+    background-color: transparent;
+  }
+
+  .card-detail-wrap--square .card__paper .card__text-editor .ProseMirror {
+    background-image: none;
+    background-color: transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 }

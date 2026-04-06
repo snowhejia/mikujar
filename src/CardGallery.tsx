@@ -13,6 +13,7 @@ import {
   MediaLightboxVideo,
   MediaOpenLink,
   MediaThumbImage,
+  MediaThumbLoadingOverlay,
   MediaThumbVideo,
   useMediaDisplaySrc,
 } from "./mediaDisplay";
@@ -79,17 +80,37 @@ function AudioGlyphIcon({ className }: { className?: string }) {
 
 function GalleryInlineVideo({ url }: { url: string }) {
   const src = useMediaDisplaySrc(url);
-  if (!src) {
-    return <span className="card__gallery-thumb card__gallery-thumb--video" aria-hidden />;
-  }
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(false);
+  }, [src]);
+
+  const showLoading = !src || !ready;
+
   return (
-    <video
-      className="card__gallery-thumb card__gallery-thumb--video"
-      src={src}
-      controls
-      playsInline
-      preload="metadata"
-    />
+    <div
+      className="card__gallery-thumb-wrap"
+      aria-busy={showLoading || undefined}
+    >
+      {showLoading ? <MediaThumbLoadingOverlay /> : null}
+      {src ? (
+        <video
+          className={[
+            "card__gallery-thumb",
+            "card__gallery-thumb--video",
+            ready ? "card__gallery-thumb--ready" : "card__gallery-thumb--pending",
+          ].join(" ")}
+          src={src}
+          controls
+          playsInline
+          preload="auto"
+          onLoadedData={() => setReady(true)}
+          onCanPlay={() => setReady(true)}
+          onError={() => setReady(true)}
+        />
+      ) : null}
+    </div>
   );
 }
 

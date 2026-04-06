@@ -5,6 +5,107 @@ function textOf(el) {
   return el?.innerText?.trim() || "";
 }
 
+/** 当前笔记在 URL 中的 id，用于从内嵌 JSON 里截取「本条笔记」片段，避免拿到登录者信息 */
+function extractNoteIdFromUrl() {
+  const p = location.pathname;
+  let m = p.match(/\/explore\/([^/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  m = p.match(/\/discovery\/item\/([^/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  m = p.match(/\/user\/profile\/[^/]+\/([^/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return "";
+}
+
+function isInTopNavOrSidebar(el) {
+  return !!el.closest(
+    "header, nav, [class*='navbar'], [class*='nav-bar'], [class*='NavBar'], [id*='header'], .reds-menu, [class*='side-bar'], [class*='sidebar'], [class*='user-menu']"
+  );
+}
+
+/**
+ * 仅取「帖子作者」昵称：只在笔记主体容器内找，排除顶栏/侧栏登录用户；JSON 只解析当前 noteId 附近片段。
+ */
+function scrapeAuthorNickname() {
+  const bad = /^(关注|粉丝|主页|私信|更多|查看|Follow|登录|注册)/;
+
+  const roots = [];
+  const pushRoot = (n) => {
+    if (n && roots.indexOf(n) === -1) roots.push(n);
+  };
+  pushRoot(document.querySelector("#noteContainer"));
+  pushRoot(document.querySelector(".note-detail"));
+  pushRoot(document.querySelector('[class*="note-detail"]'));
+  pushRoot(document.querySelector(".note-scroller"));
+  pushRoot(document.querySelector("article.note-item"));
+  pushRoot(document.querySelector("main article"));
+  pushRoot(document.querySelector("main"));
+
+  const tryDomInRoot = (root) => {
+    if (!root) return "";
+    const selectors = [
+      ".author-wrapper .username",
+      ".author-wrapper .name",
+      ".author .username",
+      ".author .name",
+      ".author-name",
+      ".user-name",
+      '[class*="author"] [class*="name"]',
+      '[class*="Author"] [class*="name"]',
+      '[class*="nickname"]',
+    ];
+    for (const sel of selectors) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (isInTopNavOrSidebar(el)) continue;
+        const t = textOf(el);
+        if (t && t.length <= 48 && t.length >= 1 && !bad.test(t)) return t;
+      }
+    }
+    for (const a of root.querySelectorAll('a[href*="/user/profile/"]')) {
+      if (isInTopNavOrSidebar(a)) continue;
+      const t = textOf(a);
+      if (
+        t &&
+        t.length > 0 &&
+        t.length <= 48 &&
+        !bad.test(t) &&
+        !/^\d+$/.test(t)
+      ) {
+        return t;
+      }
+    }
+    return "";
+  };
+
+  for (const r of roots) {
+    const got = tryDomInRoot(r);
+    if (got) return got;
+  }
+
+  const noteId = extractNoteIdFromUrl();
+  if (noteId) {
+    for (const script of document.querySelectorAll("script:not([src])")) {
+      const t = script.textContent || "";
+      if (t.length < 80 || t.length > 500_000) continue;
+      const idx = t.indexOf(noteId);
+      if (idx === -1) continue;
+      const chunk = t.slice(Math.max(0, idx - 2000), Math.min(t.length, idx + 12000));
+      const m = chunk.match(/"nickName"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (m && m[1]) {
+        const raw = m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        if (raw.length > 0 && raw.length <= 64 && !bad.test(raw)) return raw;
+      }
+      const m2 = chunk.match(/"nickname"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+      if (m2 && m2[1]) {
+        const raw = m2[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        if (raw.length > 0 && raw.length <= 64 && !bad.test(raw)) return raw;
+      }
+    }
+  }
+
+  return "";
+}
+
 function scrapeNotePage() {
   const ogTitle = document
     .querySelector('meta[property="og:title"]')
@@ -136,7 +237,18 @@ function scrapeNotePage() {
   const videoUrls = collectLikelyMp4Urls();
 
   const pageUrl = location.href;
-  return { title, body, imageUrls, videoUrls, pageUrl };
+  const authorNickname = scrapeAuthorNickname();
+  return { title, body, imageUrls, videoUrls, pageUrl, authorNickname };
+}
+
+/** 同一支视频常出现多条 URL（仅 query 不同，或 performance 与 video 元素各一条），按路径去重 */
+function mp4CanonicalKey(url) {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`.toLowerCase();
+  } catch {
+    return url;
+  }
 }
 
 /** 从 Performance 资源列表里找 .mp4（网页版播放后常见） */
@@ -149,8 +261,9 @@ function collectPerformanceMp4Urls() {
       const name = e.name || "";
       if (!/\.mp4(\?|#|$)/i.test(name)) continue;
       if (!/^https?:\/\//i.test(name)) continue;
-      if (seen.has(name)) continue;
-      seen.add(name);
+      const key = mp4CanonicalKey(name);
+      if (seen.has(key)) continue;
+      seen.add(key);
       out.push(name);
     }
   } catch {
@@ -170,25 +283,26 @@ function collectVideoElementMp4Urls() {
       v.querySelector("source[src]")?.getAttribute("src");
     if (!src || !/^https?:\/\//i.test(src)) continue;
     if (!/\.mp4(\?|#|$)/i.test(src)) continue;
-    if (seen.has(src)) continue;
-    seen.add(src);
+    const key = mp4CanonicalKey(src);
+    if (seen.has(key)) continue;
+    seen.add(key);
     out.push(src);
   }
   return out;
 }
 
 function collectLikelyMp4Urls() {
-  const seen = new Set();
-  const merged = [];
-  for (const u of [
-    ...collectPerformanceMp4Urls(),
-    ...collectVideoElementMp4Urls(),
-  ]) {
-    if (seen.has(u)) continue;
-    seen.add(u);
-    merged.push(u);
+  const byKey = new Map();
+  // 先收 video 元素：一般是当前可播地址，fetch 时更稳；再补 performance 里同路径尚未收录的
+  for (const u of collectVideoElementMp4Urls()) {
+    const key = mp4CanonicalKey(u);
+    if (!byKey.has(key)) byKey.set(key, u);
   }
-  return merged;
+  for (const u of collectPerformanceMp4Urls()) {
+    const key = mp4CanonicalKey(u);
+    if (!byKey.has(key)) byKey.set(key, u);
+  }
+  return Array.from(byKey.values());
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

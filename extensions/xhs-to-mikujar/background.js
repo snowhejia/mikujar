@@ -16,15 +16,17 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildCardHtml({ title, body, pageUrl }) {
+function buildCardHtml({ title, body, pageUrl, authorNickname }) {
   const paras = body
     .split(/\n+/)
     .map((p) => p.trim())
     .filter(Boolean)
     .map((p) => `<p>${escapeHtml(p)}</p>`)
     .join("");
+  const nick = String(authorNickname || "").trim();
+  const linkText = nick ? nick : "来源：小红书";
   const link = pageUrl
-    ? `<p><a href="${escapeHtml(pageUrl)}" rel="noreferrer">来源：小红书</a></p>`
+    ? `<p><a href="${escapeHtml(pageUrl)}" rel="noreferrer">${escapeHtml(linkText)}</a></p>`
     : "";
   return `<p><strong>${escapeHtml(title)}</strong></p>${paras || "<p>（无正文）</p>"}${link}`;
 }
@@ -73,17 +75,67 @@ async function ensureApiPermission(apiBase) {
   return chrome.permissions.request({ origins: [originPattern] });
 }
 
+/** 把 fetch / HTTP / 常见英文错译成用户可理解的说明 */
+function explainNetworkError(err) {
+  const msg = String(err?.message || err || "");
+  if (/Failed to fetch|NetworkError|network|Load failed|ECONNREFUSED/i.test(msg)) {
+    return "网络异常或浏览器拦截了跨域请求（小红书 CDN 常不允许扩展直接拉取）";
+  }
+  if (/aborted|AbortError/i.test(msg)) {
+    return "请求被中断";
+  }
+  return msg || "未知网络错误";
+}
+
+function explainHttpStatus(status) {
+  if (status === 401 || status === 403) {
+    return `服务器拒绝访问(${status})，链接可能已过期，视频请先点播放再保存`;
+  }
+  if (status === 404) {
+    return `资源不存在(${status})，地址可能已失效`;
+  }
+  if (status === 416) {
+    return `Range 请求不被接受(${status})，可刷新页面后重试`;
+  }
+  if (status >= 500) {
+    return `源站或 CDN 异常(${status})，请稍后重试`;
+  }
+  return `下载失败(HTTP ${status})`;
+}
+
+function explainUploadOrPresignError(message) {
+  const m = String(message || "");
+  if (/401|Unauthorized|未授权|无效.*token|token/i.test(m)) {
+    return "登录凭证无效：请检查扩展选项里的 Token 是否过期";
+  }
+  if (/403|Forbidden|禁止/.test(m)) {
+    return "无权限：Token 或合集权限不足";
+  }
+  if (/未开启 COS|presign|预签名|direct/.test(m)) {
+    return "服务端上传配置异常（预签名/COS）";
+  }
+  if (/上传 COS|PUT/.test(m)) {
+    return "上传到对象存储失败，请稍后重试";
+  }
+  return m;
+}
+
 async function fetchAsBlob(imageUrl) {
-  const r = await fetch(imageUrl, {
-    headers: {
-      Referer: REFERER,
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    },
-    credentials: "omit",
-    mode: "cors",
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  let r;
+  try {
+    r = await fetch(imageUrl, {
+      headers: {
+        Referer: REFERER,
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      },
+      credentials: "omit",
+      mode: "cors",
+    });
+  } catch (e) {
+    throw new Error(explainNetworkError(e));
+  }
+  if (!r.ok) throw new Error(explainHttpStatus(r.status));
   return await r.blob();
 }
 
@@ -141,10 +193,14 @@ async function presignAndUpload(apiBase, token, userId, blob, filename, contentT
   });
   const pj = await pres.json().catch(() => ({}));
   if (!pres.ok) {
-    throw new Error(pj.error || `预签名失败 ${pres.status}`);
+    throw new Error(
+      explainUploadOrPresignError(pj.error || `预签名失败 ${pres.status}`)
+    );
   }
   if (pj.direct !== true || typeof pj.putUrl !== "string") {
-    throw new Error(pj.error || "服务端未开启 COS 直传");
+    throw new Error(
+      explainUploadOrPresignError(pj.error || "服务端未开启 COS 直传")
+    );
   }
   const putHeaders = { ...(pj.headers || {}) };
   const putRes = await fetch(pj.putUrl, {
@@ -152,8 +208,14 @@ async function presignAndUpload(apiBase, token, userId, blob, filename, contentT
     headers: putHeaders,
     body: blob,
   });
-  if (!putRes.ok) throw new Error(`上传 COS 失败 ${putRes.status}`);
-  if (typeof pj.url !== "string" || !pj.url) throw new Error("无效上传响应");
+  if (!putRes.ok) {
+    throw new Error(
+      explainUploadOrPresignError(`上传 COS 失败 ${putRes.status}`)
+    );
+  }
+  if (typeof pj.url !== "string" || !pj.url) {
+    throw new Error(explainUploadOrPresignError("无效上传响应"));
+  }
   return {
     url: pj.url,
     kind: pj.kind || "image",
@@ -178,7 +240,17 @@ async function createCard(apiBase, token, userId, collectionId, card) {
   );
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
-    throw new Error(j.error || `创建笔记失败 ${r.status}`);
+    const raw = j.error || `创建笔记失败 ${r.status}`;
+    if (r.status === 401 || r.status === 403) {
+      throw new Error("无法创建笔记：Token 无效或无写入该合集的权限");
+    }
+    if (r.status === 404) {
+      throw new Error("无法创建笔记：合集不存在或 ID 填错");
+    }
+    if (r.status >= 500) {
+      throw new Error("服务器繁忙，创建笔记失败，请稍后重试");
+    }
+    throw new Error(String(raw));
   }
   return j;
 }
@@ -218,7 +290,8 @@ async function runSave(tabId, emit) {
     emit({
       type: "done",
       ok: false,
-      message: "无法读取页面：请刷新小红书笔记页后重试。",
+      message:
+        "无法连接内容脚本：请确认当前是小红书笔记详情页，刷新后重试；若刚安装扩展需刷新页面再点图标。",
     });
     return;
   }
@@ -227,12 +300,21 @@ async function runSave(tabId, emit) {
     emit({
       type: "done",
       ok: false,
-      message: scraped?.error || "抓取失败",
+      message:
+        scraped?.error ||
+        "页面抓取失败：请刷新笔记页；若页面有验证码需先在浏览器里通过验证。",
     });
     return;
   }
 
-  const { title, body, imageUrls, videoUrls = [], pageUrl } = scraped.data;
+  const {
+    title,
+    body,
+    imageUrls,
+    videoUrls = [],
+    pageUrl,
+    authorNickname,
+  } = scraped.data;
   const media = [];
   const errors = [];
 
@@ -260,7 +342,12 @@ async function runSave(tabId, emit) {
     emitStepProgress(i, `图片 ${i + 1} / ${imgs.length}…`);
     try {
       const blob = await fetchAsBlob(url);
-      if (blob.size < 200) continue;
+      if (blob.size < 200) {
+        errors.push(
+          `图${i + 1}：下载结果过小(${blob.size}B)，可能是防盗链或地址无效`
+        );
+        continue;
+      }
       const filename = guessFilename(url, i);
       const contentType = guessContentType(blob, filename);
       const up = await presignAndUpload(
@@ -277,7 +364,7 @@ async function runSave(tabId, emit) {
         name: up.name || filename,
       });
     } catch (e) {
-      errors.push(`图${i + 1}: ${e?.message || e}`);
+      errors.push(`图${i + 1}：${e?.message || e}`);
     }
   }
 
@@ -289,7 +376,12 @@ async function runSave(tabId, emit) {
     );
     try {
       const blob = await fetchAsBlob(url);
-      if (blob.size < 4096) continue;
+      if (blob.size < 4096) {
+        errors.push(
+          `视频${j + 1}：文件过小(${blob.size}B)，多半未拉到真实 mp4；请先在页内播放几秒再保存，或当前为 m3u8 流（扩展仅支持直链 mp4）`
+        );
+        continue;
+      }
       const filename = guessVideoFilename(url, j);
       const contentType = guessVideoContentType(blob, filename);
       const up = await presignAndUpload(
@@ -306,7 +398,7 @@ async function runSave(tabId, emit) {
         name: up.name || filename,
       });
     } catch (e) {
-      errors.push(`视频${j + 1}: ${e?.message || e}`);
+      errors.push(`视频${j + 1}：${e?.message || e}`);
     }
   }
 
@@ -315,7 +407,7 @@ async function runSave(tabId, emit) {
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
   const card = {
     id: newCardId(),
-    text: buildCardHtml({ title, body, pageUrl }),
+    text: buildCardHtml({ title, body, pageUrl, authorNickname }),
     minutesOfDay,
     addedOn: todayYMD(),
     tags: ["小红书"],
@@ -333,16 +425,28 @@ async function runSave(tabId, emit) {
     const nImg = media.filter((m) => m.kind === "image").length;
     const nVid = media.filter((m) => m.kind === "video").length;
     let msg;
+    const errTail =
+      errors.length > 0
+        ? (() => {
+            const shown = errors.slice(0, 2).join("；");
+            const more =
+              errors.length > 2 ? ` …共 ${errors.length} 项附件未成功。` : "";
+            return ` ${shown}${more}`;
+          })()
+        : "";
     if (media.length > 0) {
       const parts = [];
       if (nImg) parts.push(`${nImg} 张图`);
       if (nVid) parts.push(`${nVid} 个视频`);
-      msg = `成功：已保存，${parts.join("、")}。`;
+      msg = `成功：正文已保存，${parts.join("、")}。`;
+      if (errors.length > 0) {
+        msg += `部分附件失败：${errTail.trim()}`;
+      }
     } else if (errors.length > 0) {
-      msg = `成功：正文已保存；附件失败 ${errors.length} 项（CDN/鉴权/未播放视频）。`;
+      msg = `成功：正文已保存；全部附件未成功。${errTail.trim()}`;
     } else {
       msg =
-        "成功：已保存（未抓到图片/视频；视频请先播放再点保存，或当前页仅为图文）。";
+        "成功：正文已保存。未检测到可上传的图片/视频（视频请先播放几秒；纯图文笔记无视频属正常）。";
     }
     emit({ type: "progress", value: 100, text: msg });
     emit({ type: "done", ok: true, message: msg });
@@ -370,7 +474,11 @@ chrome.runtime.onConnect.addListener((port) => {
       try {
         await runSave(msg.tabId, emit);
       } catch (e) {
-        emit({ type: "done", ok: false, message: String(e?.message || e) });
+        let text = String(e?.message || e);
+        if (/Failed to fetch|NetworkError|Load failed/i.test(text)) {
+          text = explainNetworkError(e);
+        }
+        emit({ type: "done", ok: false, message: `处理异常：${text}` });
       }
     })();
   });

@@ -19,5 +19,6 @@ COPY --from=build /app/dist ./server/public
 ENV PORT=3002
 ENV DATA_FILE=/data/collections.json
 EXPOSE 3002
-VOLUME ["/data"]
+# Railway forbids `VOLUME` in Dockerfiles — attach a Railway Volume at /data if you need DATA_FILE persistence.
+RUN mkdir -p /data
 CMD ["node", "server/src/index.js"]

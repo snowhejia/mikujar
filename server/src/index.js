@@ -72,6 +72,19 @@ async function fileExists(p) {
   }
 }
 
+/** Vite 构建产物带 hash 的文件可长期缓存；HTML 等需每次协商，便于 304。 */
+function setStaticCacheHeaders(res, absolutePath) {
+  const rel = absolutePath.startsWith(publicDir)
+    ? absolutePath.slice(publicDir.length).replace(/\\/g, "/")
+    : absolutePath.replace(/\\/g, "/");
+  const inAssets = rel.includes("/assets/");
+  if (inAssets) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    res.setHeader("Cache-Control", "max-age=0, must-revalidate");
+  }
+}
+
 const hasPublic = await fileExists(publicDir);
 
 const app = express();
@@ -890,9 +903,16 @@ app.post(
 // ─────────────────────────────────────────────────────────────────────────────
 
 if (hasPublic) {
-  app.use(express.static(publicDir));
+  app.use(
+    express.static(publicDir, {
+      setHeaders(res, filePath) {
+        setStaticCacheHeaders(res, filePath);
+      },
+    })
+  );
   app.use((req, res, next) => {
     if (req.method !== "GET" || req.path.startsWith("/api")) return next();
+    res.setHeader("Cache-Control", "max-age=0, must-revalidate");
     res.sendFile(join(publicDir, "index.html"));
   });
 }

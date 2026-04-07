@@ -12,6 +12,7 @@ export async function saveLocalMediaInlineInBrowser(file: File): Promise<{
   url: string;
   kind: NoteMediaKind;
   name?: string;
+  sizeBytes: number;
 }> {
   if (file.size > INLINE_MAX_BYTES) {
     throw new Error(
@@ -33,5 +34,6 @@ export async function saveLocalMediaInlineInBrowser(file: File): Promise<{
     url,
     kind,
     name: file.name.trim() || undefined,
+    sizeBytes: file.size,
   };
 }

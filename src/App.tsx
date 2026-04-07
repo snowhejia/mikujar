@@ -14,9 +14,7 @@ import type {
   Ref,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { Capacitor } from "@capacitor/core";
 import { isTauri } from "@tauri-apps/api/core";
-import { DEFAULT_TAURI_REMOTE_API } from "./api/apiBase";
 import { fetchApiHealth } from "./api/health";
 import {
   fetchCollectionsFromApi,
@@ -63,7 +61,14 @@ import {
   saveLocalMediaToAppFolder,
 } from "./localMediaTauri";
 import { migrateCollectionTree } from "./migrateCollections";
+import {
+  readNewNotePlacement,
+  saveNewNotePlacement,
+  type NewNotePlacement,
+} from "./newNotePlacementStorage";
 import { UserProfileModal } from "./UserProfileModal";
+import { DataStatsModal } from "./DataStatsModal";
+import { NoteSettingsModal } from "./NoteSettingsModal";
 import { CardDetail } from "./CardDetail";
 import { ReminderPickerModal } from "./ReminderPickerModal";
 import { CardRowInner } from "./CardRowInner";
@@ -78,7 +83,7 @@ import {
   filesFromDataTransfer,
 } from "./filesFromDataTransfer";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
-import { htmlToPlainText, noteBodyToHtml } from "./noteEditor/plainHtml";
+import { htmlToPlainText } from "./noteEditor/plainHtml";
 import type {
   Collection,
   NoteCard,
@@ -91,7 +96,7 @@ import "./App.css";
 const DEFAULT_COLLECTION_HINT =
   "欢迎光临 mikujar「未来罐」～ 一条笔记一件小事，按一天里的时刻慢慢堆满！左侧合集随便切；这段灰灰的字双击一下，就能换成你自己的开场白 ✨";
 
-/** 与 favicon 一致的未来罐，手机底栏「新建」用 */
+/** 与 favicon 一致的未来罐，手机底栏「新建小笔记」用 */
 function MobileDockJarIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -180,6 +185,30 @@ function CollectionStarIcon({
 
 function cloneInitialCollections(): Collection[] {
   return structuredClone(initialCollections) as Collection[];
+}
+
+/** 小屏抽屉：左缘右滑打开、侧栏左滑关闭（与 @media max-width:900px 一致） */
+const MOBILE_NAV_SWIPE_LAYOUT_MAX_PX = 900;
+const MOBILE_NAV_SWIPE_OPEN_MIN_DX = 56;
+const MOBILE_NAV_SWIPE_CLOSE_MIN_DX = 56;
+const MOBILE_NAV_SWIPE_AXIS_RATIO = 1.25;
+/** 仅从屏幕左缘划入时打开，减少与正文/编辑器手势冲突 */
+const MOBILE_NAV_SWIPE_FROM_LEFT_PX = 40;
+
+function mobileNavSwipeMostlyHorizontal(dx: number, dy: number): boolean {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  return ax > ay * MOBILE_NAV_SWIPE_AXIS_RATIO;
+}
+
+function mobileNavSwipeTargetIsTextual(target: EventTarget | null): boolean {
+  const el =
+    target instanceof Element
+      ? target.closest(
+          'input, textarea, select, [contenteditable="true"], .ProseMirror, [role="textbox"]'
+        )
+      : null;
+  return Boolean(el);
 }
 
 function localDateString(d = new Date()): string {
@@ -1190,11 +1219,17 @@ function mediaItemFromUploadResult(r: {
   kind: NoteMediaKind;
   name?: string;
   coverUrl?: string;
+  sizeBytes?: number;
 }): NoteMediaItem {
   return {
     kind: r.kind,
     url: r.url,
     ...(r.name?.trim() ? { name: r.name.trim() } : {}),
+    ...(typeof r.sizeBytes === "number" &&
+    Number.isFinite(r.sizeBytes) &&
+    r.sizeBytes >= 0
+      ? { sizeBytes: Math.floor(r.sizeBytes) }
+      : {}),
     ...(r.kind === "audio" && r.coverUrl?.trim()
       ? { coverUrl: r.coverUrl.trim() }
       : {}),
@@ -1213,21 +1248,20 @@ function SidebarWorkspaceAppMark() {
   );
 }
 
-/** 头像旁下拉：个人中心、本地/云端 */
+/** 头像旁下拉：个人中心、笔记设置、数据统计（具体项在弹窗内） */
 function UserAccountMenuDropdown({
-  onClose,
   dataMode,
-  setDataMode,
   profileBusy,
   onOpenProfile,
+  onOpenNoteSettings,
+  onOpenDataStats,
 }: {
-  onClose: () => void;
   dataMode: AppDataMode;
-  setDataMode: (mode: AppDataMode) => void;
   profileBusy: boolean;
   onOpenProfile: () => void;
+  onOpenNoteSettings: () => void;
+  onOpenDataStats: () => void;
 }) {
-  const tauri = isTauri();
   return (
     <div className="sidebar__user-menu-dropdown" role="menu">
       <button
@@ -1246,44 +1280,25 @@ function UserAccountMenuDropdown({
       >
         个人中心
       </button>
-      <div className="sidebar__user-menu-sep" aria-hidden />
-      <div className="sidebar__user-menu-section-label">数据存储</div>
-      {tauri ? (
-        <button
-          type="button"
-          className={
-            "sidebar__user-menu-item" +
-            (dataMode === "local"
-              ? " sidebar__user-menu-item--active"
-              : "")
-          }
-          role="menuitem"
-          aria-pressed={dataMode === "local"}
-          onClick={() => {
-            setDataMode("local");
-            onClose();
-          }}
-        >
-          本地
-        </button>
-      ) : null}
       <button
         type="button"
-        className={
-          "sidebar__user-menu-item" +
-          (dataMode === "remote"
-            ? " sidebar__user-menu-item--active"
-            : "")
-        }
+        className="sidebar__user-menu-item"
         role="menuitem"
-        aria-pressed={dataMode === "remote"}
-        title={`连接 ${DEFAULT_TAURI_REMOTE_API.replace(/^https?:\/\//, "")} 同步与登录`}
         onClick={() => {
-          setDataMode("remote");
-          onClose();
+          onOpenNoteSettings();
         }}
       >
-        云端
+        笔记设置
+      </button>
+      <button
+        type="button"
+        className="sidebar__user-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onOpenDataStats();
+        }}
+      >
+        数据统计
       </button>
     </div>
   );
@@ -2096,36 +2111,27 @@ export default function App() {
   const [profileSaveBusy, setProfileSaveBusy] = useState(false);
   const [userProfileModalOpen, setUserProfileModalOpen] =
     useState(false);
+  const [userNoteSettingsOpen, setUserNoteSettingsOpen] =
+    useState(false);
+  const [userDataStatsOpen, setUserDataStatsOpen] = useState(false);
   const [userAccountMenuOpen, setUserAccountMenuOpen] =
     useState(false);
+  const [newNotePlacement, setNewNotePlacementState] =
+    useState<NewNotePlacement>(readNewNotePlacement);
+  const setNewNotePlacement = useCallback((p: NewNotePlacement) => {
+    setNewNotePlacementState(p);
+    saveNewNotePlacement(p);
+  }, []);
   const userAccountMenuRef = useRef<HTMLDivElement>(null);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileBrowseEditMode, setMobileBrowseEditMode] = useState(false);
   const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
-  /** 手机底栏罐子：底部横线纸速记层 */
-  const [mobileQuickCaptureOpen, setMobileQuickCaptureOpen] =
-    useState(false);
-  const [mobileQuickCaptureText, setMobileQuickCaptureText] =
-    useState("");
-  /** 打开速记层瞬间的时刻，与左上角展示、落库卡片一致 */
-  const [mobileQuickCaptureHead, setMobileQuickCaptureHead] = useState<{
-    minutesOfDay: number;
-    addedOn: string;
-  } | null>(null);
-  /** 快速记录写入的目标合集（打开时默认当前选中，可在药丸里切换） */
-  const [mobileQuickCaptureTargetColId, setMobileQuickCaptureTargetColId] =
-    useState<string | null>(null);
-  const mobileQuickCaptureDraftRef = useRef("");
-  const mobileQuickCaptureAreaRef = useRef<HTMLTextAreaElement>(null);
-  const quickCaptureMediaInputRef = useRef<HTMLInputElement>(null);
-
-  const nativeQuickCaptureShell =
-    isTauri() || Capacitor.isNativePlatform();
-
-  const mobileQuickCaptureCollectionPills = useMemo(
-    () => walkCollectionsWithPath(collections, []),
-    [collections]
+  /** 与 CSS @media (max-width: 900px) 一致，用于小屏专属控件 */
+  const [narrowUi, setNarrowUi] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 900px)").matches
   );
   const [relatedPanel, setRelatedPanel] = useState<{
     colId: string;
@@ -2141,10 +2147,10 @@ export default function App() {
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 900px)");
     const onMq = () => {
+      setNarrowUi(mq.matches);
       if (!mq.matches) {
         setMobileNavOpen(false);
         setMobileCalendarOpen(false);
-        setMobileQuickCaptureOpen(false);
       }
     };
     mq.addEventListener("change", onMq);
@@ -2159,7 +2165,6 @@ export default function App() {
     const lockScroll =
       mobileNavOpen ||
       mobileCalendarOpen ||
-      mobileQuickCaptureOpen ||
       relatedPanel !== null;
     if (!lockScroll) return;
     const prev = document.body.style.overflow;
@@ -2167,7 +2172,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [mobileNavOpen, mobileCalendarOpen, mobileQuickCaptureOpen, relatedPanel]);
+  }, [mobileNavOpen, mobileCalendarOpen, relatedPanel]);
 
   useEffect(() => {
     if (!relatedPanel) return;
@@ -2291,7 +2296,10 @@ export default function App() {
   }, [mobileNavOpen]);
 
   useEffect(() => {
-    if (!currentUser) setUserAccountMenuOpen(false);
+    if (!currentUser) {
+      setUserAccountMenuOpen(false);
+      setUserNoteSettingsOpen(false);
+    }
   }, [currentUser]);
 
   const submitNewUser = useCallback(async () => {
@@ -2575,6 +2583,136 @@ export default function App() {
     () => authReady && dataMode === "remote" && !remoteLoaded,
     [authReady, dataMode, remoteLoaded]
   );
+
+  const mobileMainSwipeRef = useRef<{
+    x: number;
+    y: number;
+    tracking: boolean;
+  } | null>(null);
+  const mobileSidebarSwipeRef = useRef<{ x: number; y: number } | null>(
+    null
+  );
+
+  const onMobileMainTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (
+        typeof window === "undefined" ||
+        window.innerWidth > MOBILE_NAV_SWIPE_LAYOUT_MAX_PX
+      ) {
+        return;
+      }
+      if (
+        mobileNavOpen ||
+        mobileCalendarOpen ||
+        relatedPanel !== null ||
+        detailCard !== null ||
+        userAdminOpen ||
+        userProfileModalOpen ||
+        userNoteSettingsOpen ||
+        userDataStatsOpen ||
+        reminderPicker !== null ||
+        collectionDeleteDialog !== null ||
+        showRemoteLoading
+      ) {
+        return;
+      }
+      if (mobileNavSwipeTargetIsTextual(e.target)) return;
+      const t = e.touches[0];
+      if (!t) return;
+      if (t.clientX > MOBILE_NAV_SWIPE_FROM_LEFT_PX) {
+        mobileMainSwipeRef.current = null;
+        return;
+      }
+      mobileMainSwipeRef.current = {
+        x: t.clientX,
+        y: t.clientY,
+        tracking: true,
+      };
+    },
+    [
+      mobileNavOpen,
+      mobileCalendarOpen,
+      relatedPanel,
+      detailCard,
+      userAdminOpen,
+      userProfileModalOpen,
+      userNoteSettingsOpen,
+      userDataStatsOpen,
+      reminderPicker,
+      collectionDeleteDialog,
+      showRemoteLoading,
+    ]
+  );
+
+  const onMobileMainTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const start = mobileMainSwipeRef.current;
+      mobileMainSwipeRef.current = null;
+      if (!start?.tracking) return;
+      if (
+        typeof window !== "undefined" &&
+        window.innerWidth > MOBILE_NAV_SWIPE_LAYOUT_MAX_PX
+      ) {
+        return;
+      }
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (dx < MOBILE_NAV_SWIPE_OPEN_MIN_DX) return;
+      if (!mobileNavSwipeMostlyHorizontal(dx, dy)) return;
+      setMobileNavOpen(true);
+    },
+    []
+  );
+
+  const onMobileMainTouchCancel = useCallback(() => {
+    mobileMainSwipeRef.current = null;
+  }, []);
+
+  const onMobileSidebarTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (
+        typeof window === "undefined" ||
+        window.innerWidth > MOBILE_NAV_SWIPE_LAYOUT_MAX_PX
+      ) {
+        return;
+      }
+      if (!mobileNavOpen || showRemoteLoading) return;
+      if (mobileNavSwipeTargetIsTextual(e.target)) return;
+      const t = e.touches[0];
+      if (!t) return;
+      mobileSidebarSwipeRef.current = { x: t.clientX, y: t.clientY };
+    },
+    [mobileNavOpen, showRemoteLoading]
+  );
+
+  const onMobileSidebarTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const start = mobileSidebarSwipeRef.current;
+      mobileSidebarSwipeRef.current = null;
+      if (!start) return;
+      if (
+        typeof window !== "undefined" &&
+        window.innerWidth > MOBILE_NAV_SWIPE_LAYOUT_MAX_PX
+      ) {
+        return;
+      }
+      if (!mobileNavOpen) return;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (dx > -MOBILE_NAV_SWIPE_CLOSE_MIN_DX) return;
+      if (!mobileNavSwipeMostlyHorizontal(dx, dy)) return;
+      setMobileNavOpen(false);
+    },
+    [mobileNavOpen]
+  );
+
+  const onMobileSidebarTouchCancel = useCallback(() => {
+    mobileSidebarSwipeRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!authReady) return;
@@ -2988,7 +3126,9 @@ export default function App() {
       }
       let cardToAppend: NoteCard = entry.card;
       if (dataMode !== "local") {
-        const created = await createCardApi(entry.colId, entry.card);
+        const created = await createCardApi(entry.colId, entry.card, {
+          insertAtStart: newNotePlacement === "top",
+        });
         if (!created) {
           window.alert("恢复笔记失败，请检查网络或权限后重试。");
           return;
@@ -3011,7 +3151,13 @@ export default function App() {
       setCollections((prev) =>
         mapCollectionById(prev, entry.colId, (col) => ({
           ...col,
-          cards: [...col.cards, structuredClone(cardToAppend) as NoteCard],
+          cards:
+            newNotePlacement === "top"
+              ? [
+                  structuredClone(cardToAppend) as NoteCard,
+                  ...col.cards,
+                ]
+              : [...col.cards, structuredClone(cardToAppend) as NoteCard],
         }))
       );
       setTrashViewActive(false);
@@ -3019,7 +3165,7 @@ export default function App() {
       setCalendarDay(null);
       setMobileNavOpen(false);
     },
-    [canEdit, collections, trashStorageKey, dataMode]
+    [canEdit, collections, trashStorageKey, dataMode, newNotePlacement]
   );
 
   const purgeTrashedEntry = useCallback(
@@ -3377,12 +3523,14 @@ export default function App() {
   /**
    * 向当前选中合集追加一张小笔记；返回新卡片 id，条件不满足时返回 null。
    * 云端模式下会 await POST 完成后再返回，避免紧接着的 PATCH 早于建卡导致正文未写入。
+   * `afterLocalInsert` 在本地 state 已提交 DOM 后同步调用（不等待网络），用于立刻滚到底部等。
    */
   const appendNoteCardWithHtml = useCallback(
     async (
       htmlBody: string,
       timeOverride?: { minutesOfDay: number; addedOn: string },
-      targetColIdOverride?: string
+      targetColIdOverride?: string,
+      afterLocalInsert?: () => void
     ): Promise<string | null> => {
       if (!canEdit) return null;
       if (trashViewActive) return null;
@@ -3404,146 +3552,64 @@ export default function App() {
         addedOn: day,
       };
 
-      setCollections((prev) =>
-        mapCollectionById(prev, targetColId, (col) => ({
-          ...col,
-          cards: [...col.cards, newCard],
-        }))
-      );
+      flushSync(() => {
+        setCollections((prev) =>
+          mapCollectionById(prev, targetColId, (col) => ({
+            ...col,
+            cards:
+              newNotePlacement === "top"
+                ? [newCard, ...col.cards]
+                : [...col.cards, newCard],
+          }))
+        );
+      });
+      afterLocalInsert?.();
       if (dataMode !== "local") {
-        const created = await createCardApi(targetColId, newCard);
+        const created = await createCardApi(targetColId, newCard, {
+          insertAtStart: newNotePlacement === "top",
+        });
         if (!created) {
-          setCollections((prev) =>
-            mapCollectionById(prev, targetColId, (col) => ({
-              ...col,
-              cards: col.cards.filter((c) => c.id !== cardId),
-            }))
-          );
+          flushSync(() => {
+            setCollections((prev) =>
+              mapCollectionById(prev, targetColId, (col) => ({
+                ...col,
+                cards: col.cards.filter((c) => c.id !== cardId),
+              }))
+            );
+          });
           return null;
         }
       }
       return cardId;
     },
-    [canEdit, trashViewActive, calendarDay, active?.id, searchQuery, dataMode]
-  );
-
-  const dismissMobileQuickCapture = useCallback(() => {
-    setMobileQuickCaptureOpen(false);
-    setMobileQuickCaptureText("");
-    mobileQuickCaptureDraftRef.current = "";
-    setMobileQuickCaptureHead(null);
-    setMobileQuickCaptureTargetColId(null);
-  }, []);
-
-  const commitMobileQuickCapture = useCallback(() => {
-    const plain = mobileQuickCaptureDraftRef.current.trim();
-    const headSnap = mobileQuickCaptureHead;
-    const colPick =
-      mobileQuickCaptureTargetColId?.trim() || active?.id || null;
-    dismissMobileQuickCapture();
-    if (!plain || !colPick) return;
-    void (async () => {
-      const cardId = await appendNoteCardWithHtml(
-        noteBodyToHtml(plain),
-        headSnap
-          ? {
-              minutesOfDay: headSnap.minutesOfDay,
-              addedOn: headSnap.addedOn,
-            }
-          : undefined,
-        colPick
-      );
-      if (!cardId) return;
-      const scrollTimelineToEnd = () => {
-        const el = timelineRef.current;
-        if (!el) return;
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      };
-      requestAnimationFrame(() => {
-        requestAnimationFrame(scrollTimelineToEnd);
-      });
-    })();
-  }, [
-    appendNoteCardWithHtml,
-    dismissMobileQuickCapture,
-    mobileQuickCaptureHead,
-    mobileQuickCaptureTargetColId,
-    active?.id,
-  ]);
-
-  const onQuickCaptureMediaFileSelected = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const input = e.target;
-      const file = input.files?.[0];
-      input.value = "";
-      if (!file) return;
-      const colPick =
-        mobileQuickCaptureTargetColId?.trim() || active?.id || null;
-      if (!colPick) return;
-      const plain = mobileQuickCaptureDraftRef.current.trim();
-      const headSnap = mobileQuickCaptureHead;
-      void (async () => {
-        const cardId = await appendNoteCardWithHtml(
-          noteBodyToHtml(plain),
-          headSnap
-            ? {
-                minutesOfDay: headSnap.minutesOfDay,
-                addedOn: headSnap.addedOn,
-              }
-            : undefined,
-          colPick
-        );
-        dismissMobileQuickCapture();
-        if (cardId) await uploadFilesToCard(colPick, cardId, [file]);
-      })();
-    },
     [
+      canEdit,
+      trashViewActive,
+      calendarDay,
       active?.id,
-      appendNoteCardWithHtml,
-      dismissMobileQuickCapture,
-      mobileQuickCaptureHead,
-      mobileQuickCaptureTargetColId,
-      uploadFilesToCard,
+      searchQuery,
+      dataMode,
+      newNotePlacement,
     ]
   );
 
-  const onQuickCaptureInsertLink = useCallback(() => {
-    const url = window.prompt("粘贴或输入链接");
-    const t = url?.trim();
-    if (!t) return;
-    const prev = mobileQuickCaptureDraftRef.current;
-    const next =
-      prev.length > 0 && !/\n$/.test(prev) ? `${prev}\n${t}` : `${prev}${t}`;
-    mobileQuickCaptureDraftRef.current = next;
-    setMobileQuickCaptureText(next);
-    requestAnimationFrame(() => {
-      mobileQuickCaptureAreaRef.current?.focus({ preventScroll: true });
-    });
-  }, []);
+  const scrollTimelineToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = timelineRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior });
+    },
+    []
+  );
 
-  const onQuickCapturePasteFromClipboard = useCallback(() => {
-    void navigator.clipboard.readText().then((t) => {
-      const chunk = t?.trim();
-      if (!chunk) return;
-      const prev = mobileQuickCaptureDraftRef.current;
-      const next =
-        prev.length > 0 && !/\n$/.test(prev)
-          ? `${prev}\n${chunk}`
-          : `${prev}${chunk}`;
-      mobileQuickCaptureDraftRef.current = next;
-      setMobileQuickCaptureText(next);
-      requestAnimationFrame(() => {
-        mobileQuickCaptureAreaRef.current?.focus({ preventScroll: true });
-      });
-    });
-  }, []);
-
-  /** 点遮罩：有字则保存并关闭，无字则直接关（同 flomo 类交互） */
-  const onQuickCaptureBackdrop = useCallback(() => {
-    const plain = mobileQuickCaptureDraftRef.current.trim();
-    if (plain) commitMobileQuickCapture();
-    else dismissMobileQuickCapture();
-  }, [commitMobileQuickCapture, dismissMobileQuickCapture]);
+  const scrollTimelineToTop = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = timelineRef.current;
+      if (!el) return;
+      el.scrollTo({ top: 0, behavior });
+    },
+    []
+  );
 
   /**
    * 侧栏选中合集时：新卡片带当前时刻与今日 addedOn，便于日历聚合。
@@ -3552,87 +3618,47 @@ export default function App() {
   const addSmallNote = useCallback(
     (opts?: { scrollTimelineToEnd?: boolean }) => {
       void (async () => {
-        const cardId = await appendNoteCardWithHtml("");
+        const afterLocal =
+          opts?.scrollTimelineToEnd
+            ? () => {
+                if (newNotePlacement === "bottom") {
+                  scrollTimelineToBottom("auto");
+                  requestAnimationFrame(() => {
+                    scrollTimelineToBottom("auto");
+                    requestAnimationFrame(() =>
+                      scrollTimelineToBottom("auto")
+                    );
+                  });
+                } else {
+                  scrollTimelineToTop("auto");
+                  requestAnimationFrame(() => {
+                    scrollTimelineToTop("auto");
+                    requestAnimationFrame(() =>
+                      scrollTimelineToTop("auto")
+                    );
+                  });
+                }
+              }
+            : undefined;
+        const cardId = await appendNoteCardWithHtml(
+          "",
+          undefined,
+          undefined,
+          afterLocal
+        );
         if (!cardId) return;
-        if (opts?.scrollTimelineToEnd) {
-          const scrollEnd = () => {
-            const el = timelineRef.current;
-            if (!el) return;
-            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-          };
-          requestAnimationFrame(() => {
-            requestAnimationFrame(scrollEnd);
-          });
-        }
         queueMicrotask(() => {
           document.getElementById(`card-text-${cardId}`)?.focus();
         });
       })();
     },
-    [appendNoteCardWithHtml]
+    [
+      appendNoteCardWithHtml,
+      newNotePlacement,
+      scrollTimelineToBottom,
+      scrollTimelineToTop,
+    ]
   );
-
-  /**
-   * 速记层聚焦：勿在 textarea 上用 autoFocus，否则 iOS 常在底栏画完前就弹键盘。
-   * Capacitor iOS 稍延迟，与底栏入场动画同步；其它环境仍同步聚焦。
-   */
-  useLayoutEffect(() => {
-    if (!mobileQuickCaptureOpen) return;
-    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios") {
-      return;
-    }
-    mobileQuickCaptureAreaRef.current?.focus({ preventScroll: true });
-  }, [mobileQuickCaptureOpen]);
-
-  useEffect(() => {
-    if (!mobileQuickCaptureOpen) return;
-    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "ios") {
-      return;
-    }
-    const t = window.setTimeout(() => {
-      mobileQuickCaptureAreaRef.current?.focus({ preventScroll: true });
-    }, 200);
-    return () => clearTimeout(t);
-  }, [mobileQuickCaptureOpen]);
-
-  /* 按内容增高输入区，避免空态大片横线留白（参考 flomo） */
-  useLayoutEffect(() => {
-    if (!mobileQuickCaptureOpen) return;
-    const el = mobileQuickCaptureAreaRef.current;
-    if (!el) return;
-    const line = 30;
-    /* 与 CSS：底 padding = 半行距（顶为 0） */
-    const vPad = line * 0.5;
-    const minH = line * 3 + vPad;
-    const maxH = Math.min(
-      Math.round(
-        (typeof window !== "undefined" ? window.innerHeight : 640) * 0.4
-      ),
-      280
-    );
-    el.style.height = "0px";
-    const h = Math.min(Math.max(el.scrollHeight, minH), maxH);
-    el.style.height = `${h}px`;
-  }, [mobileQuickCaptureOpen, mobileQuickCaptureText]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (mobileQuickCaptureOpen) {
-      root.classList.add("app-ui--quick-capture-open");
-    } else {
-      root.classList.remove("app-ui--quick-capture-open");
-    }
-    return () => root.classList.remove("app-ui--quick-capture-open");
-  }, [mobileQuickCaptureOpen]);
-
-  useEffect(() => {
-    if (!mobileQuickCaptureOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismissMobileQuickCapture();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileQuickCaptureOpen, dismissMobileQuickCapture]);
 
   const commitCollectionRename = useCallback(async () => {
     if (!editingCollectionId) return;
@@ -4827,6 +4853,16 @@ export default function App() {
     setUserProfileModalOpen(true);
   }, []);
 
+  const openNoteSettingsModal = useCallback(() => {
+    setUserAccountMenuOpen(false);
+    setUserNoteSettingsOpen(true);
+  }, []);
+
+  const openDataStatsModal = useCallback(() => {
+    setUserAccountMenuOpen(false);
+    setUserDataStatsOpen(true);
+  }, []);
+
   const userAccountMenuDropdownEl = useMemo(() => {
     if (
       !userAccountMenuOpen ||
@@ -4837,11 +4873,11 @@ export default function App() {
     }
     return (
       <UserAccountMenuDropdown
-        onClose={() => setUserAccountMenuOpen(false)}
         dataMode={dataMode}
-        setDataMode={setDataMode}
         profileBusy={profileSaveBusy}
         onOpenProfile={openUserProfileModal}
+        onOpenNoteSettings={openNoteSettingsModal}
+        onOpenDataStats={openDataStatsModal}
       />
     );
   }, [
@@ -4849,9 +4885,10 @@ export default function App() {
     writeRequiresLogin,
     currentUser,
     dataMode,
-    setDataMode,
     profileSaveBusy,
     openUserProfileModal,
+    openNoteSettingsModal,
+    openDataStatsModal,
   ]);
 
   if (!authReady) {
@@ -4909,7 +4946,13 @@ export default function App() {
         aria-hidden
         onClick={() => setMobileNavOpen(false)}
       />
-      <aside className="sidebar" id="app-mobile-sidebar">
+      <aside
+        className="sidebar"
+        id="app-mobile-sidebar"
+        onTouchStart={onMobileSidebarTouchStart}
+        onTouchEnd={onMobileSidebarTouchEnd}
+        onTouchCancel={onMobileSidebarTouchCancel}
+      >
         <div className="sidebar__mobile-browse-bar">
           {mobileNavOpen ? (
             <div className="sidebar__mobile-browse-user">
@@ -5251,7 +5294,12 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main
+        className="main"
+        onTouchStart={onMobileMainTouchStart}
+        onTouchEnd={onMobileMainTouchEnd}
+        onTouchCancel={onMobileMainTouchCancel}
+      >
         <header ref={mainHeaderRef} className="main__header" id="app-main-header">
           <div
             className={
@@ -5799,6 +5847,23 @@ export default function App() {
           ) : null}
         </div>
       </main>
+      {narrowUi &&
+      active &&
+      !calendarDay &&
+      !searchActive &&
+      !trashViewActive &&
+      !mobileNavOpen &&
+      !mobileCalendarOpen ? (
+        <button
+          type="button"
+          className="main__scroll-to-bottom"
+          aria-label="跳转到时间线底部"
+          title="到底部"
+          onClick={() => scrollTimelineToBottom("smooth")}
+        >
+          ↓
+        </button>
+      ) : null}
       <nav className="mobile-dock" aria-label="底部快捷操作">
         <button
           type="button"
@@ -5866,31 +5931,13 @@ export default function App() {
               openLogin();
               return;
             }
-            const narrow =
-              typeof window !== "undefined" &&
-              window.matchMedia("(max-width: 900px)").matches;
             if (
-              narrow &&
+              narrowUi &&
               canEdit &&
               active &&
               !trashViewActive &&
               searchQuery.trim().length === 0
             ) {
-              /* 网页小屏：直接插入时间线；Tauri / Capacitor 用底部速记层 */
-              if (nativeQuickCaptureShell) {
-                const t = new Date();
-                flushSync(() => {
-                  setMobileQuickCaptureHead({
-                    minutesOfDay: t.getHours() * 60 + t.getMinutes(),
-                    addedOn: localDateString(t),
-                  });
-                  setMobileQuickCaptureTargetColId(active?.id ?? null);
-                  setMobileQuickCaptureText("");
-                  mobileQuickCaptureDraftRef.current = "";
-                  setMobileQuickCaptureOpen(true);
-                });
-                return;
-              }
               addSmallNote({ scrollTimelineToEnd: true });
               return;
             }
@@ -5978,264 +6025,6 @@ export default function App() {
                     }}
                   />
                 </div>
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
-      {mobileQuickCaptureOpen
-        ? createPortal(
-            <div className="mobile-quick-capture" role="presentation">
-              <button
-                type="button"
-                className="mobile-quick-capture__backdrop"
-                aria-label="关闭；已输入内容时保存"
-                onClick={onQuickCaptureBackdrop}
-              />
-              <div
-                className="mobile-quick-capture__sheet"
-                role="dialog"
-                aria-modal="true"
-                aria-label="新记录"
-              >
-                <form
-                  className="mobile-quick-capture__form"
-                  autoComplete="off"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    commitMobileQuickCapture();
-                  }}
-                >
-                  <input
-                    ref={quickCaptureMediaInputRef}
-                    type="file"
-                    className="app__hidden-file-input"
-                    aria-hidden
-                    tabIndex={-1}
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
-                    onChange={onQuickCaptureMediaFileSelected}
-                  />
-                  <div className="mobile-quick-capture__chrome">
-                    <div className="mobile-quick-capture__bar">
-                      <button
-                        type="button"
-                        className="mobile-quick-capture__bar-btn mobile-quick-capture__bar-btn--ghost"
-                        aria-label="关闭，不保存"
-                        onClick={() => dismissMobileQuickCapture()}
-                      >
-                        <svg
-                          width="22"
-                          height="22"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          aria-hidden
-                        >
-                          <path d="M18 6 6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                      <span className="mobile-quick-capture__title">
-                        新记录
-                      </span>
-                      <button
-                        type="submit"
-                        className="main__header-icon-btn main__header-icon-btn--active mobile-quick-capture__submit-btn"
-                        aria-label="保存笔记"
-                        title="保存"
-                      >
-                        <svg
-                          className="main__header-icon-btn__svg"
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
-                        >
-                          <path d="M20 6 9 17l-5-5" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="mobile-quick-capture__body">
-                      <textarea
-                        ref={mobileQuickCaptureAreaRef}
-                        className="mobile-quick-capture__textarea"
-                        value={mobileQuickCaptureText}
-                        placeholder="记录你的灵感…"
-                        autoComplete="off"
-                        autoCapitalize="sentences"
-                        autoCorrect="on"
-                        spellCheck
-                        enterKeyHint="enter"
-                        inputMode="text"
-                        aria-label="笔记内容"
-                        data-lpignore="true"
-                        data-1p-ignore="true"
-                        data-form-type="other"
-                        onChange={(e) => {
-                          mobileQuickCaptureDraftRef.current =
-                            e.target.value;
-                          setMobileQuickCaptureText(e.target.value);
-                        }}
-                      />
-                    </div>
-                    <div
-                      className="mobile-quick-capture__pills"
-                      role="listbox"
-                      aria-label="保存到合集"
-                    >
-                      {mobileQuickCaptureCollectionPills.map(
-                        ({ col, path }) => {
-                          const sel =
-                            (mobileQuickCaptureTargetColId ??
-                              active?.id) === col.id;
-                          return (
-                            <button
-                              key={col.id}
-                              type="button"
-                              role="option"
-                              aria-selected={sel}
-                              title={path}
-                              className={
-                                "mobile-quick-capture__pill" +
-                                (sel
-                                  ? " mobile-quick-capture__pill--selected"
-                                  : "")
-                              }
-                              onClick={() =>
-                                setMobileQuickCaptureTargetColId(col.id)
-                              }
-                            >
-                              {col.name}
-                            </button>
-                          );
-                        }
-                      )}
-                    </div>
-                    <div className="mobile-quick-capture__tools">
-                      <div className="mobile-quick-capture__tools-left">
-                        <button
-                          type="button"
-                          className="mobile-quick-capture__tool"
-                          disabled
-                          title="语音输入即将支持"
-                          aria-label="语音输入即将支持"
-                        >
-                          <svg
-                            className="mobile-quick-capture__tool-svg"
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden
-                          >
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="mobile-quick-capture__tool"
-                          disabled={!canAttachMedia}
-                          title={
-                            canAttachMedia
-                              ? "添加图片或附件"
-                              : "当前环境未开启附件上传"
-                          }
-                          aria-label="添加图片或附件"
-                          onClick={() => {
-                            if (!canAttachMedia) return;
-                            quickCaptureMediaInputRef.current?.click();
-                          }}
-                        >
-                          <svg
-                            className="mobile-quick-capture__tool-svg"
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden
-                          >
-                            <rect
-                              x="3"
-                              y="3"
-                              width="18"
-                              height="18"
-                              rx="2"
-                            />
-                            <circle cx="8.5" cy="8.5" r="1.5" />
-                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="mobile-quick-capture__tool"
-                          title="插入链接"
-                          aria-label="插入链接"
-                          onClick={onQuickCaptureInsertLink}
-                        >
-                          <svg
-                            className="mobile-quick-capture__tool-svg"
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden
-                          >
-                            <path d="M10 13a5 5 0 0 1 0-7L9 5a5 5 0 0 0 0 7" />
-                            <path d="M14 11a5 5 0 0 1 0 7l1 1a5 5 0 0 0 0-7" />
-                          </svg>
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        className="mobile-quick-capture__tool"
-                        title="从剪贴板粘贴"
-                        aria-label="从剪贴板粘贴"
-                        onClick={onQuickCapturePasteFromClipboard}
-                      >
-                        <svg
-                          className="mobile-quick-capture__tool-svg"
-                          width="22"
-                          height="22"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
-                        >
-                          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                          <rect
-                            x="8"
-                            y="2"
-                            width="8"
-                            height="4"
-                            rx="1"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </form>
               </div>
             </div>,
             document.body
@@ -6561,6 +6350,23 @@ export default function App() {
           onAfterSave={refreshMe}
           onFlash={setSidebarFlash}
           setSaving={setProfileSaveBusy}
+        />
+      ) : null}
+      {currentUser ? (
+        <NoteSettingsModal
+          open={userNoteSettingsOpen}
+          onClose={() => setUserNoteSettingsOpen(false)}
+          newNotePlacement={newNotePlacement}
+          setNewNotePlacement={setNewNotePlacement}
+          dataMode={dataMode}
+          setDataMode={setDataMode}
+        />
+      ) : null}
+      {currentUser ? (
+        <DataStatsModal
+          open={userDataStatsOpen}
+          onClose={() => setUserDataStatsOpen(false)}
+          collections={collections}
         />
       ) : null}
       {detailCardLive ? (

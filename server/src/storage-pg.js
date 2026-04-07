@@ -400,7 +400,7 @@ export async function deleteCollection(userId, collectionId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 在指定合集末尾创建卡片。
+ * 在指定合集内创建卡片（默认末尾；card.insertAtStart 为 true 时插在 sort_order 最前）。
  * 在插入前先验证 collectionId 属于该用户。
  * @param {string|null} userId
  * @param {string} collectionId
@@ -415,13 +415,6 @@ export async function createCard(userId, collectionId, card) {
   );
   if (colCheck.rowCount === 0) throw new Error("合集不存在或无权限");
 
-  // sort_order = 当前最大值 + 1
-  const orderRes = await query(
-    "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM cards WHERE collection_id = $1",
-    [collectionId]
-  );
-  const sortOrder = orderRes.rows[0].next;
-
   const {
     id,
     text = "",
@@ -432,9 +425,26 @@ export async function createCard(userId, collectionId, card) {
     tags = [],
     relatedRefs = [],
     media = [],
+    insertAtStart = false,
   } = card;
 
   if (!id) throw new Error("card.id 为必填项");
+
+  let sortOrder;
+  if (insertAtStart) {
+    const minRes = await query(
+      `SELECT MIN(sort_order) AS m FROM cards WHERE collection_id = $1`,
+      [collectionId]
+    );
+    const m = minRes.rows[0]?.m;
+    sortOrder = m === null || m === undefined ? 0 : m - 1;
+  } else {
+    const orderRes = await query(
+      "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM cards WHERE collection_id = $1",
+      [collectionId]
+    );
+    sortOrder = orderRes.rows[0].next;
+  }
 
   await query(
     `INSERT INTO cards

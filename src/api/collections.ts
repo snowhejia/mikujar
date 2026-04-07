@@ -135,19 +135,24 @@ export async function deleteCollectionApi(id: string): Promise<boolean> {
 
 // ─── 粒度化卡片操作 ───────────────────────────────────────────────────────────
 
-/** 在合集末尾创建卡片；成功返回卡片对象，失败返回 null */
+/** 在合集内创建卡片；opts.insertAtStart 为 true 时插入到该合集列表最前（与客户端「新建在顶部」一致） */
 export async function createCardApi(
   collectionId: string,
-  card: NoteCard
+  card: NoteCard,
+  opts?: { insertAtStart?: boolean }
 ): Promise<NoteCard | null> {
   const base = apiBase();
   try {
+    const payload =
+      opts?.insertAtStart === true
+        ? { ...card, insertAtStart: true }
+        : card;
     const r = await fetch(
       `${base}/api/collections/${encodeURIComponent(collectionId)}/cards`,
       apiFetchInit({
         method: "POST",
         headers: buildHeadersPut({ "Content-Type": "application/json" }),
-        body: JSON.stringify(card),
+        body: JSON.stringify(payload),
       })
     );
     if (!r.ok) return null;

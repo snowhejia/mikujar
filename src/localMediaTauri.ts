@@ -36,6 +36,7 @@ export async function saveLocalMediaToAppFolder(file: File): Promise<{
   url: string;
   kind: NoteMediaKind;
   name?: string;
+  sizeBytes: number;
 }> {
   if (!isTauri()) {
     throw new Error("仅 Tauri 桌面版可在本地模式写入附件文件夹");
@@ -57,6 +58,7 @@ export async function saveLocalMediaToAppFolder(file: File): Promise<{
     url: `${LOCAL_MEDIA_PREFIX}${rel}`,
     kind,
     name: file.name.trim() || undefined,
+    sizeBytes: file.size,
   };
 }
 

@@ -19,6 +19,8 @@ export type UploadMediaResult = {
   name?: string;
   /** 音频内嵌封面 */
   coverUrl?: string;
+  /** 主文件大小（写入笔记 JSON 供统计） */
+  sizeBytes?: number;
 };
 
 /**
@@ -113,7 +115,11 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
     }
   }
 
-  const out: UploadMediaResult = { url: pj.url, kind };
+  const out: UploadMediaResult = {
+    url: pj.url,
+    kind,
+    sizeBytes: file.size,
+  };
   if (typeof pj.name === "string" && pj.name.trim()) {
     out.name = pj.name.trim();
   }

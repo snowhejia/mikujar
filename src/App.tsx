@@ -5861,7 +5861,18 @@ export default function App() {
           title="到底部"
           onClick={() => scrollTimelineToBottom("smooth")}
         >
-          ↓
+          <svg
+            className="main__scroll-to-bottom__icon"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              fill="currentColor"
+              d="M6 9h12L12 17 6 9z"
+            />
+          </svg>
         </button>
       ) : null}
       <nav className="mobile-dock" aria-label="底部快捷操作">

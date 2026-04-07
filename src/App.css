@@ -3709,6 +3709,11 @@ div.card__text--readonly:not(.card__text--preview) {
     height: auto;
     max-height: none;
     overflow: visible;
+    /* 底栏与「滚到底」共用：与 .mobile-dock 的 bottom / 内高一致 */
+    --mobile-dock-offset-bottom: 22px;
+    --mobile-dock-pad-y: 8px;
+    --mobile-dock-inner-max-h: 56px;
+    --scroll-to-bottom-size: 44px;
   }
 
   /* 小屏 .app 被改成 block，会盖掉 .app--boot 的 flex，加载态需重新居中 */
@@ -4251,7 +4256,9 @@ div.card__text--readonly:not(.card__text--preview) {
     display: flex;
     position: fixed;
     left: 50%;
-    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(
+      var(--mobile-dock-offset-bottom) + env(safe-area-inset-bottom, 0px)
+    );
     transform: translateX(-50%);
     z-index: 35;
     align-items: center;
@@ -4337,26 +4344,29 @@ div.card__text--readonly:not(.card__text--preview) {
     outline-offset: 2px;
   }
 
-  /* 时间线一键滚到底（避开居中底栏，靠右下） */
+  /* 时间线一键滚到底：与底栏同一垂直中线，贴屏幕最右侧 */
   .main__scroll-to-bottom {
     position: fixed;
-    right: max(12px, env(safe-area-inset-right, 0px));
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: calc(
+      var(--mobile-dock-offset-bottom) + var(--mobile-dock-pad-y) +
+        (var(--mobile-dock-inner-max-h) / 2) -
+        (var(--scroll-to-bottom-size) / 2) +
+        env(safe-area-inset-bottom, 0px)
+    );
     z-index: 36;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: var(--scroll-to-bottom-size);
+    height: var(--scroll-to-bottom-size);
     margin: 0;
     padding: 0;
     border: 1px solid rgba(55, 53, 47, 0.14);
     border-radius: 50%;
     background: #ffffff;
     color: rgba(55, 53, 47, 0.78);
-    font-size: 1.35rem;
-    font-weight: 500;
-    line-height: 1;
+    line-height: 0;
     cursor: pointer;
     box-shadow: var(--vp-shadow-2);
     -webkit-tap-highlight-color: transparent;
@@ -4365,6 +4375,11 @@ div.card__text--readonly:not(.card__text--preview) {
       border-color 0.12s ease,
       color 0.12s ease,
       transform 0.12s ease;
+  }
+
+  .main__scroll-to-bottom__icon {
+    display: block;
+    flex-shrink: 0;
   }
 
   .main__scroll-to-bottom:active {

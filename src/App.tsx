@@ -2105,33 +2105,33 @@ export default function App() {
           />
         </div>
 
-        <div
-          className="sidebar__all-reminders"
-          aria-label="全部提醒入口"
-        >
-          <button
-            type="button"
-            className={
-              "sidebar__all-reminders-hit" +
-              (remindersViewActive && !searchActive ? " is-active" : "")
-            }
-            onClick={() => {
-              setTrashViewActive(false);
-              setCalendarDay(null);
-              setSearchQuery("");
-              setSearchBarOpen(false);
-              setRemindersViewActive(true);
-              setMobileNavOpen(false);
-            }}
+        {allReminderEntries.length > 0 ? (
+          <div
+            className="sidebar__all-reminders"
+            aria-label="全部提醒入口"
           >
-            <span className="sidebar__all-reminders-label">全部提醒</span>
-            {allReminderEntries.length > 0 ? (
+            <button
+              type="button"
+              className={
+                "sidebar__all-reminders-hit" +
+                (remindersViewActive && !searchActive ? " is-active" : "")
+              }
+              onClick={() => {
+                setTrashViewActive(false);
+                setCalendarDay(null);
+                setSearchQuery("");
+                setSearchBarOpen(false);
+                setRemindersViewActive(true);
+                setMobileNavOpen(false);
+              }}
+            >
+              <span className="sidebar__all-reminders-label">全部提醒</span>
               <span className="sidebar__all-reminders-count">
                 {allReminderEntries.length}
               </span>
-            ) : null}
-          </button>
-        </div>
+            </button>
+          </div>
+        ) : null}
 
         <div className="sidebar__collections">
           <div className="sidebar__favorites">

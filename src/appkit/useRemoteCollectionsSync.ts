@@ -7,7 +7,10 @@ import {
 } from "../api/collections";
 import type { AppDataMode } from "../appDataModeStorage";
 import { getAdminToken } from "../auth/token";
-import { cloneInitialCollections } from "./initialWorkspace";
+import {
+  cloneInitialCollections,
+  cloneInitialCollectionsForRemoteUser,
+} from "./initialWorkspace";
 import { loadLocalCollections } from "../localCollectionsStorage";
 import { migrateCollectionTree } from "../migrateCollections";
 import {
@@ -165,7 +168,9 @@ export function useRemoteCollectionsSync(p: {
           let useMergeWithPrevAfterSeed = false;
           const authed = Boolean(currentUser || getAdminToken());
           if (tree.length === 0 && authed && writeRequiresLogin) {
-            tree = cloneInitialCollections();
+            tree = currentUser?.id
+              ? cloneInitialCollectionsForRemoteUser(currentUser.id)
+              : cloneInitialCollections();
             const seeded = await saveCollectionsToApi(tree);
             if (cancelled) return;
             if (!seeded) {

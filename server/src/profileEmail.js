@@ -87,7 +87,7 @@ export async function sendProfileEmailChangeCode(userId, emailRaw, ip) {
     );
   } else {
     throw new Error(
-      "服务器未配置邮件（SMTP_HOST 等），无法发送验证码，请联系管理员"
+      "服务器未配置发信（请设置 RESEND_API_KEY 或 SMTP），无法发送验证码，请联系管理员"
     );
   }
 

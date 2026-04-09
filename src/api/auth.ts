@@ -161,22 +161,22 @@ export async function loginWithCredentials(
     if (!r.ok) {
       return {
         ok: false,
-        error: typeof j.error === "string" ? j.error : "登录失败",
+        error: typeof j.error === "string" ? j.error : "登录翻车啦，再检查一下？",
       };
     }
     if (typeof j.token !== "string" || !j.user || typeof j.user !== "object") {
-      return { ok: false, error: "响应无效" };
+      return { ok: false, error: "回信怪怪的，刷新下再试？" };
     }
     const u = j.user as AuthUser;
     if (!u.id || !u.username) {
-      return { ok: false, error: "响应无效" };
+      return { ok: false, error: "回信怪怪的，刷新下再试？" };
     }
     return { ok: true, token: j.token, user: u };
   } catch (e: unknown) {
     const detail = e instanceof Error ? e.message.trim() : "";
     return {
       ok: false,
-      error: detail ? `网络错误：${detail}` : "网络错误",
+      error: detail ? `网络开小差：${detail}` : "网络开小差惹…",
     };
   }
 }
@@ -198,7 +198,7 @@ export async function sendRegisterCode(
     if (!r.ok) {
       return {
         ok: false,
-        error: typeof j.error === "string" ? j.error : "发送失败",
+        error: typeof j.error === "string" ? j.error : "验证码没发出去…",
       };
     }
     return { ok: true };
@@ -206,7 +206,7 @@ export async function sendRegisterCode(
     const detail = e instanceof Error ? e.message.trim() : "";
     return {
       ok: false,
-      error: detail ? `网络错误：${detail}` : "网络错误",
+      error: detail ? `网络开小差：${detail}` : "网络开小差惹…",
     };
   }
 }
@@ -243,22 +243,22 @@ export async function registerWithEmail(
     if (!r.ok) {
       return {
         ok: false,
-        error: typeof j.error === "string" ? j.error : "注册失败",
+        error: typeof j.error === "string" ? j.error : "注册翻车啦，再试一次？",
       };
     }
     if (typeof j.token !== "string" || !j.user || typeof j.user !== "object") {
-      return { ok: false, error: "响应无效" };
+      return { ok: false, error: "回信怪怪的，刷新下再试？" };
     }
     const u = j.user as AuthUser;
     if (!u.id || !u.username) {
-      return { ok: false, error: "响应无效" };
+      return { ok: false, error: "回信怪怪的，刷新下再试？" };
     }
     return { ok: true, token: j.token, user: u };
   } catch (e: unknown) {
     const detail = e instanceof Error ? e.message.trim() : "";
     return {
       ok: false,
-      error: detail ? `网络错误：${detail}` : "网络错误",
+      error: detail ? `网络开小差：${detail}` : "网络开小差惹…",
     };
   }
 }

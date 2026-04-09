@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { isTauri } from "@tauri-apps/api/core";
 import {
@@ -937,7 +937,7 @@ export default function App() {
           const ok = await postMeTrashEntry(entry);
           if (!ok) {
             window.alert(
-              "同步到云端回收站失败，笔记未删除。请检查网络或登录状态后重试。"
+              "丢进回收站时绊倒啦，笔记还在原位…换个网络或确认登录后再试？"
             );
             return;
           }
@@ -984,14 +984,14 @@ export default function App() {
           insertAtStart: newNotePlacement === "top",
         });
         if (!created) {
-          window.alert("恢复笔记失败，请检查网络或权限后重试。");
+          window.alert("笔记捞回来时卡住了…看看网络或再试一次？");
           return;
         }
         cardToAppend = created;
         const delOk = await deleteMeTrashEntry(entry.trashId);
         if (!delOk) {
           window.alert(
-            "笔记已写回合集，但云端回收站记录未清除，刷新后回收站里可能仍显示该条。"
+            "笔记已经回家啦，但回收站标签可能还没撕干净…刷新一下就好～"
           );
         }
       }
@@ -1036,7 +1036,7 @@ export default function App() {
       if (dataMode !== "local") {
         const ok = await deleteMeTrashEntry(trashId);
         if (!ok) {
-          window.alert("从云端回收站删除失败，请稍后重试。");
+          window.alert("这条从回收站删不掉耶…等等再试？");
           return;
         }
       }
@@ -1069,7 +1069,7 @@ export default function App() {
     if (dataMode !== "local") {
       const ok = await clearMeTrash();
       if (!ok) {
-        window.alert("清空云端回收站失败，请稍后重试。");
+        window.alert("垃圾桶倒不干净…等等再清空一次？");
         return;
       }
     }
@@ -1206,7 +1206,7 @@ export default function App() {
                 window.alert(
                   err instanceof Error
                     ? err.message
-                    : "内联保存附件失败，可换小文件或改用桌面版～"
+                    : "浏览器怀里塞不下这个附件…换张小一点的或用桌面版更稳喔～"
                 );
               }
             }
@@ -1411,6 +1411,32 @@ export default function App() {
     []
   );
 
+  /** 小屏：点击顶栏非控件区域时回到时间线顶部（类似系统「点顶栏回顶」） */
+  const onMobileHeaderRowTapToTop = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (typeof window === "undefined") return;
+      if (!window.matchMedia("(max-width: 900px)").matches) return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest("button, a, input, textarea, select, [role='search']")) {
+        return;
+      }
+      scrollTimelineToTop("smooth");
+    },
+    [scrollTimelineToTop]
+  );
+
+  /** 小屏：点击 main 顶部 padding（刘海安全区空白）时回顶 */
+  const onMobileMainSurfaceTapToTop = useCallback(
+    (e: ReactMouseEvent<HTMLElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (typeof window === "undefined") return;
+      if (!window.matchMedia("(max-width: 900px)").matches) return;
+      scrollTimelineToTop("smooth");
+    },
+    [scrollTimelineToTop]
+  );
+
   /**
    * 侧栏选中合集时：新卡片带当前时刻与今日 addedOn，便于日历聚合。
    * 选中日历某日（按日浏览）时不允许新建小笔记。
@@ -1475,7 +1501,7 @@ export default function App() {
     if (dataMode === "remote" && canEdit) {
       const ok = await updateCollectionApi(colId, { name });
       if (!ok) {
-        window.alert("名称同步到服务器失败，刷新后可能恢复旧名称。");
+        window.alert("名字没同步上…刷新一下可能变回旧的喔～");
       }
     }
   }, [editingCollectionId, draftCollectionName, dataMode, canEdit]);
@@ -1507,7 +1533,7 @@ export default function App() {
         dotColor: newCol.dotColor,
       });
       if (!created) {
-        window.alert("新建合集失败，请检查网络或登录状态后重试。");
+        window.alert("新合集没建成功…看看网络或登录后再试？");
         return;
       }
       const merged: Collection = {
@@ -1546,7 +1572,7 @@ export default function App() {
           parentId,
         });
         if (!created) {
-          window.alert("新建子合集失败，请检查网络或登录状态后重试。");
+          window.alert("子合集没塞进去…网络或登录再确认下？");
           return;
         }
         const merged: Collection = {
@@ -1598,7 +1624,7 @@ export default function App() {
       if (dataMode === "remote") {
         const ok = await deleteCollectionApi(id);
         if (!ok) {
-          window.alert("删除合集失败，请检查网络或权限后重试。");
+          window.alert("合集删不掉耶…等等再试或检查一下权限？");
           return;
         }
       }
@@ -1718,7 +1744,7 @@ export default function App() {
     if (dataMode === "remote" && canEdit) {
       const ok = await updateCollectionApi(colId, { hint: text });
       if (!ok) {
-        window.alert("合集说明同步失败，刷新后可能恢复旧内容。");
+        window.alert("说明没保存上…刷新可能变回上一版喔～");
       }
     }
   }, [editingHintCollectionId, draftCollectionHint, dataMode, canEdit]);
@@ -1908,7 +1934,7 @@ export default function App() {
       <div className="app app--boot" aria-busy="true">
         <div className="app-boot-screen">
           <span className="app-boot-spinner" aria-hidden />
-          <p>正在准备…</p>
+          <p>正在加载…</p>
         </div>
       </div>
     );
@@ -1940,7 +1966,7 @@ export default function App() {
         >
           <div className="app-remote-loading-inner">
             <span className="app-remote-loading-spinner" aria-hidden />
-            <p>正在同步笔记…</p>
+            <p>正在把笔记接进罐子…</p>
           </div>
         </div>
       ) : null}
@@ -1950,7 +1976,7 @@ export default function App() {
           role="status"
           aria-live="polite"
         >
-          正在与服务器同步…
+          正在悄悄同步中…
         </div>
       ) : null}
       <div
@@ -2383,6 +2409,7 @@ export default function App() {
 
       <main
         className="main"
+        onClick={onMobileMainSurfaceTapToTop}
         onTouchStart={onMobileMainTouchStart}
         onTouchEnd={onMobileMainTouchEnd}
         onTouchCancel={onMobileMainTouchCancel}
@@ -2393,6 +2420,7 @@ export default function App() {
               "main__header-row" +
               (searchExpanded ? " main__header-row--search-open" : "")
             }
+            onClick={onMobileHeaderRowTapToTop}
           >
             <button
               type="button"

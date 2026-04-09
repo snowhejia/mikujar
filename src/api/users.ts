@@ -155,7 +155,7 @@ export async function uploadMyAvatar(file: File): Promise<string> {
     error?: string;
   };
   if (!pres.ok) {
-    throw new Error(pj.error ?? "头像预签名失败");
+    throw new Error(pj.error ?? "头像上传预约失败，等等再试～");
   }
   if (pj.direct === true && typeof pj.putUrl === "string") {
     const putRes = await fetch(pj.putUrl, {
@@ -164,10 +164,10 @@ export async function uploadMyAvatar(file: File): Promise<string> {
       body: file,
     });
     if (!putRes.ok) {
-      throw new Error(`直传对象存储失败（HTTP ${putRes.status}）`);
+      throw new Error("头像传一半卡住啦，再试一次？");
     }
     if (typeof pj.key !== "string" || !pj.key) {
-      throw new Error("头像上传响应无效");
+      throw new Error("头像上传结果怪怪的…");
     }
     const c = await fetch(
       `${base}/api/users/me/avatar/confirm`,
@@ -185,7 +185,7 @@ export async function uploadMyAvatar(file: File): Promise<string> {
       error?: string;
     };
     if (!c.ok || typeof cj.avatarUrl !== "string") {
-      throw new Error(cj.error ?? "头像确认失败");
+      throw new Error(cj.error ?? "头像没对上号…再传一次？");
     }
     return cj.avatarUrl;
   }
@@ -201,7 +201,7 @@ export async function uploadMyAvatar(file: File): Promise<string> {
     error?: string;
   };
   if (!r.ok || typeof j.avatarUrl !== "string") {
-    throw new Error(j.error ?? "头像上传失败");
+    throw new Error(j.error ?? "头像没贴上去…再试一次？");
   }
   return j.avatarUrl;
 }

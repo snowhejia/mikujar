@@ -58,15 +58,17 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
   };
 
   if (!pres.ok) {
-    throw new Error(typeof pj.error === "string" ? pj.error : "预签名失败");
+    throw new Error(
+      typeof pj.error === "string" ? pj.error : "上传预约失败惹，等等再试～"
+    );
   }
 
-  // COS 未配置或 direct !== true：直接报错，不再 fallback 到 multipart
+  // 未配置对象存储或 direct !== true
   if (pj.direct !== true || typeof pj.putUrl !== "string") {
     throw new Error(
       typeof pj.error === "string"
         ? pj.error
-        : "当前服务端未配置对象存储（COS），无法上传媒体文件"
+        : "附件小仓库今天有点挤，稍候再来贴贴纸～"
     );
   }
 
@@ -78,15 +80,15 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
     body: file,
   });
   if (!putRes.ok) {
-    throw new Error(`直传对象存储失败（HTTP ${putRes.status}）`);
+    throw new Error("文件上传路上绊了一下，再试一次好不好？");
   }
 
   const kind = pj.kind as NoteMediaKind;
   if (kind !== "image" && kind !== "video" && kind !== "audio" && kind !== "file") {
-    throw new Error("上传响应无效");
+    throw new Error("上传结果怪怪的…刷新下再试？");
   }
   if (typeof pj.url !== "string" || !pj.url) {
-    throw new Error("上传响应无效");
+    throw new Error("上传结果怪怪的…刷新下再试？");
   }
 
   // 音频：提取内嵌封面
@@ -108,7 +110,9 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
       error?: unknown;
     };
     if (!fin.ok) {
-      throw new Error(typeof fj.error === "string" ? fj.error : "音频封面处理失败");
+      throw new Error(
+        typeof fj.error === "string" ? fj.error : "音频封面没抠出来…先听听歌也行～"
+      );
     }
     if (typeof fj.coverUrl === "string" && fj.coverUrl.trim()) {
       coverUrl = fj.coverUrl.trim();

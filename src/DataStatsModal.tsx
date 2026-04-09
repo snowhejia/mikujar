@@ -73,7 +73,7 @@ export function DataStatsModal({
 
         {stats.hasUnknownSizedAttachments ? (
           <p className="data-stats-modal__footnote">
-            部分远程链接、本地路径或未记录大小的附件未计入体积；新上传的附件会自动带上大小。
+            有些外链、本地路径或还没称过重的小附件没算进体积；新贴的贴纸会自动记上大小～
           </p>
         ) : null}
 

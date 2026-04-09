@@ -91,23 +91,23 @@ export function UserProfileModal({
     setEmailSentHint(null);
     const em = email.trim();
     if (!em) {
-      setErr("请先填写要绑定的新邮箱。");
+      setErr("先填上要绑定的邮箱嘛～");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      setErr("邮箱格式不正确。");
+      setErr("邮箱格式好像不太对…再检查一下？");
       return;
     }
     if (em.toLowerCase() === prevEmailNorm) {
-      setErr("当前已是该邮箱，无需验证。");
+      setErr("就是这个邮箱啦，不用再验证一遍～");
       return;
     }
     setEmailSendBusy(true);
     try {
       await sendMyEmailChangeCode(em);
-      setEmailSentHint("验证码已发至该邮箱，10 分钟内有效。");
+      setEmailSentHint("验证码在路上啦，10 分钟内填进来就好～");
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "发送失败");
+      setErr(e instanceof Error ? e.message : "验证码没发出去…等等再试？");
     } finally {
       setEmailSendBusy(false);
     }
@@ -117,32 +117,32 @@ export function UserProfileModal({
     setErr(null);
     onFlash(null);
     if (dataMode !== "remote") {
-      setErr("请先切换到云端后再保存到服务器。");
+      setErr("先把数据模式切到云端同步，再保存喔～");
       return;
     }
     const nick = displayName.trim();
     if (!nick) {
-      setErr("昵称不能为空。");
+      setErr("昵称空空的，罐子会不晓得怎么叫你…");
       return;
     }
     if (nick.length > 64) {
-      setErr("昵称最长 64 字。");
+      setErr("昵称太长啦，64 字以内就好～");
       return;
     }
     const emailTrim = email.trim();
     if (emailTrim) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-        setErr("邮箱格式不正确。");
+        setErr("邮箱格式好像不太对…");
         return;
       }
     }
     if (password || password2) {
       if (password !== password2) {
-        setErr("两次输入的密码不一致。");
+        setErr("两次密码对不上诶，再对一下？");
         return;
       }
       if (password.length < 4) {
-        setErr("新密码至少 4 位。");
+        setErr("新密码至少 4 位嘛～");
         return;
       }
     }
@@ -162,7 +162,7 @@ export function UserProfileModal({
     if (emailTrim !== prevEmail) {
       if (changingToNewEmail) {
         if (!/^\d{6}$/.test(emailCode.trim())) {
-          setErr("更换邮箱须先点击「发送验证码」，并填写 6 位数字。");
+          setErr("换邮箱要先点「发送验证码」，再填 6 位数字喔～");
           return;
         }
         patch.email = emailTrim;
@@ -174,7 +174,7 @@ export function UserProfileModal({
     if (password) patch.password = password;
 
     if (pendingFile && !mediaUploadMode) {
-      setErr("头像上传需配置服务器媒体存储。");
+      setErr("头像功能还在备货中，暂时换不了啦…");
       return;
     }
 
@@ -195,7 +195,7 @@ export function UserProfileModal({
       onFlash("个人中心已保存～");
       onClose();
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "保存失败");
+      setErr(e instanceof Error ? e.message : "保存翻车啦，再试一次？");
     } finally {
       setSaving(false);
     }
@@ -362,7 +362,7 @@ export function UserProfileModal({
               title={
                 mediaUploadMode
                   ? undefined
-                  : "头像上传需配置服务器媒体存储"
+                  : "头像功能还在备货中…"
               }
               onClick={() => fileRef.current?.click()}
             >

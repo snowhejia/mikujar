@@ -39,7 +39,7 @@ export async function saveLocalMediaToAppFolder(file: File): Promise<{
   sizeBytes: number;
 }> {
   if (!isTauri()) {
-    throw new Error("仅 Tauri 桌面版可在本地模式写入附件文件夹");
+    throw new Error("本地小文件夹只有桌面版能打开喔～");
   }
   const { BaseDirectory, mkdir, writeFile } = await import(
     "@tauri-apps/plugin-fs"

@@ -175,7 +175,7 @@ export function useRemoteCollectionsSync(p: {
             if (cancelled) return;
             if (!seeded) {
               setSidebarFlash(
-                "新账号内置笔记已就绪，但首次同步到服务器失败，可稍后再试或联系管理员"
+                "欢迎礼包准备好啦，但第一次同步绊了一下…等等再试就好～"
               );
             } else {
               // await 期间用户可能已新建笔记；勿用保存前的 tree 覆盖乐观更新
@@ -240,7 +240,7 @@ export function useRemoteCollectionsSync(p: {
             }
           } else {
             setLoadError(
-              "连不上服务器喵～请检查网络或稍后再刷新。"
+              "跟罐子连不上线喵～看看网络或稍后再戳进来？"
             );
             if (!usedRemoteCache) {
               setCollections([]);

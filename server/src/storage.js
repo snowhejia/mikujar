@@ -231,7 +231,9 @@ export function isCosConfigured() {
   return storageMode() === "cos";
 }
 
-/** 浏览器可直接访问的 URL（需对象 public-read 或桶策略允许读） */
+/**
+ * 逻辑上的对象访问 URL（存库、回传前端）；私有桶下浏览器须再经 GET 预签名方可加载。
+ */
 export function buildObjectPublicUrl(objectKey) {
   const key = String(objectKey).replace(/^\//, "");
   const encoded = key
@@ -249,8 +251,8 @@ export function buildObjectPublicUrl(objectKey) {
   return `https://${cosBucket()}.cos.${cosRegion()}.myqcloud.com/${encoded}`;
 }
 
-/** 上传可公开访问的媒体对象 */
-export async function putCosPublicObject(objectKey, buffer, contentType) {
+/** 上传媒体对象（默认私有；展示时走 GET 预签名） */
+export async function putCosObject(objectKey, buffer, contentType) {
   const cos = getCos();
   const key = String(objectKey).replace(/^\//, "");
   const params = {
@@ -261,7 +263,6 @@ export async function putCosPublicObject(objectKey, buffer, contentType) {
     ContentType: contentType || "application/octet-stream",
     /** 避免 COS/默认元数据为 attachment，导致 <img>/<video> 裂图而地址栏直链仍可打开 */
     ContentDisposition: "inline",
-    ACL: "public-read",
   };
   return new Promise((resolve, reject) => {
     cos.putObject(params, (err, data) => {
@@ -272,7 +273,7 @@ export async function putCosPublicObject(objectKey, buffer, contentType) {
 }
 
 /**
- * 浏览器直传 COS 的预签名 PUT（须与前端请求头 Content-Type、x-cos-acl 完全一致）
+ * 浏览器直传 COS 的预签名 PUT（须与前端请求头 Content-Type、Content-Disposition 一致）
  * @param {{ key: string; contentType: string; expiresSec?: number }} opts
  */
 export function getCosPutPresignedUrl(opts) {
@@ -296,7 +297,6 @@ export function getCosPutPresignedUrl(opts) {
         Expires: expiresSec,
         Headers: {
           "Content-Type": contentType,
-          "x-cos-acl": "public-read",
           "Content-Disposition": "inline",
         },
       },
@@ -306,6 +306,102 @@ export function getCosPutPresignedUrl(opts) {
       }
     );
   });
+}
+
+/**
+ * 浏览器加载私有对象的 GET 预签名 URL
+ * @param {string} objectKey
+ * @param {number} [expiresSec]
+ */
+export function getCosGetPresignedUrl(objectKey, expiresSec = 900) {
+  const cos = getCos();
+  const key = String(objectKey).replace(/^\//, "");
+  const expires = Math.min(3600, Math.max(60, Number(expiresSec) || 900));
+  return new Promise((resolve, reject) => {
+    cos.getObjectUrl(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: key,
+        Method: "GET",
+        Sign: true,
+        Expires: expires,
+      },
+      (err, data) => {
+        if (err) reject(err);
+        else resolve(data.Url);
+      }
+    );
+  });
+}
+
+/**
+ * 从对外 URL（直链或 COS_PUBLIC_BASE 自定义域）解析对象键；非本桶则返回 null
+ * @param {string} inputUrl
+ * @returns {string | null}
+ */
+export function extractObjectKeyFromCosPublicUrl(inputUrl) {
+  let u;
+  try {
+    u = new URL(inputUrl);
+  } catch {
+    return null;
+  }
+
+  const pathRaw = u.pathname.replace(/^\/+/, "");
+  const segments = pathRaw
+    .split("/")
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    });
+  const pathname = segments.join("/");
+
+  const custom = process.env.COS_PUBLIC_BASE?.trim();
+  if (custom) {
+    let baseUrl;
+    try {
+      baseUrl = new URL(custom.includes("://") ? custom : `https://${custom}`);
+    } catch {
+      return null;
+    }
+    if (u.origin !== baseUrl.origin) return null;
+    const basePath = baseUrl.pathname.replace(/\/$/, "");
+    let p = u.pathname;
+    if (basePath && basePath !== "/") {
+      if (p !== basePath && !p.startsWith(`${basePath}/`)) return null;
+      p = p.slice(basePath.length).replace(/^\//, "");
+    } else {
+      p = p.replace(/^\//, "");
+    }
+    const keyFromCustom = p
+      .split("/")
+      .filter(Boolean)
+      .map((s) => {
+        try {
+          return decodeURIComponent(s);
+        } catch {
+          return s;
+        }
+      })
+      .join("/");
+    return keyFromCustom || null;
+  }
+
+  const bucket = process.env.COS_BUCKET?.trim();
+  const region = process.env.COS_REGION?.trim();
+  if (!bucket || !region) return null;
+
+  const host = u.hostname.toLowerCase();
+  const okHost =
+    host === `${bucket}.cos.${region}.myqcloud.com`.toLowerCase() ||
+    host === `${bucket}.cos.accelerate.myqcloud.com`.toLowerCase();
+  if (!okHost) return null;
+  return pathname || null;
 }
 
 /** 下载 COS 对象正文（服务端拉取，用于音频内嵌封面等） */

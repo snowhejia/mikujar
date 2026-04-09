@@ -14,7 +14,7 @@ import {
   buildObjectPublicUrl,
   getCosObjectBuffer,
   isCosConfigured,
-  putCosPublicObject,
+  putCosObject,
 } from "./storage.js";
 
 /** 写入 COS/磁盘的封面上限；再大则尝试 sharp 压图，仍过大则跳过 */
@@ -299,7 +299,7 @@ export async function saveUploadedMedia(file, opts) {
       const coverFilename = `${token}-cover.${cover.ext}`;
       if (isCosConfigured()) {
         const coverKey = `${cosSub}/${coverFilename}`;
-        await putCosPublicObject(coverKey, cover.buffer, cover.mimeType);
+        await putCosObject(coverKey, cover.buffer, cover.mimeType);
         coverUrl = buildObjectPublicUrl(coverKey);
       } else {
         await mkdir(localBase, { recursive: true });
@@ -312,7 +312,7 @@ export async function saveUploadedMedia(file, opts) {
 
   if (isCosConfigured()) {
     const key = `${cosSub}/${filename}`;
-    await putCosPublicObject(key, file.buffer, mimetype);
+    await putCosObject(key, file.buffer, mimetype);
     const url = buildObjectPublicUrl(key);
     return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
   }
@@ -384,6 +384,6 @@ export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
   if (!cover) return {};
   const coverFilename = `${tokenPart}-cover.${cover.ext}`;
   const coverKey = `${cosSub}/${coverFilename}`;
-  await putCosPublicObject(coverKey, cover.buffer, cover.mimeType);
+  await putCosObject(coverKey, cover.buffer, cover.mimeType);
   return { coverUrl: buildObjectPublicUrl(coverKey) };
 }

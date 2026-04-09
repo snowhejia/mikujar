@@ -7,7 +7,7 @@ import {
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import type { AuthUser } from "./api/auth";
-import { resolveMediaUrl } from "./api/auth";
+import { useMediaDisplaySrc } from "./mediaDisplay";
 import {
   sendMyEmailChangeCode,
   updateMyProfileApi,
@@ -226,13 +226,13 @@ export function UserProfileModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const serverAvatarSrc = useMediaDisplaySrc(
+    previewUrl ? undefined : currentUser.avatarUrl
+  );
+
   if (!open) return null;
 
-  const avatarSrc = previewUrl
-    ? previewUrl
-    : currentUser.avatarUrl
-      ? resolveMediaUrl(currentUser.avatarUrl)
-      : "";
+  const avatarSrc = previewUrl ? previewUrl : serverAvatarSrc;
 
   const panel = (
     <div

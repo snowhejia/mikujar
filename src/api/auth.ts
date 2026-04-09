@@ -12,7 +12,7 @@ export type AuthUser = {
 };
 
 /**
- * 媒体地址：绝对 URL 原样返回。
+ * 媒体地址：绝对 URL 原样返回（腾讯云 COS 私有桶时浏览器展示须再经 {@link resolveCosMediaUrlIfNeeded}）。
  * - `/uploads/…` 由后端（或 COS 回写为绝对地址）提供，分域部署时补全为 API 根。
  * - 其它以 `/` 开头的路径视为**前端静态资源**（Vite `public/` 等），与当前页面同源，
  *   不可拼到 API 上，否则云端未登录示例图会 404，与本地模式不一致。
@@ -29,6 +29,73 @@ export function resolveMediaUrl(pathOrUrl: string): string {
     return `${base}${normalized}`;
   }
   return normalized;
+}
+
+const cosReadUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const COS_READ_MARGIN_MS = 60 * 1000;
+
+function viteCosPublicBase(): string {
+  return (
+    (import.meta.env.VITE_COS_PUBLIC_BASE as string | undefined)?.trim().replace(
+      /\/$/,
+      ""
+    ) ?? ""
+  );
+}
+
+/** 是否为腾讯云 COS 对象直链（用于判断是否要走 GET 预签名） */
+export function looksLikeTencentCosObjectUrl(href: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(href);
+  } catch {
+    return false;
+  }
+  const h = u.hostname.toLowerCase();
+  if (!h.includes("myqcloud.com")) return false;
+  if (!h.includes("cos")) return false;
+  return true;
+}
+
+/**
+ * 经 {@link resolveMediaUrl} 后的地址是否可能需要 COS 私有读换签。
+ * 自定义域与 `COS_PUBLIC_BASE` 一致时请在构建环境配置 `VITE_COS_PUBLIC_BASE`。
+ */
+export function needsCosReadUrl(resolvedUrl: string): boolean {
+  const p = resolvedUrl.trim();
+  if (!p || !/^https?:\/\//i.test(p)) return false;
+  if (/^data:|^blob:/i.test(p)) return false;
+  if (looksLikeTencentCosObjectUrl(p)) return true;
+  const base = viteCosPublicBase();
+  if (base && p.startsWith(base)) return true;
+  return false;
+}
+
+/** 将 COS 对外 URL 换为短时 GET 预签名（需已登录且有权访问该对象） */
+export async function resolveCosMediaUrlIfNeeded(
+  resolvedUrl: string
+): Promise<string> {
+  if (!needsCosReadUrl(resolvedUrl)) return resolvedUrl;
+  const now = Date.now();
+  const hit = cosReadUrlCache.get(resolvedUrl);
+  if (hit && hit.expiresAt > now + COS_READ_MARGIN_MS) return hit.url;
+
+  const base = apiBase();
+  const q = new URLSearchParams({ url: resolvedUrl });
+  const r = await fetch(`${base}/api/upload/cos-read?${q}`, apiFetchInit());
+  if (!r.ok) return resolvedUrl;
+  const j = (await r.json().catch(() => ({}))) as {
+    url?: unknown;
+    expiresIn?: unknown;
+  };
+  if (typeof j.url !== "string" || !j.url) return resolvedUrl;
+  const ttlSec =
+    typeof j.expiresIn === "number" && Number.isFinite(j.expiresIn)
+      ? j.expiresIn
+      : 900;
+  const ttlMs = Math.min(3600, Math.max(60, ttlSec)) * 1000 * 0.85;
+  cosReadUrlCache.set(resolvedUrl, { url: j.url, expiresAt: now + ttlMs });
+  return j.url;
 }
 
 export async function fetchAuthStatus(): Promise<{

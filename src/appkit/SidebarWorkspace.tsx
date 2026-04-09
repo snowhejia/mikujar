@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
-import { resolveMediaUrl, type AuthUser } from "../api/auth";
+import type { AuthUser } from "../api/auth";
+import { useMediaDisplaySrc } from "../mediaDisplay";
 import type { AppDataMode } from "../appDataModeStorage";
 import { getAdminToken } from "../auth/token";
 import { SidebarWorkspaceAppMark } from "./AppIcons";
@@ -78,6 +79,12 @@ export function SidebarWorkspaceIdentity({
   menuOpen: boolean;
   menuDropdown: ReactNode;
 }) {
+  const avatarDisplaySrc = useMediaDisplaySrc(
+    writeRequiresLogin && currentUser?.avatarUrl
+      ? currentUser.avatarUrl
+      : undefined
+  );
+
   return (
     <div className="sidebar__workspace">
       {writeRequiresLogin && currentUser ? (
@@ -103,7 +110,7 @@ export function SidebarWorkspaceIdentity({
             >
               {currentUser.avatarUrl ? (
                 <img
-                  src={resolveMediaUrl(currentUser.avatarUrl)}
+                  src={avatarDisplaySrc}
                   alt=""
                   className="sidebar__avatar-img"
                 />

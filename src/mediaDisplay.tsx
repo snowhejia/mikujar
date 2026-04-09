@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { resolveMediaUrl } from "./api/auth";
+import {
+  needsCosReadUrl,
+  resolveCosMediaUrlIfNeeded,
+  resolveMediaUrl,
+} from "./api/auth";
 import {
   isLocalMediaRef,
   resolveLocalMediaDisplayUrl,
@@ -7,7 +11,10 @@ import {
 export function useMediaDisplaySrc(url: string | undefined): string {
   const [src, setSrc] = useState(() => {
     if (!url) return "";
-    if (!isLocalMediaRef(url)) return resolveMediaUrl(url);
+    if (!isLocalMediaRef(url)) {
+      const b = resolveMediaUrl(url);
+      return needsCosReadUrl(b) ? "" : b;
+    }
     return "";
   });
   useEffect(() => {
@@ -16,8 +23,18 @@ export function useMediaDisplaySrc(url: string | undefined): string {
       return;
     }
     if (!isLocalMediaRef(url)) {
-      setSrc(resolveMediaUrl(url));
-      return;
+      const base = resolveMediaUrl(url);
+      if (!needsCosReadUrl(base)) {
+        setSrc(base);
+        return;
+      }
+      let c = false;
+      void resolveCosMediaUrlIfNeeded(base).then((s) => {
+        if (!c) setSrc(s);
+      });
+      return () => {
+        c = true;
+      };
     }
     let c = false;
     void resolveLocalMediaDisplayUrl(url).then((s) => {

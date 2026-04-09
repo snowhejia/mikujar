@@ -13,8 +13,11 @@ import {
   planMediaCosDirectUpload,
   UPLOAD_MAX_BYTES,
 } from "./mediaUpload.js";
+import { canSessionReadCosObjectKey } from "./cosReadAuth.js";
 import {
   buildObjectPublicUrl,
+  extractObjectKeyFromCosPublicUrl,
+  getCosGetPresignedUrl,
   getCosPutPresignedUrl,
   isCosConfigured,
 } from "./storage.js";
@@ -582,7 +585,6 @@ app.post("/api/users/me/avatar/presign", attachJwtSession, requireLoggedInUser, 
       putUrl,
       headers: {
         "Content-Type": plan.contentType,
-        "x-cos-acl": "public-read",
         "Content-Disposition": "inline",
       },
       key: plan.key,
@@ -921,6 +923,49 @@ app.delete("/api/me/trash/:trashId", preferencesWriterMw, async (req, res) => {
 // 媒体上传（COS 预签名直传）
 // ─────────────────────────────────────────────────────────────────────────────
 
+const COS_READ_SIGN_EXPIRES_SEC = Math.min(
+  3600,
+  Math.max(
+    60,
+    Number(process.env.COS_READ_SIGN_EXPIRES_SEC || 900) || 900
+  )
+);
+
+/**
+ * GET /api/upload/cos-read?url= — 将本桶对外 URL 换为短时 GET 预签名（私有桶展示媒体）
+ */
+app.get("/api/upload/cos-read", (req, res, next) => {
+  const s = getJwtSession(req);
+  if (!s) return res.status(401).json({ error: "未授权", code: "AUTH" });
+  req.jwtSession = s;
+  next();
+}, async (req, res) => {
+  try {
+    if (!isCosConfigured()) {
+      return res.status(503).json({
+        error: "未配置 COS",
+        code: "COS_NOT_CONFIGURED",
+      });
+    }
+    const raw = typeof req.query.url === "string" ? req.query.url.trim() : "";
+    if (!raw || !/^https?:\/\//i.test(raw)) {
+      return res.status(400).json({ error: "缺少有效 url" });
+    }
+    const key = extractObjectKeyFromCosPublicUrl(raw);
+    if (!key) {
+      return res.status(400).json({ error: "URL 不属于当前存储桶" });
+    }
+    if (!canSessionReadCosObjectKey(key, req.jwtSession)) {
+      return res.status(403).json({ error: "无权访问该对象" });
+    }
+    const signedUrl = await getCosGetPresignedUrl(key, COS_READ_SIGN_EXPIRES_SEC);
+    res.json({ url: signedUrl, expiresIn: COS_READ_SIGN_EXPIRES_SEC });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "预签名失败" });
+  }
+});
+
 /** POST /api/upload/presign — 获取 COS 直传预签名 URL */
 app.post(
   "/api/upload/presign",
@@ -951,7 +996,6 @@ app.post(
         putUrl,
         headers: {
           "Content-Type": plan.contentType,
-          "x-cos-acl": "public-read",
           "Content-Disposition": "inline",
         },
         key: plan.key,

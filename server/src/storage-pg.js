@@ -1,7 +1,7 @@
 /**
  * storage-pg.js
  * PostgreSQL 数据访问层：合集 + 卡片 CRUD。
- * COS 工具函数（presign、putCosPublicObject 等）继续留在 storage.js，不在此文件。
+ * COS 工具函数（presign、putCosObject 等）继续留在 storage.js，不在此文件。
  */
 
 import { query, getClient } from "./db.js";

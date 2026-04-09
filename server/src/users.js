@@ -8,7 +8,7 @@ import { query } from "./db.js";
 import {
   buildObjectPublicUrl,
   isCosConfigured,
-  putCosPublicObject,
+  putCosObject,
 } from "./storage.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
@@ -407,7 +407,7 @@ export async function saveAvatarFile(userId, buffer, mimetype, opts) {
   const ext = MIME_EXT[mime] || "jpg";
   if (isCosConfigured()) {
     const key = `mikujar/avatars/${userId}.${ext}`;
-    await putCosPublicObject(key, buffer, mime);
+    await putCosObject(key, buffer, mime);
     return withAvatarCacheBust(buildObjectPublicUrl(key));
   }
   const dir = join(opts.publicDir, "uploads", "avatars");

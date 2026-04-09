@@ -134,7 +134,7 @@ function LoginModal({
         regPassword,
         regDisplayName.trim()
       );
-      if (!r.ok) setError(r.error ?? "注册失败");
+      if (!r.ok) setError(r.error ?? "注册翻车啦，再试一次？");
       else {
         setRegEmail("");
         setRegCode("");
@@ -188,7 +188,7 @@ function LoginModal({
           <>
             <h2 className="auth-modal__title">登录账号</h2>
             <p className="auth-modal__hint">
-              支持用户名或邮箱 + 密码。登录后笔记和附件按账号隔离；新账号首次进入会带上站内导览笔记。
+              用户名或邮箱 + 密码就能进来～笔记和小附件都会乖乖跟着你的账号走，新同学还会收到罐子里的小导览 ✨
             </p>
             <input
               type="text"
@@ -219,8 +219,8 @@ function LoginModal({
           <>
             <h2 className="auth-modal__title">邮箱注册</h2>
             <p className="auth-modal__hint">
-              填写邮箱后发送验证码，收信后填入 6
-              位数字并设置密码（至少 6 位）。生产环境需在服务端配置 SMTP。
+              填好邮箱点「发验证码」，收到信后把 6
+              位数字填进来，再设一个至少 6 位的密码，就注册完成啦～
             </p>
             <div className="auth-modal__input-row">
               <input

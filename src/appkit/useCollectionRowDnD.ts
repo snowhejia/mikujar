@@ -143,7 +143,7 @@ export function useCollectionRowDnD(p: {
               void persistNoteCardDropToRemote(noteFrom, next).then((ok) => {
                 if (!ok) {
                   window.alert(
-                    "笔记移动同步失败，请刷新后重试。"
+                    "笔记搬家没搬完…刷新一下再拖拖看？"
                   );
                 }
               });
@@ -174,7 +174,7 @@ export function useCollectionRowDnD(p: {
           void persistCollectionTreeLayoutRemote(next, null).then((ok) => {
             if (!ok) {
               window.alert(
-                "合集顺序同步失败，请刷新后重试。"
+                "合集排队没排好…刷新一下再试？"
               );
             }
           });

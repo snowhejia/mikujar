@@ -221,7 +221,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               void persistNoteCardDropToRemote(from, next).then((ok) => {
                 if (!ok) {
                   window.alert(
-                    "笔记移动同步失败，请刷新后重试。"
+                    "笔记搬家没搬完…刷新一下再拖拖看？"
                   );
                 }
               });

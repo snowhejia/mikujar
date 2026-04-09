@@ -28,7 +28,7 @@ export function UserAccountMenuDropdown({
         disabled={dataMode !== "remote" || profileBusy}
         title={
           dataMode !== "remote"
-            ? "请先切换到云端同步后再打开个人中心"
+            ? "先切到云端同步，再来开个人中心喔～"
             : undefined
         }
         onClick={() => {

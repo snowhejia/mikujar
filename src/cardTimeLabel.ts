@@ -1,3 +1,4 @@
+import type { LoginUiLang } from "./auth/loginUiI18n";
 import type { NoteCard } from "./types";
 
 function localDateString(d = new Date()): string {
@@ -18,10 +19,17 @@ export function formatCardClock(minutesOfDay: number): string {
   return formatClock(minutesOfDay);
 }
 
+function dateFromIsoParts(y: number, mo: number, d: number): Date {
+  return new Date(y, mo - 1, d);
+}
+
 /**
- * 提醒日 YYYY-MM-DD → 「M月D日」；非今年则带年份（与 {@link formatCardReminderBesideTime} 日期部分一致）。
+ * 提醒日 YYYY-MM-DD → 展示用日期；非今年则带年份（与 {@link formatCardReminderBesideTime} 日期部分一致）。
  */
-export function formatReminderDateLabel(iso: string): string {
+export function formatReminderDateLabel(
+  iso: string,
+  lang: LoginUiLang = "zh"
+): string {
   const raw = iso?.trim() ?? "";
   const parts = raw.split("-");
   if (parts.length !== 3) return raw || "—";
@@ -30,13 +38,51 @@ export function formatReminderDateLabel(iso: string): string {
   const d = Number(parts[2]);
   if (!y || !mo || !d) return raw;
   const yNow = new Date().getFullYear();
+  const dt = dateFromIsoParts(y, mo, d);
+  if (lang === "en") {
+    return y === yNow
+      ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : dt.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+  }
   return y === yNow ? `${mo}月${d}日` : `${y}年${mo}月${d}日`;
 }
 
 /** 卡片左上角：按 addedOn 显示「今天 / 昨天 / M月D日」+ 时刻 */
-export function formatCardTimeLabel(card: NoteCard) {
+export function formatCardTimeLabel(
+  card: NoteCard,
+  lang: LoginUiLang = "zh"
+) {
   const clock = formatClock(card.minutesOfDay);
   const added = card.addedOn;
+  if (lang === "en") {
+    if (!added) return `Today ${clock}`;
+    const today = localDateString();
+    if (added === today) return `Today ${clock}`;
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    if (added === localDateString(yest)) return `Yesterday ${clock}`;
+    const ap = added.split("-");
+    if (ap.length !== 3) return clock;
+    const y = Number(ap[0]);
+    const mo = Number(ap[1]);
+    const day = Number(ap[2]);
+    if (!y || !mo || !day) return clock;
+    const dt = dateFromIsoParts(y, mo, day);
+    const yNow = new Date().getFullYear();
+    const label =
+      y === yNow
+        ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : dt.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+    return `${label} ${clock}`;
+  }
   if (!added) return `今天 ${clock}`;
   const today = localDateString();
   if (added === today) return `今天 ${clock}`;
@@ -51,16 +97,35 @@ export function formatCardTimeLabel(card: NoteCard) {
  * 排在 {@link formatCardTimeLabel} 之后：有提醒日时返回「 · 提醒M月D日」（非今年则带年份）。
  * 无提醒返回空串。
  */
-export function formatCardReminderBesideTime(card: NoteCard): string {
+export function formatCardReminderBesideTime(
+  card: NoteCard,
+  lang: LoginUiLang = "zh"
+): string {
   const raw = card.reminderOn?.trim();
   if (!raw) return "";
   const parts = raw.split("-");
-  if (parts.length !== 3) return ` · 提醒 ${raw}`;
+  if (parts.length !== 3) {
+    return lang === "en" ? ` · Reminder ${raw}` : ` · 提醒 ${raw}`;
+  }
   const y = Number(parts[0]);
   const mo = Number(parts[1]);
   const d = Number(parts[2]);
-  if (!y || !mo || !d) return ` · 提醒 ${raw}`;
+  if (!y || !mo || !d) {
+    return lang === "en" ? ` · Reminder ${raw}` : ` · 提醒 ${raw}`;
+  }
   const yNow = new Date().getFullYear();
+  if (lang === "en") {
+    const dt = dateFromIsoParts(y, mo, d);
+    const dateLabel =
+      y === yNow
+        ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : dt.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+    return ` · Reminder ${dateLabel}`;
+  }
   const dateLabel = y === yNow ? `${mo}月${d}日` : `${y}年${mo}月${d}日`;
   return ` · 提醒${dateLabel}`;
 }

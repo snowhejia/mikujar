@@ -5,6 +5,8 @@ import type {
   SetStateAction,
 } from "react";
 import type { AppDataMode } from "../appDataModeStorage";
+import { useAppChrome } from "../i18n/useAppChrome";
+import { useAppUiLang } from "../appUiLang";
 import { CardGallery } from "../CardGallery";
 import { CardRowInner } from "../CardRowInner";
 import { CardTagsRow } from "../CardTagsRow";
@@ -18,7 +20,6 @@ import {
   filesFromDataTransfer,
 } from "../filesFromDataTransfer";
 import type { Collection, NoteCard, NoteMediaItem } from "../types";
-import { cardNeedsMasonryCollapse } from "./masonryLayout";
 import {
   NOTE_CARD_DRAG_MIME,
   NOTE_CARD_TEXT_PREFIX,
@@ -31,7 +32,6 @@ import {
 export type NoteTimelineCardProps = {
   card: NoteCard;
   colId: string;
-  masonryLayout: boolean;
   canEdit: boolean;
   canAttachMedia: boolean;
   cardMenuId: string | null;
@@ -94,7 +94,6 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   const {
     card,
     colId,
-    masonryLayout,
     canEdit,
     canAttachMedia,
     cardMenuId,
@@ -125,12 +124,12 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     setCardTags,
   } = p;
 
+  const { lang } = useAppUiLang();
+  const c = useAppChrome();
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   const mediaUploadPending = uploadBusyCardId === card.id;
   const hasGallery = media.length > 0 || mediaUploadPending;
-  const reminderBesideTime = formatCardReminderBesideTime(card);
-  const hugeForMasonry =
-    masonryLayout && cardNeedsMasonryCollapse(card);
+  const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const noteKey = `${colId}-${card.id}`;
   const dropEdgeActive =
     cardDropMarker !== null &&
@@ -139,6 +138,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
 
   return (
     <li
+      data-masonry-key={noteKey}
       className={
         "card" +
         (cardMenuId === card.id ? " is-menu-open" : "") +
@@ -150,8 +150,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             ? " card--note-drop-before"
             : " card--note-drop-after"
           : "") +
-        (draggingNoteCardKey === noteKey ? " card--note-dragging" : "") +
-        (hugeForMasonry ? " card--masonry-collapsed" : "")
+        (draggingNoteCardKey === noteKey ? " card--note-dragging" : "")
       }
       onDragOver={(e) => {
         if (!canEdit) return;
@@ -227,9 +226,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             if (dataMode === "remote" && canEdit) {
               void persistNoteCardDropToRemote(from, next).then((ok) => {
                 if (!ok) {
-                  window.alert(
-                    "笔记搬家没搬完…刷新一下再拖拖看？"
-                  );
+                  window.alert(c.uiDropIncomplete);
                 }
               });
             }
@@ -248,8 +245,6 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     >
       <CardRowInner
         hasGallery={hasGallery}
-        textRev={card.text}
-        masonryLayout={masonryLayout}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")
         }
@@ -261,14 +256,10 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           }
           draggable={canEdit}
           aria-label={
-            canEdit
-              ? "拖动以移动小笔记"
-              : "侧栏条（登录后可拖动排列）"
+            canEdit ? c.uiDragHandleLoggedIn : c.uiDragHandleGuest
           }
           title={
-            canEdit
-              ? "按住拖到其他卡片旁或侧栏合集"
-              : "登录后可拖动小笔记排序"
+            canEdit ? c.uiDragHintLoggedIn : c.uiDragHintGuest
           }
           onDragStart={
             canEdit
@@ -319,7 +310,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         >
           <div className="card__toolbar">
             <span className="card__time">
-              {formatCardTimeLabel(card)}
+              {formatCardTimeLabel(card, lang)}
               {reminderBesideTime ? (
                 <span className="card__time-reminder">
                   {reminderBesideTime}
@@ -330,16 +321,8 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               <button
                 type="button"
                 className="card__icon-btn card__detail-btn"
-                title={
-                  hugeForMasonry
-                    ? "查看完整笔记"
-                    : "查看详情"
-                }
-                aria-label={
-                  hugeForMasonry
-                    ? "查看完整笔记"
-                    : "查看详情"
-                }
+                title={c.uiViewDetail}
+                aria-label={c.uiViewDetail}
                 onClick={() =>
                   setDetailCard({
                     card,
@@ -364,7 +347,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                 <button
                   type="button"
                   className="card__more"
-                  aria-label="更多操作"
+                  aria-label={c.uiMoreActions}
                   aria-expanded={cardMenuId === card.id}
                   onClick={() =>
                     setCardMenuId((id) =>
@@ -399,7 +382,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         setCardMenuId(null);
                       }}
                     >
-                      相关笔记
+                      {c.uiRelatedNotes}
                     </button>
                     {canEdit && canAttachMedia ? (
                       <button
@@ -412,8 +395,8 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         }
                       >
                         {uploadBusyCardId === card.id
-                          ? "上传中…"
-                          : "添加附件"}
+                          ? c.uiUploading
+                          : c.uiAddAttachment}
                       </button>
                     ) : null}
                     {canEdit && hasGallery ? (
@@ -425,7 +408,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                           clearCardMedia(colId, card.id)
                         }
                       >
-                        清空附件
+                        {c.uiClearAttachments}
                       </button>
                     ) : null}
                     {canEdit ? (
@@ -441,7 +424,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                           setCardMenuId(null);
                         }}
                       >
-                        提醒…
+                        {c.uiReminderEllipsis}
                       </button>
                     ) : null}
                     {canEdit ? (
@@ -454,7 +437,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                           setCardMenuId(null);
                         }}
                       >
-                        {card.pinned ? "取消置顶" : "置顶"}
+                        {card.pinned ? c.uiUnpin : c.uiPin}
                       </button>
                     ) : null}
                     {canEdit ? (
@@ -466,7 +449,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                           deleteCard(colId, card.id)
                         }
                       >
-                        删除
+                        {c.uiDelete}
                       </button>
                     ) : null}
                   </div>
@@ -478,7 +461,6 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             id={`card-text-${card.id}`}
             value={card.text}
             canEdit={canEdit}
-            ariaLabel="笔记正文"
             onChange={(next) => setCardText(colId, card.id, next)}
             onPasteFiles={
               canEdit && canAttachMedia

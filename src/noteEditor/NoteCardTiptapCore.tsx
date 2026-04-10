@@ -3,6 +3,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useMemo, useRef } from "react";
+import { useAppChrome } from "../i18n/useAppChrome";
 import { filesFromDataTransfer } from "../filesFromDataTransfer";
 import { NOTE_HIGHLIGHT_COLORS } from "./highlightPalette";
 import { noteBodyToHtml } from "./plainHtml";
@@ -24,10 +25,12 @@ export function NoteCardTiptapCore({
   value,
   onChange,
   canEdit,
-  ariaLabel = "笔记正文",
+  ariaLabel: ariaLabelProp,
   onPasteFiles,
   highlightBubble = false,
 }: NoteCardTiptapProps) {
+  const c = useAppChrome();
+  const ariaLabel = ariaLabelProp ?? c.uiNoteBodyAria;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const onPasteFilesRef = useRef(onPasteFiles);
@@ -139,7 +142,7 @@ export function NoteCardTiptapCore({
                   (active ? " card-highlight-bubble__btn--active" : "")
                 }
                 title={sw.label}
-                aria-label={`${sw.label}高亮`}
+                aria-label={c.uiHighlightAria(sw.label)}
                 aria-pressed={active}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {

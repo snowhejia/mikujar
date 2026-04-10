@@ -113,7 +113,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "未来罐" */;
+			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "mikujar" */;
 			compatibilityVersion = "Xcode 8.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -296,7 +296,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = N6YFUN376R;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "未来罐";
@@ -321,7 +321,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = N6YFUN376R;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "未来罐";
@@ -343,7 +343,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "未来罐" */ = {
+		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "mikujar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				504EC3141FED79650016851F /* Debug */,

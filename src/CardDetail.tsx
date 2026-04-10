@@ -11,12 +11,17 @@ import {
   dataTransferHasFiles,
   filesFromDataTransfer,
 } from "./filesFromDataTransfer";
+import { useAppUiLang } from "./appUiLang";
+import { useAppChrome } from "./i18n/useAppChrome";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
 import type { NoteCard, NoteMediaItem } from "./types";
 
 const detailMenuId = (cardId: string) => `__detail__${cardId}`;
 
 const CARD_DETAIL_LAYOUT_KEY = "mikujar-card-detail-layout";
+
+/** 与时间线 CardRowInner 一致：手机端固定上下布局 */
+const CARD_DETAIL_MOBILE_MQ = "(max-width: 900px)";
 
 /** 左右分栏：方框 + 正中竖线 */
 function IconDetailLayoutSplit() {
@@ -142,12 +147,29 @@ export function CardDetail({
   onRemoveGalleryItem,
   onSetGalleryCoverItem,
 }: CardDetailProps) {
+  const { lang } = useAppUiLang();
+  const c = useAppChrome();
   const menuId = useMemo(() => detailMenuId(card.id), [card.id]);
   const menuOpen = cardMenuId === menuId;
-  const reminderBesideTime = formatCardReminderBesideTime(card);
+  const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const [fileDragOver, setFileDragOver] = useState(false);
-  /** true = 上下分栏（附件在上、正文在下）；false = 左右分栏 */
+  /** true = 上下分栏（附件在上、正文在下）；false = 左右分栏（仅宽屏可切换） */
   const [layoutStack, setLayoutStack] = useState(readInitialDetailLayoutStack);
+  const [detailNarrow, setDetailNarrow] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia(CARD_DETAIL_MOBILE_MQ).matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(CARD_DETAIL_MOBILE_MQ);
+    const onChange = () => setDetailNarrow(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  /** 小屏强制上下，避免左右分栏 */
+  const layoutStackEffective = detailNarrow || layoutStack;
 
   const attachEnabled =
     Boolean(canEdit && canAttachMedia && onPasteFiles);
@@ -249,7 +271,9 @@ export function CardDetail({
       <div
         className={
           "card-detail-wrap card-detail-wrap--square" +
-          (hasGallery && layoutStack ? " card-detail-wrap--layout-stack" : "")
+          (hasGallery && layoutStackEffective
+            ? " card-detail-wrap--layout-stack"
+            : "")
         }
         onMouseDown={(e) => e.stopPropagation()}
         onDragOver={onDetailDragOver}
@@ -262,7 +286,7 @@ export function CardDetail({
           className={
             "card card--detail-modal" +
             (hasGallery ? " card--detail-modal--has-gallery" : "") +
-            (hasGallery && layoutStack
+            (hasGallery && layoutStackEffective
               ? " card--detail-modal--layout-stack"
               : "") +
             (menuOpen ? " is-menu-open" : "") +
@@ -282,7 +306,7 @@ export function CardDetail({
             >
               <div className="card__toolbar">
                 <span className="card__time">
-                  {formatCardTimeLabel(card)}
+                  {formatCardTimeLabel(card, lang)}
                   {reminderBesideTime ? (
                     <span className="card__time-reminder">
                       {reminderBesideTime}
@@ -290,20 +314,20 @@ export function CardDetail({
                   ) : null}
                 </span>
                 <div className="card__toolbar-actions">
-                  {hasGallery ? (
+                  {hasGallery && !detailNarrow ? (
                     <button
                       type="button"
                       className="card__detail-layout-toggle"
                       aria-pressed={layoutStack}
                       aria-label={
                         layoutStack
-                          ? "切换为左右分栏"
-                          : "切换为上下分栏（附件在上，正文在下可滚动）"
+                          ? c.uiLayoutSplitTitle
+                          : c.uiLayoutStackTitle
                       }
                       title={
                         layoutStack
-                          ? "切换为左右分栏"
-                          : "切换为上下分栏（附件在上，正文在下可滚动）"
+                          ? c.uiLayoutSplitTitle
+                          : c.uiLayoutStackTitle
                       }
                       onClick={toggleDetailLayout}
                     >
@@ -321,7 +345,7 @@ export function CardDetail({
                     <button
                       type="button"
                       className="card__more"
-                      aria-label="更多操作"
+                      aria-label={c.uiMoreActions}
                       aria-expanded={menuOpen}
                       onClick={() =>
                         setCardMenuId(
@@ -349,7 +373,7 @@ export function CardDetail({
                             setCardMenuId(null);
                           }}
                         >
-                          相关笔记
+                          {c.uiRelatedNotes}
                         </button>
                         {canEdit && canAttachMedia ? (
                           <button
@@ -359,7 +383,7 @@ export function CardDetail({
                             disabled={uploadBusy}
                             onClick={() => onBeginMediaUpload()}
                           >
-                            {uploadBusy ? "上传中…" : "添加附件"}
+                            {uploadBusy ? c.uiUploading : c.uiAddAttachment}
                           </button>
                         ) : null}
                         {canEdit && hasGallery ? (
@@ -369,7 +393,7 @@ export function CardDetail({
                             role="menuitem"
                             onClick={() => onClearMedia()}
                           >
-                            清空附件
+                            {c.uiClearAttachments}
                           </button>
                         ) : null}
                         {canEdit && onOpenReminderPicker ? (
@@ -382,7 +406,7 @@ export function CardDetail({
                               setCardMenuId(null);
                             }}
                           >
-                            提醒…
+                            {c.uiReminderEllipsis}
                           </button>
                         ) : null}
                         {canEdit ? (
@@ -395,7 +419,7 @@ export function CardDetail({
                               setCardMenuId(null);
                             }}
                           >
-                            {card.pinned ? "取消置顶" : "置顶"}
+                            {card.pinned ? c.uiUnpin : c.uiPin}
                           </button>
                         ) : null}
                         {canEdit ? (
@@ -405,7 +429,7 @@ export function CardDetail({
                             role="menuitem"
                             onClick={() => onDelete()}
                           >
-                            删除
+                            {c.uiDelete}
                           </button>
                         ) : null}
                       </div>
@@ -418,7 +442,6 @@ export function CardDetail({
                 value={card.text}
                 canEdit={canEdit}
                 onChange={onChangeText}
-                ariaLabel="笔记正文"
                 onPasteFiles={onPasteFiles}
                 highlightBubble
               />

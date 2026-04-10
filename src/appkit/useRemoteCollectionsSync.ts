@@ -1,6 +1,8 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import { flushSync } from "react-dom";
+import type { LoginUiLang } from "../auth/loginUiI18n";
 import { fetchApiHealth } from "../api/health";
+import { getAppChrome } from "../i18n/appChrome";
 import {
   fetchCollectionsFromApi,
   saveCollectionsToApi,
@@ -39,6 +41,7 @@ type MediaMode = "cos" | "local" | null;
 export function useRemoteCollectionsSync(p: {
   authReady: boolean;
   dataMode: AppDataMode;
+  appUiLang: LoginUiLang;
   writeRequiresLogin: boolean;
   currentUser: { id: string } | null | undefined;
   setCollections: Dispatch<SetStateAction<Collection[]>>;
@@ -56,6 +59,7 @@ export function useRemoteCollectionsSync(p: {
   const {
     authReady,
     dataMode,
+    appUiLang,
     writeRequiresLogin,
     currentUser,
     setCollections,
@@ -74,13 +78,17 @@ export function useRemoteCollectionsSync(p: {
   useEffect(() => {
     if (!authReady) return;
 
+    const chrome = getAppChrome(appUiLang);
+
     if (dataMode === "local") {
       setMediaUploadMode(null);
       setApiOnline(true);
       setLoadError(null);
       setSaveError(null);
       setRemoteBootSyncing(false);
-      const cols = loadLocalCollections(cloneInitialCollections);
+      const cols = loadLocalCollections(() =>
+        cloneInitialCollections(appUiLang)
+      );
       setCollections(cols);
       const localKey = activeCollectionStorageKey("local", null);
       const localCollapsedKey = collapsedFoldersStorageKey("local", null);
@@ -169,14 +177,12 @@ export function useRemoteCollectionsSync(p: {
           const authed = Boolean(currentUser || getAdminToken());
           if (tree.length === 0 && authed && writeRequiresLogin) {
             tree = currentUser?.id
-              ? cloneInitialCollectionsForRemoteUser(currentUser.id)
-              : cloneInitialCollections();
+              ? cloneInitialCollectionsForRemoteUser(currentUser.id, appUiLang)
+              : cloneInitialCollections(appUiLang);
             const seeded = await saveCollectionsToApi(tree);
             if (cancelled) return;
             if (!seeded) {
-              setSidebarFlash(
-                "欢迎礼包准备好啦，但第一次同步绊了一下…等等再试就好～"
-              );
+              setSidebarFlash(chrome.syncWelcomeSeedFail);
             } else {
               // await 期间用户可能已新建笔记；勿用保存前的 tree 覆盖乐观更新
               const pulled = await fetchCollectionsFromApi();
@@ -229,9 +235,7 @@ export function useRemoteCollectionsSync(p: {
         } else {
           setRemoteSaveAllowed(false);
           if (writeRequiresLogin && (currentUser || getAdminToken())) {
-            setLoadError(
-              "笔记加载摔了一跤… 看看网络或重新登录试试？"
-            );
+            setLoadError(chrome.syncLoadFail);
             if (!usedRemoteCache) {
               setCollections([]);
               setApiOnline(false);
@@ -239,9 +243,7 @@ export function useRemoteCollectionsSync(p: {
               setApiOnline(false);
             }
           } else {
-            setLoadError(
-              "跟罐子连不上线喵～看看网络或稍后再戳进来？"
-            );
+            setLoadError(chrome.syncOffline);
             if (!usedRemoteCache) {
               setCollections([]);
               setApiOnline(online);
@@ -259,6 +261,7 @@ export function useRemoteCollectionsSync(p: {
   }, [
     authReady,
     dataMode,
+    appUiLang,
     writeRequiresLogin,
     currentUser?.id,
     setCollections,

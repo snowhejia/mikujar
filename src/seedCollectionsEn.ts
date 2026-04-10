@@ -1,12 +1,9 @@
 import type { Collection } from "./types";
-import type { LoginUiLang } from "./auth/loginUiI18n";
-import { collectionsEn } from "./seedCollectionsEn";
 
 function t(h: number, m: number) {
   return h * 60 + m;
 }
 
-/** 与 App 内 localDateString 一致：本地日历日，供侧栏月历聚合 */
 function addDays(base: Date, deltaDays: number): Date {
   const d = new Date(base.getTime());
   d.setDate(d.getDate() + deltaDays);
@@ -21,7 +18,6 @@ function ymdLocal(d: Date): string {
 }
 
 const now = new Date();
-/** 示例笔记落在「今天、昨天、近几天」，刷新页面会随真实日期平移 */
 const D0 = ymdLocal(now);
 const D1 = ymdLocal(addDays(now, -1));
 const D2 = ymdLocal(addDays(now, -2));
@@ -30,27 +26,24 @@ const D4 = ymdLocal(addDays(now, -4));
 const D5 = ymdLocal(addDays(now, -5));
 const D7 = ymdLocal(addDays(now, -7));
 
-/**
- * 内置导览数据：每张卡讲清一个功能；卷首语那条排在时间线最前（不设置顶），新手瀑布流不会单独出现「仅一条置顶」区块。
- * 本地模式首启、或云端新账号首次拉取到空库时写入用户数据（不再作为未登录游客预览）。
- */
-export const collectionsZh: Collection[] = [
+/** English onboarding seed — same ids / media as zh for stable sync & refs */
+export const collectionsEn: Collection[] = [
   {
     id: "c1",
-    name: "入门 · 未来罐导览",
-    hint: "每条笔记一件事；下面按功能拆开说明。左侧可切换到学习、摘抄、日记等合集，按你的节奏搭架子。灰色说明可双击改成自己的卷首语。",
+    name: "Start · Mikujar tour",
+    hint: "One note, one thing; features below are explained card by card. Switch collections on the left (study, quotes, journal…). Gray hint text: double‑click to make it yours.",
     dotColor: "#5e9fe8",
     children: [
       {
         id: "c1-am",
-        name: "示意 · 子合集（上半天）",
+        name: "Sample · Sub‑folder (morning)",
         dotColor: "#fbbf24",
         cards: [
           {
             id: "intro-sub-am",
             minutesOfDay: t(9, 0),
             addedOn: D4,
-            text: "【子合集】左侧树形里点开本文件夹——子合集与顶级合集一样按时间线排卡片，只是多了一层归类，适合按场景、项目或心情拆分。",
+            text: "【Sub‑folders】Open this folder in the tree — sub‑folders behave like top‑level ones on the timeline, with an extra level for scenes, projects, or moods.",
             media: [
               {
                 kind: "image",
@@ -66,14 +59,14 @@ export const collectionsZh: Collection[] = [
       },
       {
         id: "c1-pm",
-        name: "示意 · 子合集（入夜后）",
+        name: "Sample · Sub‑folder (evening)",
         dotColor: "#a78bfa",
         cards: [
           {
             id: "intro-sub-pm",
             minutesOfDay: t(22, 30),
             addedOn: D5,
-            text: "【子合集】白天与夜晚、工作与私事各放一坑，切换文件夹就能换一副脑子看同一天的记录。",
+            text: "【Sub‑folders】Put day vs night, work vs life in different buckets — switch folders to see the same day with a different lens.",
             media: [
               {
                 kind: "image",
@@ -97,7 +90,7 @@ export const collectionsZh: Collection[] = [
         id: "intro-verse",
         minutesOfDay: t(5, 20),
         addedOn: D0,
-        text: "日子是散落的星子，拾进同一口罐里，便成了自己的银河。",
+        text: "Days are scattered stars; gathered into one jar, they become your own galaxy.",
         media: [
           {
             kind: "image",
@@ -109,26 +102,26 @@ export const collectionsZh: Collection[] = [
         id: "intro-timeline",
         minutesOfDay: t(6, 0),
         addedOn: D0,
-        text: "【时间线】每条笔记落在「今天某一时刻」，像横格纸往下写，不必起标题。适合碎片：一句念头、半行待办、一阵路过的风。",
+        text: "【Timeline】Each note sits at a moment “today” — like ruled lines downward, no title required. Great for fragments: a thought, half a to‑do, a breeze you noticed.",
       },
       {
         id: "intro-pin",
         minutesOfDay: t(6, 2),
         addedOn: D0,
-        text: "【置顶】要紧的一条可钉在列表最上方（置顶区），与普通时间线隔开。卡片右上角「⋯」里可选「置顶 / 取消置顶」。",
+        text: "【Pin】Pin important cards to the top (pinned section), separate from the normal timeline. Use “⋯” on a card → Pin / Unpin.",
       },
       {
         id: "intro-tags",
         minutesOfDay: t(6, 4),
         addedOn: D0,
-        text: "【标签】正文下方的标签单独录入；侧栏「标签」里点选即可筛选。本条带了两个示例标签。",
-        tags: ["导览", "功能"],
+        text: "【Tags】Add tags under the body; filter from Tags in the sidebar. This card has two sample tags.",
+        tags: ["Tour", "Tips"],
       },
       {
         id: "intro-media",
         minutesOfDay: t(6, 6),
         addedOn: D0,
-        text: "【附件与轮播】多图会与视频、文件一起在右侧轮播；点缩略图可看大图或播放，底部圆点可切换。「⋯」里可继续添加附件或清空。",
+        text: "【Attachments & carousel】Images, video, and files carousel on the right; tap thumbnails for lightbox. Add or clear more via “⋯”.",
         media: [
           {
             kind: "image",
@@ -157,7 +150,7 @@ export const collectionsZh: Collection[] = [
           {
             kind: "file",
             url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            name: "示例-dummy.pdf",
+            name: "sample-dummy.pdf",
           },
           {
             kind: "video",
@@ -177,67 +170,67 @@ export const collectionsZh: Collection[] = [
         id: "intro-related-a",
         minutesOfDay: t(6, 8),
         addedOn: D0,
-        text: "【相关笔记】在「⋯」里打开「相关笔记」，可把其它卡片关联过来，侧栏里双向跳转、添加或解除。本条与下一条已互相关联。",
+        text: "【Related notes】From “⋯” → Related notes to link other cards; the side panel jumps both ways. This card links to the next one.",
         relatedRefs: [{ colId: "c1", cardId: "intro-related-b" }],
       },
       {
         id: "intro-related-b",
         minutesOfDay: t(6, 10),
         addedOn: D0,
-        text: "【相关笔记】从侧栏点「查看」会跳到对应笔记；同一条可在多个关联里出现，适合把会议记录与后续跟进串在一起。",
+        text: "【Related notes】Open from the sidebar to jump to the note; one note can appear in several relations — handy for meeting notes and follow‑ups.",
         relatedRefs: [{ colId: "c1", cardId: "intro-related-a" }],
       },
       {
         id: "intro-links",
         minutesOfDay: t(6, 12),
         addedOn: D0,
-        text: "【正文链接】写下的 http(s) 或 www. 地址会变成可点链接，新标签页打开。未编辑时点正文区域进入书写，点链接则直接跳转。\n示例：https://developer.mozilla.org/zh-CN/",
+        text: "【Links】http(s) or www. in the body become tappable; they open in a new tab. Tap body to edit; tap a link to follow.\nExample: https://developer.mozilla.org/en-US/",
       },
       {
         id: "intro-header-tools",
         minutesOfDay: t(6, 14),
         addedOn: D1,
-        text: "【顶栏图标】右侧放大镜展开搜索；加号即「新建小笔记」，仅在当前合集时间线显示（搜索或日历按日浏览时不会出现）。列表底部也有同款新建按钮。",
+        text: "【Top bar】Magnifier opens search; “+” creates a note in the current collection timeline (hidden in search or day view). Same new‑note control at the bottom of the list.",
       },
       {
         id: "intro-search",
         minutesOfDay: t(6, 16),
         addedOn: D1,
-        text: "【搜索】可搜笔记正文、标签、附件显示名、合集名称等；结果里点「打开」会跳到对应合集。",
+        text: "【Search】Matches body, tags, attachment names, collection titles… Tap Open in results to jump to the collection.",
       },
       {
         id: "intro-calendar",
         minutesOfDay: t(6, 18),
         addedOn: D1,
-        text: "【日历】侧栏月历上有小记号的日期表示那天写过笔记；点某一天，主区只显示该日的卡片（按合集分组）。示例数据已写在「今天、昨天、近几日」，可点点看。",
+        text: "【Calendar】Dots on days with notes; tap a day to show only that day’s cards (grouped by collection). Sample data spans today, yesterday, and recent days — try tapping around.",
       },
       {
         id: "intro-hint",
         minutesOfDay: t(6, 20),
         addedOn: D1,
-        text: "【合集说明】标题下面灰色小字就是本合集的说明（hint），双击可改成你自己的介绍——每个罐子都可以有一句开场白。",
+        text: "【Collection hint】The gray line under the title is this collection’s hint — double‑click to write your own tagline for each jar.",
       },
     ],
   },
   {
     id: "c2",
-    name: "学习笔记",
-    hint: "课程、术语、错题、复盘——按课表或主题再分子文件夹也行。",
+    name: "Study",
+    hint: "Courses, terms, mistakes, reviews — add sub‑folders by week or topic.",
     dotColor: "#60a5fa",
     cards: [
       {
         id: "study-1",
         minutesOfDay: t(10, 5),
         addedOn: D2,
-        text: "【用法】上课或读书时先抓「此刻的结论」记下钟点，回去再整理大纲；不必同一天写完。",
-        tags: ["方法"],
+        text: "【How to use】In class or reading, jot the “conclusion right now” with the clock; outline later — doesn’t have to finish the same day.",
+        tags: ["Method"],
       },
       {
         id: "study-2",
         minutesOfDay: t(15, 40),
         addedOn: D2,
-        text: "欧拉公式把 e、i、π 系在一行：e^(iπ)+1=0——每次看到都觉得代数与几何在同一张纸上握手。",
-        tags: ["数学", "摘抄"],
+        text: "Euler’s identity ties e, i, and π in one line: e^(iπ)+1=0 — algebra and geometry shaking hands on the same page.",
+        tags: ["Math", "Quote"],
         media: [
           {
             kind: "image",
@@ -253,15 +246,15 @@ export const collectionsZh: Collection[] = [
   },
   {
     id: "c3",
-    name: "摘抄本",
-    hint: "书影、台词、歌词——原文不必长，记下页码或章节更好找。",
+    name: "Quotes",
+    hint: "Lines from books, films, lyrics — short is fine; page or chapter helps you find it again.",
     dotColor: "#f472b6",
     cards: [
       {
         id: "quote-1",
         minutesOfDay: t(20, 15),
         addedOn: D3,
-        text: "「我们活过的刹那，前后皆是永夜。」——费尔南多·佩索阿（可换成你书架上那句）",
+        text: "“The moment we live is flanked by eternal night on both sides.” — Fernando Pessoa (swap in your shelf’s favorite)",
         media: [
           {
             kind: "image",
@@ -281,16 +274,16 @@ export const collectionsZh: Collection[] = [
   },
   {
     id: "c4",
-    name: "今日小记",
-    hint: "一日一页的呼吸感：喝了什么、见了谁、天气怎样，都算数。",
+    name: "Daily log",
+    hint: "One day, one breath: drinks, people, weather — it all counts.",
     dotColor: "#34d399",
     cards: [
       {
         id: "daily-1",
         minutesOfDay: t(12, 30),
         addedOn: D0,
-        text: "午饭锁定一家小面馆，酸汤开胃，窗外雨丝斜着打玻璃——今天适合慢半拍。",
-        tags: ["生活"],
+        text: "Lunch at a small noodle shop — sour soup, rain slanting on the glass — a good day to move half a beat slower.",
+        tags: ["Life"],
         media: [
           {
             kind: "image",
@@ -314,16 +307,16 @@ export const collectionsZh: Collection[] = [
   },
   {
     id: "c5",
-    name: "兴趣爱好",
-    hint: "琴谱链接、配方克数、剧追到第几集——爱好值得单独一口罐。",
+    name: "Hobbies",
+    hint: "Chord charts, recipe grams, which episode you’re on — hobbies deserve their own jar.",
     dotColor: "#fb923c",
     cards: [
       {
         id: "hobby-1",
         minutesOfDay: t(18, 0),
         addedOn: D3,
-        text: "【吉他】新和弦 Fmaj7 总算按响了，指尖还疼，但扫下去那一下像在笑。",
-        tags: ["音乐"],
+        text: "【Guitar】Fmaj7 finally rings clean — fingers still sore, but the strum feels like a smile.",
+        tags: ["Music"],
         media: [
           {
             kind: "image",
@@ -339,8 +332,8 @@ export const collectionsZh: Collection[] = [
         id: "hobby-2",
         minutesOfDay: t(21, 10),
         addedOn: D7,
-        text: "本周画展「光影与城市」记得带广角；博物馆夜场周五开到九点。",
-        tags: ["展览", "待办"],
+        text: "This week’s show “Light & City” — bring a wide lens; museum night hours Friday until 9.",
+        tags: ["Exhibit", "Todo"],
         media: [
           {
             kind: "image",
@@ -359,10 +352,3 @@ export const collectionsZh: Collection[] = [
     ],
   },
 ];
-
-/** 与历史代码兼容：默认中文种子 */
-export const collections: Collection[] = collectionsZh;
-
-export function getSeedCollections(lang: LoginUiLang): Collection[] {
-  return structuredClone(lang === "en" ? collectionsEn : collectionsZh);
-}

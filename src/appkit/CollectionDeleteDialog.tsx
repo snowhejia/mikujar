@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useAppChrome } from "../i18n/useAppChrome";
 
 export type CollectionDeleteDialogState = {
   id: string;
@@ -17,6 +18,7 @@ export function CollectionDeleteDialog({
   onClose,
   onConfirmRemove,
 }: Props) {
+  const c = useAppChrome();
   if (!dialog) return null;
   return createPortal(
     <div
@@ -32,12 +34,12 @@ export function CollectionDeleteDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="collection-delete-dialog-title" className="auth-modal__title">
-          删除合集
+          {c.uiDeleteCollectionDialogTitle}
         </h2>
         <p className="auth-modal__hint">
           {dialog.hasSubtree
-            ? `要连「${dialog.displayName}」带子文件夹一锅端吗？里面的笔记也会一起蒸发，救不回喔。`
-            : `确定拆掉「${dialog.displayName}」这个合集？里面的笔记也会一起消失喔。`}
+            ? c.uiDeleteCollectionWithSubtree(dialog.displayName)
+            : c.uiDeleteCollectionLeaf(dialog.displayName)}
         </p>
         <div className="auth-modal__actions">
           <button
@@ -45,7 +47,7 @@ export function CollectionDeleteDialog({
             className="auth-modal__btn auth-modal__btn--ghost"
             onClick={onClose}
           >
-            取消
+            {c.profileCancel}
           </button>
           <button
             type="button"
@@ -56,7 +58,7 @@ export function CollectionDeleteDialog({
               onConfirmRemove(id);
             }}
           >
-            确定删除
+            {c.uiConfirmDelete}
           </button>
         </div>
       </div>

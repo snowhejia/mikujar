@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useAppChrome } from "../i18n/useAppChrome";
 
 export type CollectionContextMenuState = {
   x: number;
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function CollectionContextMenu({ menu, onRemove }: Props) {
+  const c = useAppChrome();
   if (!menu) return null;
   return createPortal(
     <div
@@ -39,7 +41,7 @@ export function CollectionContextMenu({ menu, onRemove }: Props) {
           onRemove(menu.id, menu.name, menu.hasChildren);
         }}
       >
-        删除合集
+        {c.uiDeleteCollectionMenu}
       </button>
     </div>,
     document.body

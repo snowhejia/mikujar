@@ -1,5 +1,7 @@
+import { readStoredLoginUiLang } from "../auth/loginUiI18n";
+import type { LoginUiLang } from "../auth/loginUiI18n";
 import { getAppDataMode } from "../appDataModeStorage";
-import { collections as initialCollections } from "../data";
+import { getSeedCollections } from "../data";
 import { loadLocalCollections } from "../localCollectionsStorage";
 import type { Collection, NoteCard } from "../types";
 import {
@@ -13,16 +15,21 @@ import {
   readPersistedActiveCollectionId,
 } from "./workspaceStorage";
 
-export function cloneInitialCollections(): Collection[] {
-  return structuredClone(initialCollections) as Collection[];
+export function cloneInitialCollections(
+  lang: LoginUiLang = readStoredLoginUiLang()
+): Collection[] {
+  return getSeedCollections(lang) as Collection[];
 }
 
 /**
  * 云端多用户：PostgreSQL 里 `collections.id` 是全局主键，内置示例的 c1/c2… 不能给第二个用户再 INSERT。
  * 在首次 PUT 种子前为当前用户整树换 id，并改写卡片上的 relatedRefs。
  */
-export function cloneInitialCollectionsForRemoteUser(userId: string): Collection[] {
-  const raw = structuredClone(initialCollections) as Collection[];
+export function cloneInitialCollectionsForRemoteUser(
+  userId: string,
+  lang: LoginUiLang = readStoredLoginUiLang()
+): Collection[] {
+  const raw = getSeedCollections(lang) as Collection[];
   const safe = String(userId).replace(/[^a-zA-Z0-9_-]+/g, "_");
   const p = `seed-${safe}-`;
   const colOldToNew = new Map<string, string>();
@@ -70,7 +77,9 @@ export function initialWorkspaceFromStorage(): {
   collapsedFolderIds: Set<string>;
 } {
   if (getAppDataMode() === "local") {
-    const cols = loadLocalCollections(cloneInitialCollections);
+    const cols = loadLocalCollections(() =>
+      cloneInitialCollections(readStoredLoginUiLang())
+    );
     const activeKey = activeCollectionStorageKey("local", null);
     const collapsedKey = collapsedFoldersStorageKey("local", null);
     return {

@@ -48,12 +48,14 @@ const cosReadUrlCache = new Map<string, { url: string; expiresAt: number }>();
 const COS_READ_MARGIN_MS = 60 * 1000;
 
 function viteCosPublicBase(): string {
-  return (
+  const raw =
     (import.meta.env.VITE_COS_PUBLIC_BASE as string | undefined)?.trim().replace(
       /\/$/,
       ""
-    ) ?? ""
-  );
+    ) ?? "";
+  // 必须含主机名；仅「https://」等协议壳会被当成一切外链的前缀，导致 picsum 等 https 图被误判为 COS、initial src 为空
+  if (!raw || !/^https?:\/\/[^/\s]+/i.test(raw)) return "";
+  return raw;
 }
 
 /** 是否为腾讯云 COS 对象直链（用于判断是否要走 GET 预签名） */
@@ -94,7 +96,7 @@ function cosReadAuthHeaders(): Record<string, string> {
 }
 
 /** 是否存在任一会话手段（避免未登录时反复请求 cos-read → 401 刷屏） */
-function mightHaveApiSession(): boolean {
+export function mightHaveApiSession(): boolean {
   if (getAdminToken()) return true;
   if (authUsesHttpOnlyCookie()) return true;
   if ((import.meta.env.VITE_API_TOKEN as string | undefined)?.trim()) return true;

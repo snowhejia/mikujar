@@ -18,6 +18,7 @@ import {
   createCardApi,
   updateCardApi,
   deleteCardApi,
+  fetchCollectionsFromApi,
 } from "./api/collections";
 import {
   clearMeTrash,
@@ -30,8 +31,13 @@ import {
 import { uploadCardMedia } from "./api/upload";
 import { useAppDataMode } from "./appDataMode";
 import { useAuth } from "./auth/AuthContext";
+import { useAppUiLang } from "./appUiLang";
+import { useAppChrome } from "./i18n/useAppChrome";
 import { getAdminToken } from "./auth/token";
-import { saveLocalCollections } from "./localCollectionsStorage";
+import {
+  loadLocalCollections,
+  saveLocalCollections,
+} from "./localCollectionsStorage";
 import { saveLocalMediaInlineInBrowser } from "./localMediaBrowser";
 import {
   deleteLocalMediaFile,
@@ -70,6 +76,11 @@ import type {
   NoteMediaItem,
   TrashedNoteEntry,
 } from "./types";
+import { migrateCollectionTree } from "./migrateCollections";
+import {
+  remoteSnapshotUserKey,
+  saveRemoteCollectionsSnapshot,
+} from "./remoteCollectionsCache";
 import "./App.css";
 
 import {
@@ -90,16 +101,18 @@ import {
   collectAllTagsFromCollections,
   collectAllReminderEntries,
   collectCardsOnDate,
+  cloneInitialCollections,
   collectReminderCardsOnDate,
   collectSubtreeCollectionIds,
   collectionPathLabel,
   countSidebarCollectionCardBadge,
   datesWithNoteAddedOn,
   datesWithReminderOn,
-  DEFAULT_COLLECTION_HINT,
   favoriteCollectionsStorageKey,
   findCollectionById,
-  formatChineseDayTitle,
+  readCollapsedFolderIdsFromStorage,
+  readPersistedActiveCollectionId,
+  formatCalendarDayTitle,
   initMasonryLayoutPreferenceIfNeeded,
   insertChildCollection,
   INITIAL_WORKSPACE,
@@ -108,10 +121,13 @@ import {
   localDateString,
   MASONRY_LAYOUT_STORAGE_KEY,
   mapCollectionById,
+  MasonryShortestColumns,
+  useMasonryColumnCount,
   mediaItemFromUploadResult,
   MobileDockJarIcon,
   NoteTimelineCard,
   pruneCollapsedFolderIds,
+  resolveActiveCollectionId,
   randomDotColor,
   readMasonryLayoutFromStorage,
   RelatedCardsSidePanel,
@@ -129,6 +145,8 @@ import {
   useCollectionRowDnD,
   useMobileNavSwipe,
   useRemoteCollectionsSync,
+  useCollectionsRemotePush,
+  usePullToRefresh,
   useUserAdmin,
   walkCollections,
   walkCollectionsWithPath,
@@ -146,6 +164,8 @@ export default function App() {
   } = useAuth();
 
   const { dataMode, setDataMode } = useAppDataMode();
+  const c = useAppChrome();
+  const { lang: appUiLang } = useAppUiLang();
 
   /**
    * 本地数据模式一律可编辑（合集/拖拽/删除仅依赖本地存储）。
@@ -222,8 +242,11 @@ export default function App() {
     colId: string;
     cardId: string;
   } | null>(null);
-  /** 瀑布流布局（localStorage 持久化） */
-  const [masonryLayout, setMasonryLayout] = useState(readMasonryLayoutFromStorage);
+  /**
+   * 瀑布流布局（localStorage 持久化）。
+   * 首帧固定为时间线列表：若首屏直接套 `app--masonry`，WebKit 偶发算错；先列表再 `useEffect` 恢复偏好，与手动「列表→瀑布流」同一路径。
+   */
+  const [masonryLayout, setMasonryLayout] = useState(false);
   const [detailCard, setDetailCard] = useState<{
     card: NoteCard;
     colId: string;
@@ -361,7 +384,10 @@ export default function App() {
 
   useEffect(() => {
     initMasonryLayoutPreferenceIfNeeded();
+    setMasonryLayout(readMasonryLayoutFromStorage());
   }, []);
+
+  const masonryColumnCount = useMasonryColumnCount();
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 900px)");
@@ -400,6 +426,18 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [relatedPanel]);
+
+  /** 小屏「相关笔记」全屏样式（portal 在 body，用 class 驱动） */
+  useEffect(() => {
+    if (!relatedPanel) {
+      document.body.classList.remove("app--related-panel-open");
+      return;
+    }
+    document.body.classList.add("app--related-panel-open");
+    return () => {
+      document.body.classList.remove("app--related-panel-open");
+    };
   }, [relatedPanel]);
 
   useEffect(() => {
@@ -485,6 +523,7 @@ export default function App() {
   useRemoteCollectionsSync({
     authReady,
     dataMode,
+    appUiLang,
     writeRequiresLogin,
     currentUser,
     setCollections,
@@ -500,11 +539,107 @@ export default function App() {
     setSidebarFlash,
   });
 
+  const refreshRemotePreferences = useCallback(async () => {
+    if (dataMode !== "remote" || !remoteLoaded) return;
+    if (writeRequiresLogin && !currentUser && !getAdminToken()) return;
+    const [ids, entries] = await Promise.all([
+      fetchMeFavorites(),
+      fetchMeTrash(),
+    ]);
+    if (ids !== null) setFavoriteCollectionIds(new Set(ids));
+    if (entries !== null) setTrashEntries(entries);
+  }, [dataMode, remoteLoaded, writeRequiresLogin, currentUser]);
+
+  useCollectionsRemotePush({
+    authReady,
+    dataMode,
+    remoteLoaded,
+    writeRequiresLogin,
+    currentUserId: currentUser?.id,
+    setCollections,
+    setLoadError,
+    setApiOnline,
+    refreshRemotePreferences,
+  });
+
   /** 云端模式下在首次 remote 就绪前盖住主区（含未登录时等健康检查、登录后等 GET 合集） */
   const showRemoteLoading = useMemo(
     () => authReady && dataMode === "remote" && !remoteLoaded,
     [authReady, dataMode, remoteLoaded]
   );
+
+  const ptrEnabled = useMemo(
+    () =>
+      authReady &&
+      !showRemoteLoading &&
+      (dataMode === "local" ||
+        (dataMode === "remote" && remoteLoaded)),
+    [authReady, showRemoteLoading, dataMode, remoteLoaded]
+  );
+
+  const handleTimelinePullRefresh = useCallback(async () => {
+    if (dataMode === "remote") {
+      if (writeRequiresLogin && !currentUser && !getAdminToken()) {
+        return;
+      }
+      const data = await fetchCollectionsFromApi();
+      if (data === null) {
+        setLoadError((prev) => prev ?? c.syncLoadFail);
+        setApiOnline(false);
+        return;
+      }
+      setLoadError(null);
+      setApiOnline(true);
+      const tree = migrateCollectionTree(data);
+      setCollections(tree);
+      const sk = remoteSnapshotUserKey(
+        writeRequiresLogin,
+        currentUser?.id?.trim() || null
+      );
+      if (sk) saveRemoteCollectionsSnapshot(sk, tree);
+      await refreshRemotePreferences();
+      return;
+    }
+    const cols = loadLocalCollections(() =>
+      cloneInitialCollections(appUiLang)
+    );
+    setCollections(cols);
+    const localKey = activeCollectionStorageKey("local", null);
+    const collapsedKey = collapsedFoldersStorageKey("local", null);
+    setActiveId((prev) =>
+      findCollectionById(cols, prev)
+        ? prev
+        : resolveActiveCollectionId(
+            cols,
+            readPersistedActiveCollectionId(localKey)
+          )
+    );
+    setCollapsedFolderIds(
+      pruneCollapsedFolderIds(
+        cols,
+        readCollapsedFolderIdsFromStorage(collapsedKey)
+      )
+    );
+  }, [
+    dataMode,
+    appUiLang,
+    c,
+    writeRequiresLogin,
+    currentUser,
+    setCollections,
+    setLoadError,
+    setApiOnline,
+    setActiveId,
+    setCollapsedFolderIds,
+    refreshRemotePreferences,
+  ]);
+
+  const { pullOffset: timelinePullOffset, refreshing: timelinePtrRefreshing } =
+    usePullToRefresh({
+      scrollRef: timelineRef,
+      onRefresh: handleTimelinePullRefresh,
+      enabled: ptrEnabled,
+    });
 
   const blockMainEdgeSwipe = useMemo(
     () =>
@@ -633,9 +768,7 @@ export default function App() {
           const quota =
             e instanceof DOMException && e.name === "QuotaExceededError";
           setSaveError(
-            quota
-              ? "本地存满啦，清掉点缓存或删掉大附件再试～"
-              : "本地保存失败惹…"
+            quota ? c.errLocalQuota : c.errLocalSave
           );
         }
       }, 900);
@@ -648,6 +781,7 @@ export default function App() {
     dataMode,
     remoteLoaded,
     authReady,
+    appUiLang,
   ]);
 
   const active = useMemo(() => {
@@ -830,6 +964,35 @@ export default function App() {
     });
   }, []);
 
+  /**
+   * WebKit（含 iOS）：`.cards` 从 flex 列表切到瀑布流 Grid 时，首帧偶发未完成重算；
+   * 开启后强制读几何并派发 resize，触发稳定重排。
+   */
+  useLayoutEffect(() => {
+    if (!masonryLayout) return;
+    const root = timelineRef.current;
+    if (!root) return;
+
+    const bumpColLayout = () => {
+      void root.getBoundingClientRect();
+      root.querySelectorAll<HTMLElement>("ul.cards").forEach((ul) => {
+        void ul.getBoundingClientRect();
+      });
+    };
+
+    let id2 = 0;
+    bumpColLayout();
+    const id1 = requestAnimationFrame(() => {
+      bumpColLayout();
+      window.dispatchEvent(new Event("resize"));
+      id2 = requestAnimationFrame(bumpColLayout);
+    });
+    return () => {
+      cancelAnimationFrame(id1);
+      if (id2 !== 0) cancelAnimationFrame(id2);
+    };
+  }, [masonryLayout]);
+
   const dayReminderEntries = useMemo(() => {
     if (!calendarDay) return [];
     return collectReminderCardsOnDate(collections, calendarDay);
@@ -941,9 +1104,7 @@ export default function App() {
         if (dataMode !== "local") {
           const ok = await postMeTrashEntry(entry);
           if (!ok) {
-            window.alert(
-              "丢进回收站时绊倒啦，笔记还在原位…换个网络或确认登录后再试？"
-            );
+            window.alert(c.errTrashMove);
             return;
           }
         }
@@ -973,14 +1134,14 @@ export default function App() {
         void deleteCardApi(cardId);
       }
     },
-    [canEdit, collections, trashStorageKey, dataMode]
+    [canEdit, collections, trashStorageKey, dataMode, c.errTrashMove]
   );
 
   const restoreTrashedEntry = useCallback(
     async (entry: TrashedNoteEntry) => {
       if (!canEdit) return;
       if (!findCollectionById(collections, entry.colId)) {
-        setSidebarFlash("原合集不见啦，这条笔记捞不回去惹…");
+        setSidebarFlash(c.errTrashRestoreOrigin);
         return;
       }
       let cardToAppend: NoteCard = entry.card;
@@ -989,15 +1150,13 @@ export default function App() {
           insertAtStart: newNotePlacement === "top",
         });
         if (!created) {
-          window.alert("笔记捞回来时卡住了…看看网络或再试一次？");
+          window.alert(c.errTrashRestore);
           return;
         }
         cardToAppend = created;
         const delOk = await deleteMeTrashEntry(entry.trashId);
         if (!delOk) {
-          window.alert(
-            "笔记已经回家啦，但回收站标签可能还没撕干净…刷新一下就好～"
-          );
+          window.alert(c.errTrashRestoreTag);
         }
       }
       setTrashEntries((te) => {
@@ -1025,23 +1184,30 @@ export default function App() {
       setCalendarDay(null);
       setMobileNavOpen(false);
     },
-    [canEdit, collections, trashStorageKey, dataMode, newNotePlacement]
+    [
+      canEdit,
+      collections,
+      trashStorageKey,
+      dataMode,
+      newNotePlacement,
+      c.errTrashRestoreOrigin,
+      c.errTrashRestore,
+      c.errTrashRestoreTag,
+    ]
   );
 
   const purgeTrashedEntry = useCallback(
     async (trashId: string) => {
       if (!canEdit) return;
       if (
-        !window.confirm(
-          "真的要永久删掉这条小笔记吗？（回收站记录也会一起消失，回不去那种）"
-        )
+        !window.confirm(c.confirmTrashDelete)
       ) {
         return;
       }
       if (dataMode !== "local") {
         const ok = await deleteMeTrashEntry(trashId);
         if (!ok) {
-          window.alert("这条从回收站删不掉耶…等等再试？");
+          window.alert(c.errTrashDeleteOne);
           return;
         }
       }
@@ -1059,22 +1225,20 @@ export default function App() {
         return next;
       });
     },
-    [canEdit, trashStorageKey, dataMode]
+    [canEdit, trashStorageKey, dataMode, c.confirmTrashDelete, c.errTrashDeleteOne]
   );
 
   const emptyTrash = useCallback(async () => {
     if (!canEdit || trashEntries.length === 0) return;
     if (
-      !window.confirm(
-        `垃圾桶里一共 ${trashEntries.length} 条，要全部清空吗？会永久消失回不来的那种！`
-      )
+      !window.confirm(c.confirmEmptyTrash(trashEntries.length))
     ) {
       return;
     }
     if (dataMode !== "local") {
       const ok = await clearMeTrash();
       if (!ok) {
-        window.alert("垃圾桶倒不干净…等等再清空一次？");
+        window.alert(c.errTrashEmpty);
         return;
       }
     }
@@ -1087,7 +1251,14 @@ export default function App() {
     if (dataMode === "local") {
       saveTrashedNoteEntries(trashStorageKey, []);
     }
-  }, [canEdit, trashEntries, trashStorageKey, dataMode]);
+  }, [
+    canEdit,
+    trashEntries,
+    trashStorageKey,
+    dataMode,
+    c.confirmEmptyTrash,
+    c.errTrashEmpty,
+  ]);
 
   const removeRelatedPair = useCallback(
     (
@@ -1192,9 +1363,7 @@ export default function App() {
                 );
               } catch (err) {
                 window.alert(
-                  err instanceof Error
-                    ? err.message
-                    : "存到本地文件夹失败，再试一次？"
+                  err instanceof Error ? err.message : c.errLocalFolder
                 );
               }
             }
@@ -1209,9 +1378,7 @@ export default function App() {
                 );
               } catch (err) {
                 window.alert(
-                  err instanceof Error
-                    ? err.message
-                    : "浏览器怀里塞不下这个附件…换张小一点的或用桌面版更稳喔～"
+                  err instanceof Error ? err.message : c.errBrowserBlob
                 );
               }
             }
@@ -1228,13 +1395,13 @@ export default function App() {
         }
       } catch (err) {
         window.alert(
-          err instanceof Error ? err.message : "附件上传翻车啦，再试一次？"
+          err instanceof Error ? err.message : c.errUpload
         );
       } finally {
         setUploadBusyCardId(null);
       }
     },
-    [addMediaItemToCard, dataMode]
+    [addMediaItemToCard, dataMode, c.errLocalFolder, c.errBrowserBlob, c.errUpload]
   );
 
   const beginCardMediaUpload = useCallback(
@@ -1530,7 +1697,7 @@ export default function App() {
     if (!editingCollectionId) return;
     const colId = editingCollectionId;
     const trimmed = draftCollectionName.trim();
-    const name = trimmed.length > 0 ? trimmed : "新合集";
+    const name = trimmed.length > 0 ? trimmed : c.newCollectionName;
     setCollections((prev) =>
       mapCollectionById(prev, colId, (col) => ({
         ...col,
@@ -1541,10 +1708,10 @@ export default function App() {
     if (dataMode === "remote" && canEdit) {
       const ok = await updateCollectionApi(colId, { name });
       if (!ok) {
-        window.alert("名字没同步上…刷新一下可能变回旧的喔～");
+        window.alert(c.errRenameSync);
       }
     }
-  }, [editingCollectionId, draftCollectionName, dataMode, canEdit]);
+  }, [editingCollectionId, draftCollectionName, dataMode, canEdit, c.newCollectionName, c.errRenameSync]);
 
   const onCollectionNameBlur = useCallback(() => {
     if (skipCollectionBlurCommitRef.current) {
@@ -1562,7 +1729,7 @@ export default function App() {
     const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const newCol: Collection = {
       id,
-      name: "新合集",
+      name: c.newCollectionName,
       dotColor: randomDotColor(),
       cards: [],
     };
@@ -1573,7 +1740,7 @@ export default function App() {
         dotColor: newCol.dotColor,
       });
       if (!created) {
-        window.alert("新合集没建成功…看看网络或登录后再试？");
+        window.alert(c.errCreateCol);
         return;
       }
       const merged: Collection = {
@@ -1587,9 +1754,9 @@ export default function App() {
       setCollections((prev) => [...prev, newCol]);
     }
     setActiveId(id);
-    setDraftCollectionName("新合集");
+    setDraftCollectionName(c.newCollectionName);
     setEditingCollectionId(id);
-  }, [canEdit, dataMode]);
+  }, [canEdit, dataMode, c.newCollectionName, c.errCreateCol]);
 
   const addSubCollection = useCallback(
     async (parentId: string) => {
@@ -1600,7 +1767,7 @@ export default function App() {
       const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const child: Collection = {
         id,
-        name: "新子合集",
+        name: c.newSubCollectionName,
         dotColor: randomDotColor(),
         cards: [],
       };
@@ -1612,7 +1779,7 @@ export default function App() {
           parentId,
         });
         if (!created) {
-          window.alert("子合集没塞进去…网络或登录再确认下？");
+          window.alert(c.errCreateSub);
           return;
         }
         const merged: Collection = {
@@ -1635,10 +1802,10 @@ export default function App() {
         return next;
       });
       setActiveId(id);
-      setDraftCollectionName("新子合集");
+      setDraftCollectionName(c.newSubCollectionName);
       setEditingCollectionId(id);
     },
-    [canEdit, dataMode]
+    [canEdit, dataMode, c.newSubCollectionName, c.errCreateSub]
   );
 
   const toggleFavoriteCollection = useCallback(
@@ -1664,7 +1831,7 @@ export default function App() {
       if (dataMode === "remote") {
         const ok = await deleteCollectionApi(id);
         if (!ok) {
-          window.alert("合集删不掉耶…等等再试或检查一下权限？");
+          window.alert(c.errDeleteCol);
           return;
         }
       }
@@ -1705,7 +1872,7 @@ export default function App() {
         });
       }
     },
-    [canEdit, dataMode, favoriteStorageKey]
+    [canEdit, dataMode, favoriteStorageKey, c.errDeleteCol]
   );
 
   const openRemoveCollectionDialog = useCallback(
@@ -1784,10 +1951,10 @@ export default function App() {
     if (dataMode === "remote" && canEdit) {
       const ok = await updateCollectionApi(colId, { hint: text });
       if (!ok) {
-        window.alert("说明没保存上…刷新可能变回上一版喔～");
+        window.alert(c.errHintSave);
       }
     }
-  }, [editingHintCollectionId, draftCollectionHint, dataMode, canEdit]);
+  }, [editingHintCollectionId, draftCollectionHint, dataMode, canEdit, c.errHintSave]);
 
   const onCollectionHintBlur = useCallback(() => {
     if (skipHintBlurCommitRef.current) {
@@ -1894,7 +2061,6 @@ export default function App() {
         key={`${colId}-${card.id}`}
         card={card}
         colId={colId}
-        masonryLayout={masonryLayout}
         canEdit={canEdit}
         canAttachMedia={canAttachMedia}
         cardMenuId={cardMenuId}
@@ -1968,6 +2134,7 @@ export default function App() {
     openUserProfileModal,
     openNoteSettingsModal,
     openDataStatsModal,
+    appUiLang,
   ]);
 
   if (!authReady) {
@@ -1975,7 +2142,7 @@ export default function App() {
       <div className="app app--boot" aria-busy="true">
         <div className="app-boot-screen">
           <span className="app-boot-spinner" aria-hidden />
-          <p>正在加载…</p>
+          <p>{c.loading}</p>
         </div>
       </div>
     );
@@ -2007,7 +2174,7 @@ export default function App() {
         >
           <div className="app-remote-loading-inner">
             <span className="app-remote-loading-spinner" aria-hidden />
-            <p>正在把笔记接进罐子…</p>
+            <p>{c.loadingRemote}</p>
           </div>
         </div>
       ) : null}
@@ -2017,7 +2184,7 @@ export default function App() {
           role="status"
           aria-live="polite"
         >
-          正在悄悄同步中…
+          {c.syncing}
         </div>
       ) : null}
       <div
@@ -2059,12 +2226,12 @@ export default function App() {
                     currentUser || getAdminToken() ? logout : openLogin
                   }
                   aria-label={
-                    currentUser || getAdminToken() ? "退出登录" : "登录"
+                    currentUser || getAdminToken() ? c.logout : c.login
                   }
                   title={
                     currentUser || getAdminToken()
-                      ? "下次再见啦～"
-                      : "开门登录～"
+                      ? c.logoutTitle
+                      : c.loginTitle
                   }
                 >
                   <AdminHeaderIcon
@@ -2090,20 +2257,20 @@ export default function App() {
                   aria-pressed={mobileBrowseEditMode}
                   aria-label={
                     mobileBrowseEditMode
-                      ? "完成编辑"
-                      : "编辑合集结构"
+                      ? c.doneEditStructure
+                      : c.editStructure
                   }
                   onClick={() =>
                     setMobileBrowseEditMode((v) => !v)
                   }
                 >
-                  {mobileBrowseEditMode ? "完成" : "编辑"}
+                  {mobileBrowseEditMode ? c.done : c.edit}
                 </button>
                 <button
                   type="button"
                   className="sidebar__mobile-browse-action sidebar__mobile-browse-action--emph sidebar__mobile-browse-action--icon"
-                  aria-label="新建合集"
-                  title="新建合集"
+                  aria-label={c.newCollectionAria}
+                  title={c.newCollection}
                   onClick={() => addCollection()}
                 >
                   <svg
@@ -2148,9 +2315,9 @@ export default function App() {
                       type="button"
                       className="sidebar__users-btn"
                       onClick={() => userAdmin.setUserAdminOpen(true)}
-                      title="小伙伴管理台"
+                      title={c.adminTitle}
                     >
-                      用户
+                      {c.adminUsersShort}
                     </button>
                   ) : null}
                   <button
@@ -2165,12 +2332,12 @@ export default function App() {
                       currentUser || getAdminToken() ? logout : openLogin
                     }
                     aria-label={
-                      currentUser || getAdminToken() ? "退出登录" : "登录"
+                      currentUser || getAdminToken() ? c.logout : c.login
                     }
                     title={
                       currentUser || getAdminToken()
-                        ? "下次再见啦～"
-                        : "开门登录～"
+                        ? c.logoutTitle
+                        : c.loginTitle
                     }
                   >
                     <AdminHeaderIcon
@@ -2185,7 +2352,7 @@ export default function App() {
             <button
               type="button"
               className="sidebar__mobile-close"
-              aria-label="关闭菜单"
+              aria-label={c.closeMenu}
               onClick={() => setMobileNavOpen(false)}
             >
               <span aria-hidden>×</span>
@@ -2205,7 +2372,7 @@ export default function App() {
               ? " sidebar__calendar--below-rule-desktop"
               : "")
           }
-          aria-label="按日期浏览"
+          aria-label={c.browseByDate}
         >
           <CalendarBrowsePanel
             calendarViewMonth={calendarViewMonth}
@@ -2221,7 +2388,7 @@ export default function App() {
         {allReminderEntries.length > 0 ? (
           <div
             className="sidebar__all-reminders"
-            aria-label="全部提醒入口"
+            aria-label={c.remindersEntry}
           >
             <button
               type="button"
@@ -2238,7 +2405,9 @@ export default function App() {
                 setMobileNavOpen(false);
               }}
             >
-              <span className="sidebar__all-reminders-label">全部提醒</span>
+              <span className="sidebar__all-reminders-label">
+                {c.remindersTitle}
+              </span>
               <span className="sidebar__all-reminders-count">
                 {allReminderEntries.length}
               </span>
@@ -2249,16 +2418,14 @@ export default function App() {
         <div className="sidebar__collections">
           <div className="sidebar__favorites">
             <div className="sidebar__section-row">
-              <p className="sidebar__section">收藏</p>
+              <p className="sidebar__section">{c.sidebarFavorites}</p>
             </div>
             {favoriteSidebarEntries.length === 0 ? (
-              <p className="sidebar__favorites-empty">
-                还没有星标？去主标题旁点那颗黄星星，常逛的合集一键直达～
-              </p>
+              <p className="sidebar__favorites-empty">{c.favoritesEmpty}</p>
             ) : (
               <ul
                 className="sidebar__favorites-list"
-                aria-label="收藏的合集"
+                aria-label={c.favoriteCols}
               >
                 {favoriteSidebarEntries.map(({ col, path }) => (
                   <li key={col.id} className="sidebar__favorites-item">
@@ -2303,8 +2470,8 @@ export default function App() {
                         type="button"
                         draggable={false}
                         className="sidebar__favorites-remove"
-                        aria-label="取消收藏"
-                        title="取消收藏"
+                        aria-label={c.unfavoriteAria}
+                        title={c.unfavoriteTitle}
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleFavoriteCollection(col.id);
@@ -2324,19 +2491,19 @@ export default function App() {
             )}
           </div>
           <div className="sidebar__section-row">
-            <p className="sidebar__section">合集</p>
+            <p className="sidebar__section">{c.sidebarCollections}</p>
             {canEdit && !mobileNavOpen ? (
               <button
                 type="button"
                 className="sidebar__section-add"
                 onClick={addCollection}
-                aria-label="新建合集"
+                aria-label={c.newCollectionAria}
               >
                 +
               </button>
             ) : null}
           </div>
-          <nav className="sidebar__nav" aria-label="合集">
+          <nav className="sidebar__nav" aria-label={c.sidebarNav}>
             <CollectionSidebarTree
               collections={collections}
               activeId={active?.id}
@@ -2376,9 +2543,9 @@ export default function App() {
           </nav>
         </div>
 
-        <div className="sidebar__tags" aria-label="全部标签">
+        <div className="sidebar__tags" aria-label={c.allTags}>
           <div className="sidebar__section-row sidebar__tags-head">
-            <p className="sidebar__section">标签</p>
+            <p className="sidebar__section">{c.sidebarTags}</p>
           </div>
           {sidebarTags.length > 0 ? (
             <div className="sidebar__tags-cloud">
@@ -2400,11 +2567,9 @@ export default function App() {
               ))}
             </div>
           ) : (
-            <p className="sidebar__tags-empty">
-              还没有标签出没，多写几条笔记就会长出来～
-            </p>
+            <p className="sidebar__tags-empty">{c.tagsEmpty}</p>
           )}
-          <div className="sidebar__trash" aria-label="垃圾桶">
+          <div className="sidebar__trash" aria-label={c.trashAria}>
             <button
               type="button"
               className={
@@ -2437,7 +2602,7 @@ export default function App() {
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                 <path d="M10 11v6M14 11v6" />
               </svg>
-              <span className="sidebar__trash-label">垃圾桶</span>
+              <span className="sidebar__trash-label">{c.titleTrash}</span>
               {trashEntries.length > 0 ? (
                 <span className="sidebar__trash-badge">
                   {trashEntries.length > 99 ? "99+" : trashEntries.length}
@@ -2466,7 +2631,7 @@ export default function App() {
             <button
               type="button"
               className="main__mobile-back"
-              aria-label="返回合集列表"
+              aria-label={c.backToList}
               onClick={() => {
                 setSearchBarOpen(false);
                 setSearchQuery("");
@@ -2499,7 +2664,7 @@ export default function App() {
                   id="app-main-search"
                   type="search"
                   className="main__search-input"
-                  placeholder="搜搜笔记、合集、附件名～"
+                  placeholder={c.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -2510,13 +2675,13 @@ export default function App() {
                     }
                   }}
                   autoComplete="off"
-                  aria-label="搜索笔记、附件名、合集名"
+                  aria-label={c.searchAria}
                 />
                 <button
                   type="button"
                   className="main__search-clear"
                   aria-label={
-                    searchActive ? "清除搜索" : "收起搜索"
+                    searchActive ? c.searchClear : c.searchCollapse
                   }
                   onClick={() => {
                     if (searchActive) setSearchQuery("");
@@ -2530,7 +2695,7 @@ export default function App() {
             <button
               type="button"
               className="main__nav-toggle"
-              aria-label={mobileNavOpen ? "关闭菜单" : "打开菜单"}
+              aria-label={mobileNavOpen ? c.closeMenu : c.openMenu}
               aria-expanded={mobileNavOpen}
               aria-controls="app-mobile-sidebar"
               onClick={() => setMobileNavOpen((o) => !o)}
@@ -2551,14 +2716,14 @@ export default function App() {
             <div className="main__heading-wrap">
               <h1 className="main__heading">
                 {searchActive
-                  ? "搜索"
+                  ? c.titleSearch
                   : trashViewActive
-                    ? "垃圾桶"
+                    ? c.titleTrash
                     : remindersViewActive
-                      ? "全部提醒"
+                      ? c.titleReminders
                       : calendarDay
-                        ? formatChineseDayTitle(calendarDay)
-                        : active?.name ?? "未选择合集"}
+                        ? formatCalendarDayTitle(calendarDay, appUiLang)
+                        : active?.name ?? c.titleNoCollection}
               </h1>
               {active &&
               !calendarDay &&
@@ -2575,14 +2740,14 @@ export default function App() {
                   }
                   aria-label={
                     favoriteCollectionIds.has(active.id)
-                      ? "取消收藏此合集"
-                      : "收藏此合集"
+                      ? c.unfavoriteThis
+                      : c.favoriteThis
                   }
                   aria-pressed={favoriteCollectionIds.has(active.id)}
                   title={
                     favoriteCollectionIds.has(active.id)
-                      ? "取消收藏"
-                      : "收藏"
+                      ? c.unfavoriteShort
+                      : c.favoriteShort
                   }
                   onClick={() => toggleFavoriteCollection(active.id)}
                 >
@@ -2598,7 +2763,7 @@ export default function App() {
                 <button
                   type="button"
                   className="main__header-icon-btn"
-                  aria-label="打开搜索"
+                  aria-label={c.openSearchAria}
                   onClick={() => setSearchBarOpen(true)}
                 >
                   <svg
@@ -2624,10 +2789,10 @@ export default function App() {
                 aria-pressed={masonryLayout}
                 aria-label={
                   masonryLayout
-                    ? "切换为列表布局"
-                    : "切换为瀑布流布局"
+                    ? c.layoutListAria
+                    : c.layoutMasonryAria
                 }
-                title={masonryLayout ? "列表布局" : "瀑布流"}
+                title={masonryLayout ? c.layoutListTitle : c.layoutMasonryTitle}
                 onClick={toggleMasonryLayout}
               >
                 {masonryLayout ? (
@@ -2676,12 +2841,12 @@ export default function App() {
                 <button
                   type="button"
                   className="main__header-icon-btn main__header-icon-btn--danger-text"
-                  aria-label="清空垃圾桶"
-                  title="清空垃圾桶"
+                  aria-label={c.emptyTrashAria}
+                  title={c.emptyTrashTitle}
                   onClick={emptyTrash}
                 >
                   <span className="main__header-trash-empty-label">
-                    清空
+                    {c.clearTrashLabel}
                   </span>
                 </button>
               ) : null}
@@ -2694,7 +2859,7 @@ export default function App() {
                 <button
                   type="button"
                   className="main__header-icon-btn"
-                  aria-label="新建小笔记"
+                  aria-label={c.newNoteAria}
                   onClick={() => addSmallNote()}
                 >
                   <svg
@@ -2741,7 +2906,7 @@ export default function App() {
                   className="main__hint-editor"
                   rows={1}
                   value={draftCollectionHint}
-                  aria-label="合集说明"
+                  aria-label={c.collectionHintAria}
                   onChange={(e) =>
                     setDraftCollectionHint(e.target.value)
                   }
@@ -2764,8 +2929,8 @@ export default function App() {
                   title={
                     (active.hint?.trim()
                       ? active.hint!
-                      : DEFAULT_COLLECTION_HINT) +
-                    (canEdit ? " · 双击改成自己的话 ✨" : "")
+                      : c.defaultCollectionHint) +
+                    (canEdit ? c.hintSuffixEdit : "")
                   }
                   onDoubleClick={
                     canEdit
@@ -2774,7 +2939,7 @@ export default function App() {
                           setDraftCollectionHint(
                             raw
                               ? active.hint!
-                              : DEFAULT_COLLECTION_HINT
+                              : c.defaultCollectionHint
                           );
                           setEditingHintCollectionId(active.id);
                         }
@@ -2783,7 +2948,7 @@ export default function App() {
                 >
                   {active.hint?.trim()
                     ? active.hint
-                    : DEFAULT_COLLECTION_HINT}
+                    : c.defaultCollectionHint}
                 </p>
               )}
             </div>
@@ -2796,27 +2961,52 @@ export default function App() {
           role="feed"
           aria-label={
             searchActive
-              ? "搜索结果"
+              ? c.resultsTitle
               : trashViewActive
-                ? "垃圾桶"
+                ? c.titleTrash
                 : remindersViewActive
-                  ? "全部提醒"
-                  : "mikujar 时间线"
+                  ? c.titleReminders
+                  : c.timelineBrand
           }
         >
+          {ptrEnabled ? (
+            <div
+              className={
+                "timeline__ptr" +
+                (timelinePtrRefreshing ? " timeline__ptr--busy" : "")
+              }
+              style={{
+                height: timelinePtrRefreshing
+                  ? 44
+                  : Math.round(timelinePullOffset),
+              }}
+              aria-live="polite"
+              aria-busy={timelinePtrRefreshing || undefined}
+            >
+              <span className="timeline__ptr-label">
+                {timelinePtrRefreshing
+                  ? c.pullRefreshRunning
+                  : timelinePullOffset >= 42
+                    ? c.pullRefreshRelease
+                    : c.pullRefreshGuide}
+              </span>
+            </div>
+          ) : null}
           {searchActive ? (
             !searchHasResults ? (
               <div className="timeline__empty">
-                唔…「{searchTrim}」什么也没搜到，换个词或换个姿势试试？
+                {c.searchNoHit(searchTrim)}
               </div>
             ) : (
               <>
                 {searchCollectionMatches.length > 0 ? (
                   <section
                     className="search-section"
-                    aria-label="名称匹配的合集"
+                    aria-label={c.matchCollectionsAria}
                   >
-                    <h2 className="timeline__pin-heading">合集</h2>
+                    <h2 className="timeline__pin-heading">
+                      {c.headingCollections}
+                    </h2>
                     <ul className="search-col-list">
                       {searchCollectionMatches.map(({ col, path }) => (
                         <li key={col.id} className="search-col-list__item">
@@ -2835,7 +3025,7 @@ export default function App() {
                               setSearchBarOpen(false);
                             }}
                           >
-                            打开
+                            {c.openBtn}
                           </button>
                         </li>
                       ))}
@@ -2853,9 +3043,9 @@ export default function App() {
                 {searchGroupedCards.length > 0 ? (
                   <section
                     className="search-section"
-                    aria-label="匹配的笔记"
+                    aria-label={c.matchNotesAria}
                   >
-                    <h2 className="timeline__pin-heading">笔记</h2>
+                    <h2 className="timeline__pin-heading">{c.headingNotes}</h2>
                     {searchGroupedCards.map(({ col, path, cards }) => (
                       <div
                         key={col.id}
@@ -2877,14 +3067,17 @@ export default function App() {
                               setSearchBarOpen(false);
                             }}
                           >
-                            打开合集
+                            {c.openCollectionBtn}
                           </button>
                         </div>
-                        <ul className="cards">
+                        <MasonryShortestColumns
+                          enabled={masonryLayout}
+                          columnCount={masonryColumnCount}
+                        >
                           {cards.map((card) =>
                             renderNoteTimelineCard(card, col.id)
                           )}
-                        </ul>
+                        </MasonryShortestColumns>
                       </div>
                     ))}
                   </section>
@@ -2894,29 +3087,31 @@ export default function App() {
           ) : trashViewActive ? (
             trashEntries.length === 0 ? (
               <div className="timeline__empty trash-empty">
-                {canEdit
-                  ? "回收站空空如也～ 删掉的小卡片会乖乖躺在这，点「⋯」能捞回来或彻底粉碎。"
-                  : "暂时没有已删除的笔记哟。"}
+                {canEdit ? c.trashEmptyRich : c.trashEmptyPlain}
               </div>
             ) : (
-              <ul className="cards" aria-label="已删除的笔记">
+              <MasonryShortestColumns
+                enabled={masonryLayout}
+                columnCount={masonryColumnCount}
+                ariaLabel={c.deletedNotesAria}
+              >
                 {trashEntries.map((entry) => (
                   <TrashNoteCardRow
                     key={entry.trashId}
                     entry={entry}
                     canEdit={canEdit}
-                    masonryLayout={masonryLayout}
                     cardMenuId={cardMenuId}
                     setCardMenuId={setCardMenuId}
                     restoreTrashedEntry={restoreTrashedEntry}
                     purgeTrashedEntry={purgeTrashedEntry}
                   />
                 ))}
-              </ul>
+              </MasonryShortestColumns>
             )
           ) : remindersViewActive ? (
             <AllRemindersView
               entries={allReminderEntries}
+              masonryLayout={masonryLayout}
               renderCard={(colId, card) =>
                 renderNoteTimelineCard(card, colId)
               }
@@ -2926,26 +3121,29 @@ export default function App() {
             dayPinned.length === 0 &&
             dayRestCards.length === 0 ? (
               <div className="timeline__empty">
-                {canEdit
-                  ? "这一天还没有笔记或提醒～ 带「日历日期」的笔记会按合集出现在下面；在卡片「⋯」里可设置提醒，提醒日会在月历格右上角显示角标。"
-                  : "这一天没有可以展示的笔记～"}
+                {canEdit ? c.dayEmptyReminder : c.dayEmptyPlain}
               </div>
             ) : (
               <>
                 {dayReminderEntries.length > 0 && (
                   <section
                     className="timeline__pin-section timeline__reminder-section"
-                    aria-label="当日提醒"
+                    aria-label={c.dayRemindersAria}
                   >
-                    <h2 className="timeline__pin-heading">提醒</h2>
-                    <ul className="cards">
+                    <h2 className="timeline__pin-heading">
+                      {c.headingReminders}
+                    </h2>
+                    <MasonryShortestColumns
+                      enabled={masonryLayout}
+                      columnCount={masonryColumnCount}
+                    >
                       {dayReminderEntries.map(({ card }) =>
                         renderNoteTimelineCard(
                           card,
                           cardToColIdForDay.get(card.id) ?? ""
                         )
                       )}
-                    </ul>
+                    </MasonryShortestColumns>
                   </section>
                 )}
                 {dayReminderEntries.length > 0 &&
@@ -2959,17 +3157,20 @@ export default function App() {
                 {dayPinned.length > 0 && (
                   <section
                     className="timeline__pin-section"
-                    aria-label="当日置顶"
+                    aria-label={c.dayPinnedAria}
                   >
-                    <h2 className="timeline__pin-heading">置顶</h2>
-                    <ul className="cards">
+                    <h2 className="timeline__pin-heading">{c.headingPinned}</h2>
+                    <MasonryShortestColumns
+                      enabled={masonryLayout}
+                      columnCount={masonryColumnCount}
+                    >
                       {dayPinned.map((card) =>
                         renderNoteTimelineCard(
                           card,
                           cardToColIdForDay.get(card.id) ?? ""
                         )
                       )}
-                    </ul>
+                    </MasonryShortestColumns>
                   </section>
                 )}
                 {dayPinned.length > 0 && dayRestCards.length > 0 && (
@@ -2987,11 +3188,14 @@ export default function App() {
                     <h2 className="timeline__cal-group-title">
                       「{col.name}」
                     </h2>
-                    <ul className="cards">
+                    <MasonryShortestColumns
+                      enabled={masonryLayout}
+                      columnCount={masonryColumnCount}
+                    >
                       {dayColCards.map((card) =>
                         renderNoteTimelineCard(card, col.id)
                       )}
-                    </ul>
+                    </MasonryShortestColumns>
                   </div>
                 ))}
               </>
@@ -3000,23 +3204,26 @@ export default function App() {
             <div className="timeline__empty">
               {timelineEmpty
                 ? canEdit
-                  ? "这里还光溜溜的！点顶栏「+」或底下罐子/「新建小笔记」，新卡会进当前合集并打上今天的日历～"
-                  : "这个合集还没有笔记～"
-                : "暂时没有任何小笔记～"}
+                  ? c.emptyNewUser
+                  : c.emptyCollection
+                : c.emptyGlobal}
             </div>
           ) : (
             <>
               {pinned.length > 0 && (
                 <section
                   className="timeline__pin-section"
-                  aria-label="置顶笔记"
+                  aria-label={c.pinnedNotesAria}
                 >
-                  <h2 className="timeline__pin-heading">置顶</h2>
-                  <ul className="cards">
+                  <h2 className="timeline__pin-heading">{c.headingPinned}</h2>
+                  <MasonryShortestColumns
+                    enabled={masonryLayout}
+                    columnCount={masonryColumnCount}
+                  >
                     {pinned.map((card) =>
                       renderNoteTimelineCard(card, active!.id)
                     )}
-                  </ul>
+                  </MasonryShortestColumns>
                 </section>
               )}
               {pinned.length > 0 && rest.length > 0 && (
@@ -3026,9 +3233,12 @@ export default function App() {
                   aria-hidden
                 />
               )}
-              <ul className="cards">
+              <MasonryShortestColumns
+                enabled={masonryLayout}
+                columnCount={masonryColumnCount}
+              >
                 {rest.map((card) => renderNoteTimelineCard(card, active!.id))}
-              </ul>
+              </MasonryShortestColumns>
             </>
           )}
           {canEdit &&
@@ -3041,10 +3251,10 @@ export default function App() {
               <button
                 type="button"
                 className="timeline__add-bottom-btn"
-                aria-label="新建小笔记"
+                aria-label={c.newNoteAria}
                 onClick={() => addSmallNote()}
               >
-                ＋ 新建小笔记
+                {c.newNotePlus}
               </button>
             </div>
           ) : null}
@@ -3061,8 +3271,8 @@ export default function App() {
         <button
           type="button"
           className="main__scroll-to-bottom"
-          aria-label="跳转到时间线底部"
-          title="到底部"
+          aria-label={c.scrollBottomAria}
+          title={c.scrollBottomTitle}
           onClick={() => scrollTimelineToBottom("smooth")}
         >
           <svg
@@ -3079,11 +3289,13 @@ export default function App() {
           </svg>
         </button>
       ) : null}
-      <nav className="mobile-dock" aria-label="底部快捷操作">
+      <nav className="mobile-dock" aria-label={c.mobileDockAria}>
         <button
           type="button"
           className="mobile-dock__btn mobile-dock__btn--icon"
-          aria-label={mobileCalendarOpen ? "关闭日历" : "打开日历"}
+          aria-label={
+            mobileCalendarOpen ? c.dockCalendarClose : c.dockCalendarOpen
+          }
           aria-expanded={mobileCalendarOpen}
           onClick={() => {
             setMobileNavOpen(false);
@@ -3117,9 +3329,9 @@ export default function App() {
               : "")
           }
           aria-label={
-            remindersViewActive ? "关闭全部提醒" : "全部提醒"
+            remindersViewActive ? c.dockRemindersOn : c.dockRemindersOff
           }
-          title="全部提醒"
+          title={c.remindersTitle}
           aria-expanded={remindersViewActive}
           onClick={() => {
             setMobileNavOpen(false);
@@ -3147,19 +3359,19 @@ export default function App() {
           className="mobile-dock__btn mobile-dock__btn--fab"
           aria-label={
             calendarDay !== null || remindersViewActive
-              ? "回到合集"
+              ? c.fabBack
               : writeRequiresLogin && !getAdminToken() && !isTauri()
-                ? "先登录再写笔记"
-                : "新建小笔记"
+                ? c.fabLogin
+                : c.fabNewNote
           }
           title={
             calendarDay !== null
-              ? "退出按日浏览，回到当前合集"
+              ? c.fabTitleCalendar
               : remindersViewActive
-                ? "关闭全部提醒，回到当前合集"
+                ? c.fabTitleReminders
                 : writeRequiresLogin && !getAdminToken() && !isTauri()
-                  ? "先登录再开罐写笔记～"
-                  : "新建小笔记"
+                  ? c.fabTitleLogin
+                  : c.fabTitleNewNote
           }
           disabled={
             calendarDay !== null || remindersViewActive
@@ -3211,8 +3423,8 @@ export default function App() {
         <button
           type="button"
           className="mobile-dock__btn mobile-dock__btn--icon"
-          aria-label="搜索"
-          title="搜索"
+          aria-label={c.searchDockAria}
+          title={c.searchDockTitle}
           onClick={() => {
             setRemindersViewActive(false);
             setSearchBarOpen(true);
@@ -3264,14 +3476,14 @@ export default function App() {
               <button
                 type="button"
                 className="mobile-cal-popup__backdrop"
-                aria-label="关闭日历"
+                aria-label={c.calendarCloseAria}
                 onClick={() => setMobileCalendarOpen(false)}
               />
               <div
                 className="mobile-cal-popup__sheet"
                 role="dialog"
                 aria-modal="true"
-                aria-label="按日期浏览"
+                aria-label={c.calendarBrowseAria}
               >
                 <div className="mobile-cal-popup__grab" aria-hidden />
                 <div className="sidebar__calendar mobile-cal-popup__calendar">

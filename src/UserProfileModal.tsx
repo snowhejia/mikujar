@@ -13,6 +13,8 @@ import {
   updateMyProfileApi,
   uploadMyAvatar,
 } from "./api/users";
+import { useAppChrome } from "./i18n/useAppChrome";
+import { useLegalPages } from "./legalPages";
 
 type UserProfileModalProps = {
   open: boolean;
@@ -35,6 +37,7 @@ export function UserProfileModal({
   onFlash,
   setSaving,
 }: UserProfileModalProps) {
+  const c = useAppChrome();
   const fileRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -91,58 +94,58 @@ export function UserProfileModal({
     setEmailSentHint(null);
     const em = email.trim();
     if (!em) {
-      setErr("先填上要绑定的邮箱嘛～");
+      setErr(c.profileErrEmailEmpty);
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      setErr("邮箱格式好像不太对…再检查一下？");
+      setErr(c.profileErrEmailFmt2);
       return;
     }
     if (em.toLowerCase() === prevEmailNorm) {
-      setErr("就是这个邮箱啦，不用再验证一遍～");
+      setErr(c.profileErrSameEmail);
       return;
     }
     setEmailSendBusy(true);
     try {
       await sendMyEmailChangeCode(em);
-      setEmailSentHint("验证码在路上啦，10 分钟内填进来就好～");
+      setEmailSentHint(c.profileEmailSendOk);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "验证码没发出去…等等再试？");
+      setErr(e instanceof Error ? e.message : c.profileErrSendFail);
     } finally {
       setEmailSendBusy(false);
     }
-  }, [email, prevEmailNorm]);
+  }, [c, email, prevEmailNorm]);
 
   const handleSubmit = useCallback(async () => {
     setErr(null);
     onFlash(null);
     if (dataMode !== "remote") {
-      setErr("先把数据模式切到云端同步，再保存喔～");
+      setErr(c.profileErrNeedRemote);
       return;
     }
     const nick = displayName.trim();
     if (!nick) {
-      setErr("昵称空空的，罐子会不晓得怎么叫你…");
+      setErr(c.profileErrNickEmpty);
       return;
     }
     if (nick.length > 64) {
-      setErr("昵称太长啦，64 字以内就好～");
+      setErr(c.profileErrNickLen);
       return;
     }
     const emailTrim = email.trim();
     if (emailTrim) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-        setErr("邮箱格式好像不太对…");
+        setErr(c.profileErrEmailFmt);
         return;
       }
     }
     if (password || password2) {
       if (password !== password2) {
-        setErr("两次密码对不上诶，再对一下？");
+        setErr(c.profileErrPwdMismatch);
         return;
       }
       if (password.length < 4) {
-        setErr("新密码至少 4 位嘛～");
+        setErr(c.profileErrPwdLen);
         return;
       }
     }
@@ -162,7 +165,7 @@ export function UserProfileModal({
     if (emailTrim !== prevEmail) {
       if (changingToNewEmail) {
         if (!/^\d{6}$/.test(emailCode.trim())) {
-          setErr("换邮箱要先点「发送验证码」，再填 6 位数字喔～");
+          setErr(c.profileErrNeedVerify);
           return;
         }
         patch.email = emailTrim;
@@ -174,7 +177,7 @@ export function UserProfileModal({
     if (password) patch.password = password;
 
     if (pendingFile && !mediaUploadMode) {
-      setErr("头像功能还在备货中，暂时换不了啦…");
+      setErr(c.profileErrAvatarCos);
       return;
     }
 
@@ -192,10 +195,10 @@ export function UserProfileModal({
         await uploadMyAvatar(pendingFile);
       }
       await onAfterSave();
-      onFlash("个人中心已保存～");
+      onFlash(c.profileFlashSaved);
       onClose();
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "保存翻车啦，再试一次？");
+      setErr(e instanceof Error ? e.message : c.profileErrSaveFail);
     } finally {
       setSaving(false);
     }
@@ -215,6 +218,7 @@ export function UserProfileModal({
     password2,
     pendingFile,
     setSaving,
+    c,
   ]);
 
   useEffect(() => {
@@ -229,6 +233,8 @@ export function UserProfileModal({
   const serverAvatarSrc = useMediaDisplaySrc(
     previewUrl ? undefined : currentUser.avatarUrl
   );
+
+  const { openTerms, openPrivacy } = useLegalPages();
 
   if (!open) return null;
 
@@ -248,18 +254,18 @@ export function UserProfileModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="user-profile-title" className="auth-modal__title">
-          个人中心
+          {c.profileTitle}
         </h2>
         <p className="auth-modal__hint user-profile-modal__sub">
-          登录名{" "}
+          {c.profileBeforeUsername}{" "}
           <span className="user-profile-modal__mono">
             {currentUser.username}
           </span>
-          不可修改。绑定邮箱后可用邮箱登录。
+          {c.profileAfterUsername}
         </p>
 
         <label className="user-profile-modal__label" htmlFor="profile-display">
-          昵称
+          {c.profileNickname}
         </label>
         <input
           id="profile-display"
@@ -272,7 +278,7 @@ export function UserProfileModal({
         />
 
         <label className="user-profile-modal__label" htmlFor="profile-email">
-          邮箱
+          {c.profileEmail}
         </label>
         <div className="user-profile-modal__email-row">
           <input
@@ -286,7 +292,7 @@ export function UserProfileModal({
               setEmailCode("");
               setEmailSentHint(null);
             }}
-            placeholder="留空可解绑；换绑新邮箱需验证"
+            placeholder={c.profileEmailPlaceholder}
           />
           <button
             type="button"
@@ -300,7 +306,7 @@ export function UserProfileModal({
             }
             onClick={() => void handleSendEmailCode()}
           >
-            {emailSendBusy ? "…" : "发送验证码"}
+            {emailSendBusy ? "…" : c.profileSendCode}
           </button>
         </div>
         {emailSentHint ? (
@@ -314,7 +320,7 @@ export function UserProfileModal({
               className="user-profile-modal__label"
               htmlFor="profile-email-code"
             >
-              新邮箱验证码
+              {c.profileNewEmailCode}
             </label>
             <input
               id="profile-email-code"
@@ -322,7 +328,7 @@ export function UserProfileModal({
               inputMode="numeric"
               className="auth-modal__input"
               autoComplete="one-time-code"
-              placeholder="6 位数字"
+              placeholder={c.profileEmailCodePh}
               value={emailCode}
               maxLength={6}
               onChange={(e) =>
@@ -332,7 +338,7 @@ export function UserProfileModal({
           </>
         ) : null}
 
-        <p className="user-profile-modal__label">头像</p>
+        <p className="user-profile-modal__label">{c.profileAvatar}</p>
         <div className="user-profile-modal__avatar-row">
           <div
             className="user-profile-modal__avatar-preview"
@@ -341,7 +347,9 @@ export function UserProfileModal({
             {avatarSrc ? (
               <img src={avatarSrc} alt="" />
             ) : (
-              <span className="user-profile-modal__avatar-ph">无</span>
+              <span className="user-profile-modal__avatar-ph">
+                {c.profileNoAvatar}
+              </span>
             )}
           </div>
           <div className="user-profile-modal__avatar-actions">
@@ -362,11 +370,11 @@ export function UserProfileModal({
               title={
                 mediaUploadMode
                   ? undefined
-                  : "头像功能还在备货中…"
+                  : c.profileAvatarDisabledTitle
               }
               onClick={() => fileRef.current?.click()}
             >
-              选择图片
+              {c.profileChooseImage}
             </button>
             {pendingFile ? (
               <span className="user-profile-modal__file-name">
@@ -374,14 +382,14 @@ export function UserProfileModal({
               </span>
             ) : (
               <span className="user-profile-modal__file-hint">
-                保存时上传；不选则保持原头像
+                {c.profileAvatarPendingHint}
               </span>
             )}
           </div>
         </div>
 
         <label className="user-profile-modal__label" htmlFor="profile-pwd">
-          新密码（可选）
+          {c.profileNewPassword}
         </label>
         <input
           id="profile-pwd"
@@ -390,13 +398,13 @@ export function UserProfileModal({
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="不修改请留空"
+          placeholder={c.profilePwdPlaceholder}
         />
         <label
           className="user-profile-modal__label"
           htmlFor="profile-pwd2"
         >
-          确认新密码
+          {c.profileConfirmPassword}
         </label>
         <input
           id="profile-pwd2"
@@ -410,24 +418,24 @@ export function UserProfileModal({
         {err ? <p className="auth-modal__err">{err}</p> : null}
 
         <p className="user-profile-modal__legal">
-          <a
-            href={`${import.meta.env.BASE_URL}legal/terms.html`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            className="user-profile-modal__legal-btn"
+            onClick={openTerms}
           >
-            用户协议
-          </a>
+            {c.profileTermsOfService}
+          </button>
           <span className="user-profile-modal__legal-sep" aria-hidden>
             {" "}
             ·{" "}
           </span>
-          <a
-            href={`${import.meta.env.BASE_URL}legal/privacy.html`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            className="user-profile-modal__legal-btn"
+            onClick={openPrivacy}
           >
-            隐私政策
-          </a>
+            {c.profilePrivacyPolicy}
+          </button>
         </p>
 
         <div className="auth-modal__actions">
@@ -436,14 +444,14 @@ export function UserProfileModal({
             className="auth-modal__btn auth-modal__btn--ghost"
             onClick={onClose}
           >
-            取消
+            {c.profileCancel}
           </button>
           <button
             type="button"
             className="auth-modal__btn auth-modal__btn--primary"
             onClick={() => void handleSubmit()}
           >
-            保存
+            {c.profileSave}
           </button>
         </div>
       </div>

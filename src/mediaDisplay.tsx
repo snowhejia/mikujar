@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  mightHaveApiSession,
   needsCosReadUrl,
   resolveCosMediaUrlIfNeeded,
   resolveMediaUrl,
@@ -13,7 +14,10 @@ export function useMediaDisplaySrc(url: string | undefined): string {
     if (!url) return "";
     if (!isLocalMediaRef(url)) {
       const b = resolveMediaUrl(url);
-      return needsCosReadUrl(b) ? "" : b;
+      if (!needsCosReadUrl(b)) return b;
+      // 无会话时 resolveCosReadUrl 也会退回直链，首帧即可用，避免轮播/大图「点了没反应」
+      if (!mightHaveApiSession()) return b;
+      return "";
     }
     return "";
   });

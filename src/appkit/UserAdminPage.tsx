@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useAppChrome } from "../i18n/useAppChrome";
 import type { Dispatch, SetStateAction } from "react";
 import type { ProfileDraft } from "./useUserAdmin";
 import type { PublicUser } from "../api/users";
@@ -71,6 +72,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
     onDeleteUser,
   } = p;
 
+  const c = useAppChrome();
   if (!open) return null;
 
   return createPortal(
@@ -81,15 +83,15 @@ export function UserAdminPage(p: UserAdminPageProps) {
           className="user-admin-page__back"
           onClick={onClose}
         >
-          ← 返回笔记
+          {c.adminBackToNotes}
         </button>
         <h1 className="user-admin-page__title" id="user-admin-page-title">
-          用户管理
+          {c.adminTitle}
         </h1>
       </header>
       <div className="user-admin-page__body">
         <p className="user-admin-page__lead">
-          新建账号、修改昵称与登录 ID、绑定邮箱、调整身份或重置口令。删除后该用户的笔记与附件将一并清理（不可恢复）。
+          {c.adminLead}
         </p>
         {adminUsersErr || userAdminFormErr ? (
           <p className="user-admin-page__err" role="alert">
@@ -102,19 +104,19 @@ export function UserAdminPage(p: UserAdminPageProps) {
           aria-labelledby="user-admin-new-heading"
         >
           <h2 id="user-admin-new-heading" className="user-admin-page__h2">
-            新建用户
+            {c.adminNewUserHeading}
           </h2>
           <div className="user-admin__fields user-admin__fields--row">
             <div className="user-admin__field">
               <label className="user-admin__label" htmlFor="ua-new-username">
-                登录 ID
+                {c.adminLabelLoginId}
               </label>
               <input
                 id="ua-new-username"
                 type="text"
                 className="user-admin__field-input"
                 autoComplete="off"
-                placeholder="2–32 位字母、数字或下划线"
+                placeholder={c.adminPhLoginId}
                 value={newUserUsername}
                 disabled={newUserBusy}
                 onChange={(e) => setNewUserUsername(e.target.value)}
@@ -122,14 +124,14 @@ export function UserAdminPage(p: UserAdminPageProps) {
             </div>
             <div className="user-admin__field">
               <label className="user-admin__label" htmlFor="ua-new-password">
-                初始密码
+                {c.adminLabelPassword}
               </label>
               <input
                 id="ua-new-password"
                 type="password"
                 className="user-admin__field-input"
                 autoComplete="new-password"
-                placeholder="至少 4 位"
+                placeholder={c.adminPhPassword}
                 value={newUserPassword}
                 disabled={newUserBusy}
                 onChange={(e) => setNewUserPassword(e.target.value)}
@@ -137,14 +139,14 @@ export function UserAdminPage(p: UserAdminPageProps) {
             </div>
             <div className="user-admin__field">
               <label className="user-admin__label" htmlFor="ua-new-display">
-                显示昵称
+                {c.adminLabelDisplayName}
               </label>
               <input
                 id="ua-new-display"
                 type="text"
                 className="user-admin__field-input"
                 autoComplete="off"
-                placeholder="侧栏与笔记旁显示；不填则用登录 ID"
+                placeholder={c.adminPhDisplayName}
                 value={newUserDisplayName}
                 disabled={newUserBusy}
                 onChange={(e) => setNewUserDisplayName(e.target.value)}
@@ -152,14 +154,14 @@ export function UserAdminPage(p: UserAdminPageProps) {
             </div>
             <div className="user-admin__field">
               <label className="user-admin__label" htmlFor="ua-new-email">
-                邮箱（可选）
+                {c.adminLabelEmail}
               </label>
               <input
                 id="ua-new-email"
                 type="email"
                 className="user-admin__field-input"
                 autoComplete="off"
-                placeholder="绑定后可用邮箱登录"
+                placeholder={c.adminPhEmail}
                 value={newUserEmail}
                 disabled={newUserBusy}
                 onChange={(e) => setNewUserEmail(e.target.value)}
@@ -167,7 +169,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
             </div>
             <div className="user-admin__field user-admin__field--role">
               <label className="user-admin__label" htmlFor="ua-new-role">
-                身份
+                {c.adminLabelRole}
               </label>
               <select
                 id="ua-new-role"
@@ -185,9 +187,9 @@ export function UserAdminPage(p: UserAdminPageProps) {
                   );
                 }}
               >
-                <option value="user">住民（普通）</option>
-                <option value="subscriber">订阅</option>
-                <option value="admin">站长</option>
+                <option value="user">{c.adminRoleUser}</option>
+                <option value="subscriber">{c.adminRoleSubscriber}</option>
+                <option value="admin">{c.adminRoleAdmin}</option>
               </select>
             </div>
             <div className="user-admin__field user-admin__field--action">
@@ -204,7 +206,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                 }
                 onClick={() => void submitNewUser()}
               >
-                {newUserBusy ? "创建中…" : "创建用户"}
+                {newUserBusy ? c.adminCreating : c.adminCreateUser}
               </button>
             </div>
           </div>
@@ -215,22 +217,22 @@ export function UserAdminPage(p: UserAdminPageProps) {
           aria-labelledby="user-admin-list-heading"
         >
           <h2 id="user-admin-list-heading" className="user-admin-page__h2">
-            全部用户
+            {c.adminAllUsers}
           </h2>
           <div className="user-admin-page__table-scroll">
             {adminUsersLoading ? (
-              <p className="user-admin__loading">名单加载中…</p>
+              <p className="user-admin__loading">{c.adminLoadingList}</p>
             ) : (
               <table className="user-admin-page__table">
                 <thead>
                   <tr>
-                    <th>内部 ID</th>
-                    <th>昵称</th>
-                    <th>登录 ID</th>
-                    <th>邮箱</th>
-                    <th>身份</th>
-                    <th>重置口令</th>
-                    <th>资料</th>
+                    <th>{c.adminThInternalId}</th>
+                    <th>{c.adminThNickname}</th>
+                    <th>{c.adminThLoginId}</th>
+                    <th>{c.adminThEmail}</th>
+                    <th>{c.adminThRole}</th>
+                    <th>{c.adminThResetPwd}</th>
+                    <th>{c.adminThProfile}</th>
                     <th />
                   </tr>
                 </thead>
@@ -253,7 +255,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                           <input
                             type="text"
                             className="user-admin-page__cell-input"
-                            aria-label={`${u.username} 的昵称`}
+                            aria-label={c.adminAriaDisplayName(u.username)}
                             value={dn}
                             disabled={busy}
                             onChange={(e) =>
@@ -266,7 +268,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             type="text"
                             className="user-admin-page__cell-input user-admin-page__cell-input--mono"
                             autoComplete="off"
-                            aria-label={`${u.username} 的登录 ID`}
+                            aria-label={c.adminAriaLoginId(u.username)}
                             value={un}
                             disabled={busy}
                             onChange={(e) =>
@@ -279,8 +281,8 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             type="email"
                             className="user-admin-page__cell-input"
                             autoComplete="off"
-                            aria-label={`${u.username} 的邮箱`}
-                            placeholder="未绑定"
+                            aria-label={c.adminAriaEmail(u.username)}
+                            placeholder={c.adminPhUnbound}
                             value={em}
                             disabled={busy}
                             onChange={(e) =>
@@ -293,7 +295,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             className="user-admin__role-select user-admin__role-select--inline"
                             value={u.role}
                             disabled={busy}
-                            aria-label={`${u.username} 的身份`}
+                            aria-label={c.adminAriaRole(u.username)}
                             onChange={(e) => {
                               const v = e.target.value;
                               void onRoleChange(
@@ -306,9 +308,9 @@ export function UserAdminPage(p: UserAdminPageProps) {
                               );
                             }}
                           >
-                            <option value="user">住民（普通）</option>
-                            <option value="subscriber">订阅</option>
-                            <option value="admin">站长</option>
+                            <option value="user">{c.adminRoleUser}</option>
+                            <option value="subscriber">{c.adminRoleSubscriber}</option>
+                            <option value="admin">{c.adminRoleAdmin}</option>
                           </select>
                         </td>
                         <td>
@@ -317,7 +319,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                               type="password"
                               className="user-admin__pwd-input user-admin-page__pwd-input"
                               autoComplete="new-password"
-                              placeholder="新口令"
+                              placeholder={c.adminPhNewPassword}
                               value={pwdResetByUser[u.id] ?? ""}
                               disabled={busy}
                               onChange={(e) =>
@@ -333,7 +335,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                               disabled={busy}
                               onClick={() => void applyPasswordReset(u)}
                             >
-                              生效
+                              {c.adminApplyPwd}
                             </button>
                           </div>
                         </td>
@@ -344,7 +346,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             disabled={busy}
                             onClick={() => void saveUserProfile(u)}
                           >
-                            保存
+                            {c.adminSave}
                           </button>
                         </td>
                         <td>
@@ -354,7 +356,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             disabled={busy}
                             onClick={() => void onDeleteUser(u)}
                           >
-                            删除
+                            {c.adminDelete}
                           </button>
                         </td>
                       </tr>

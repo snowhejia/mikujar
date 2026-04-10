@@ -60,13 +60,24 @@ export function buildSearchResults(
   };
 }
 
-export function formatChineseDayTitle(iso: string): string {
+export function formatCalendarDayTitle(
+  iso: string,
+  lang: "zh" | "en" = "zh"
+): string {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
-  const wk = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
-    dt.getDay()
-  ];
+  const dow = dt.getDay();
+  if (lang === "en") {
+    const wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
+    return `${wk}, ${m}/${d}/${y}`;
+  }
+  const wk = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][dow];
   return `${y}年${m}月${d}日 ${wk}`;
+}
+
+/** @deprecated 使用 {@link formatCalendarDayTitle}(iso, "zh") */
+export function formatChineseDayTitle(iso: string): string {
+  return formatCalendarDayTitle(iso, "zh");
 }
 
 /** 侧栏月历格：周一为列首 */

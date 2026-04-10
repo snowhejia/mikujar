@@ -3,6 +3,7 @@ import type { AuthUser } from "../api/auth";
 import { useMediaDisplaySrc } from "../mediaDisplay";
 import type { AppDataMode } from "../appDataModeStorage";
 import { getAdminToken } from "../auth/token";
+import { useAppChrome } from "../i18n/useAppChrome";
 import { SidebarWorkspaceAppMark } from "./AppIcons";
 
 /** 头像旁下拉：个人中心、笔记设置、数据统计（具体项在弹窗内） */
@@ -19,6 +20,7 @@ export function UserAccountMenuDropdown({
   onOpenNoteSettings: () => void;
   onOpenDataStats: () => void;
 }) {
+  const c = useAppChrome();
   return (
     <div className="sidebar__user-menu-dropdown" role="menu">
       <button
@@ -27,15 +29,13 @@ export function UserAccountMenuDropdown({
         role="menuitem"
         disabled={dataMode !== "remote" || profileBusy}
         title={
-          dataMode !== "remote"
-            ? "先切到云端同步，再来开个人中心喔～"
-            : undefined
+          dataMode !== "remote" ? c.profileRemoteOnly : undefined
         }
         onClick={() => {
           onOpenProfile();
         }}
       >
-        个人中心
+        {c.menuProfile}
       </button>
       <button
         type="button"
@@ -45,7 +45,7 @@ export function UserAccountMenuDropdown({
           onOpenNoteSettings();
         }}
       >
-        笔记设置
+        {c.menuNoteSettings}
       </button>
       <button
         type="button"
@@ -55,7 +55,7 @@ export function UserAccountMenuDropdown({
           onOpenDataStats();
         }}
       >
-        数据统计
+        {c.menuDataStats}
       </button>
     </div>
   );
@@ -79,6 +79,7 @@ export function SidebarWorkspaceIdentity({
   menuOpen: boolean;
   menuDropdown: ReactNode;
 }) {
+  const c = useAppChrome();
   const avatarDisplaySrc = useMediaDisplaySrc(
     writeRequiresLogin && currentUser?.avatarUrl
       ? currentUser.avatarUrl
@@ -105,8 +106,8 @@ export function SidebarWorkspaceIdentity({
               onClick={onAvatarClick}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              aria-label="账户菜单"
-              title="账户菜单"
+              aria-label={c.accountMenu}
+              title={c.accountMenu}
             >
               {currentUser.avatarUrl ? (
                 <img
@@ -130,7 +131,7 @@ export function SidebarWorkspaceIdentity({
         <>
           <SidebarWorkspaceAppMark />
           <div className="sidebar__workspace-text">
-            <span className="sidebar__workspace-name">恢复会话…</span>
+            <span className="sidebar__workspace-name">{c.restoringSession}</span>
           </div>
         </>
       ) : (

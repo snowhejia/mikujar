@@ -32,6 +32,15 @@
     max(16px, env(safe-area-inset-left, 0px));
 }
 
+/**
+ * App 内嵌 iframe：宿主已有顶栏与安全区，子文档若再叠一层 safe-area-inset-top，
+ * 会在「返回」栏与正文「用户协议」大标题之间出现一大块空白。
+ * 独立浏览器打开时 html 无此类名，仍保留顶部安全区。
+ */
+html.legal-embed .legal-page {
+  padding-top: 6px;
+}
+
 .legal-wrap {
   max-width: min(54rem, calc(100vw - 2rem));
   margin: 0 auto;

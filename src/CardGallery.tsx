@@ -1,10 +1,14 @@
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import type { NoteMediaItem, NoteMediaKind } from "./types";
+import { useAppChrome } from "./i18n/useAppChrome";
+import type { NoteMediaItem } from "./types";
 import { resolveMediaUrl } from "./api/auth";
 import { LOCAL_MEDIA_PREFIX } from "./localMediaTauri";
 import {
@@ -18,6 +22,17 @@ import {
   MediaThumbVideo,
   useMediaDisplaySrc,
 } from "./mediaDisplay";
+
+const SWIPE_MIN_PX = 44;
+const SWIPE_DOMINANCE_OVER_VERTICAL = 1.12;
+const SWIPE_SUPPRESS_CLICK_MS = 220;
+
+function mediaSwipePointerTargetOk(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  if (el.closest("button, [role='tab'], audio")) return false;
+  return true;
+}
 
 function noteMediaItemsEqual(a: NoteMediaItem, b: NoteMediaItem): boolean {
   return (
@@ -46,7 +61,7 @@ async function copyImageToClipboard(item: NoteMediaItem) {
   }
 }
 
-function fileLabelFromUrl(url: string): string {
+function fileLabelFromUrl(url: string, fileFallback: string): string {
   if (url.startsWith(LOCAL_MEDIA_PREFIX)) {
     const seg =
       url.slice(LOCAL_MEDIA_PREFIX.length).split("/").pop() ?? "";
@@ -54,16 +69,16 @@ function fileLabelFromUrl(url: string): string {
     if (i >= 0 && i < seg.length - 1) {
       return decodeURIComponent(seg.slice(i + 1).replace(/\+/g, " "));
     }
-    return seg || "文件";
+    return seg || fileFallback;
   }
   try {
     const u = new URL(url);
     const parts = u.pathname.split("/").filter(Boolean);
     const last = parts[parts.length - 1];
-    if (!last) return "文件";
+    if (!last) return fileFallback;
     return decodeURIComponent(last.replace(/\+/g, " "));
   } catch {
-    return "文件";
+    return fileFallback;
   }
 }
 
@@ -148,12 +163,8 @@ function GalleryInlineAudioBar({ url }: { url: string }) {
   return <audio src={src} controls className="card__gallery-inline-audio" />;
 }
 
-type LightboxState = {
-  url: string;
-  kind: NoteMediaKind;
-  name?: string;
-  coverUrl?: string;
-};
+/** 大图预览：用 `items` 下标驱动，便于左右切换与列表轮播同步 */
+type LightboxState = { index: number };
 
 export type CardGalleryPlayback = "default" | "inlineAv";
 
@@ -173,7 +184,24 @@ export function CardGallery({
   /** 正在上传附件：在轮播区显示占位与进度圈 */
   uploadPending?: boolean;
 }) {
+  const ui = useAppChrome();
+  const labelFromUrl = (url: string) =>
+    fileLabelFromUrl(url, ui.uiFileFallback);
   const [i, setI] = useState(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  /** 水平滑动切图后短时间内屏蔽误触发的 click（含视频上的幽灵点击） */
+  const suppressClicksUntilRef = useRef(0);
+  const swipeTrackRef = useRef<{
+    x: number;
+    y: number;
+    pointerId: number;
+  } | null>(null);
+  const lightboxSwipeTrackRef = useRef<{
+    x: number;
+    y: number;
+    pointerId: number;
+  } | null>(null);
+  const lightboxSuppressClicksUntilRef = useRef(0);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [attachMenu, setAttachMenu] = useState<{
     x: number;
@@ -189,6 +217,29 @@ export function CardGallery({
         `${x.kind}:${x.url}:${x.name ?? ""}:${x.coverUrl ?? ""}`
     )
     .join("|");
+
+  const safeI = n > 0 ? ((i % n) + n) % n : 0;
+  const current = n > 0 ? items[safeI] : items[0];
+  const go = (delta: number) => {
+    if (n <= 0) return;
+    setI((x) => (x + delta + n * 100) % n);
+  };
+  const goLightbox = useCallback((delta: number) => {
+    if (n <= 1) return;
+    setLightbox((lb) => {
+      if (!lb) return lb;
+      const next = (lb.index + delta + n * 100) % n;
+      setI(next);
+      return { index: next };
+    });
+  }, [n]);
+  const closeLightbox = useCallback(() => {
+    setLightbox((lb) => {
+      if (lb) setI(lb.index);
+      return null;
+    });
+  }, []);
+
   useEffect(() => {
     setI((prev) => {
       if (n === 0) return 0;
@@ -197,19 +248,45 @@ export function CardGallery({
   }, [n, itemsKey]);
 
   useEffect(() => {
+    setLightbox((lb) => {
+      if (!lb) return lb;
+      if (n === 0) return null;
+      if (lb.index >= n) return { index: n - 1 };
+      if (lb.index < 0) return { index: 0 };
+      return lb;
+    });
+  }, [n, itemsKey]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (attachMenu) {
-        e.preventDefault();
-        setAttachMenu(null);
+      if (e.key === "Escape") {
+        if (attachMenu) {
+          e.preventDefault();
+          setAttachMenu(null);
+          return;
+        }
+        if (lightbox) {
+          e.preventDefault();
+          closeLightbox();
+        }
         return;
       }
-      if (lightbox) setLightbox(null);
+      if (lightbox && n > 1) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          goLightbox(-1);
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          goLightbox(1);
+        }
+      }
     };
     if (!attachMenu && !lightbox) return;
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [attachMenu, lightbox]);
+  }, [attachMenu, lightbox, n, closeLightbox, goLightbox]);
 
   useEffect(() => {
     if (!attachMenu) return;
@@ -245,31 +322,136 @@ export function CardGallery({
           <div
             className="card__gallery-upload-slot card__gallery-upload-slot--solo"
             aria-busy
-            aria-label="上传中"
+            aria-label={ui.uiUploading}
           >
             <span className="card__gallery-upload-spinner" aria-hidden />
-            <span className="card__gallery-upload-slot__text">上传中</span>
+            <span className="card__gallery-upload-slot__text">
+              {ui.uiUploading}
+            </span>
           </div>
         </div>
       </div>
     );
   }
 
-  const safeI = ((i % n) + n) % n;
-  const current = items[safeI];
-  const go = (delta: number) => {
-    setI((x) => (x + delta + n * 100) % n);
-  };
+  function onGalleryViewportPointerDown(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    if (n <= 1) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!mediaSwipePointerTargetOk(e.target)) return;
+    swipeTrackRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+    };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function onGalleryViewportPointerUp(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const st = swipeTrackRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    swipeTrackRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (n <= 1) return;
+    const dx = e.clientX - st.x;
+    const dy = e.clientY - st.y;
+    if (
+      Math.abs(dx) < SWIPE_MIN_PX ||
+      Math.abs(dx) < Math.abs(dy) * SWIPE_DOMINANCE_OVER_VERTICAL
+    ) {
+      return;
+    }
+    suppressClicksUntilRef.current =
+      performance.now() + SWIPE_SUPPRESS_CLICK_MS;
+    go(dx < 0 ? 1 : -1);
+  }
+
+  function onGalleryViewportPointerCancel(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const st = swipeTrackRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    swipeTrackRef.current = null;
+  }
+
+  function onGalleryViewportClickCapture(e: MouseEvent<HTMLDivElement>) {
+    if (e.target instanceof HTMLButtonElement) return;
+    if (performance.now() >= suppressClicksUntilRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function onLightboxSwipePointerDown(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    if (n <= 1) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!mediaSwipePointerTargetOk(e.target)) return;
+    lightboxSwipeTrackRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+    };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function onLightboxSwipePointerUp(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const st = lightboxSwipeTrackRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    lightboxSwipeTrackRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (n <= 1) return;
+    const dx = e.clientX - st.x;
+    const dy = e.clientY - st.y;
+    if (
+      Math.abs(dx) < SWIPE_MIN_PX ||
+      Math.abs(dx) < Math.abs(dy) * SWIPE_DOMINANCE_OVER_VERTICAL
+    ) {
+      return;
+    }
+    lightboxSuppressClicksUntilRef.current =
+      performance.now() + SWIPE_SUPPRESS_CLICK_MS;
+    goLightbox(dx < 0 ? 1 : -1);
+  }
+
+  function onLightboxSwipePointerCancel(
+    e: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const st = lightboxSwipeTrackRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    lightboxSwipeTrackRef.current = null;
+  }
+
+  function onLightboxSwipeAreaClickCapture(e: MouseEvent<HTMLDivElement>) {
+    if (e.target instanceof HTMLButtonElement) return;
+    if (performance.now() >= lightboxSuppressClicksUntilRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
   const openCurrentLightbox = () => {
-    setLightbox({
-      url: current.url,
-      kind: current.kind,
-      name: current.name ?? fileLabelFromUrl(current.url),
-      ...(current.kind === "audio" && current.coverUrl
-        ? { coverUrl: current.coverUrl }
-        : {}),
-    });
+    setLightbox({ index: safeI });
   };
 
   const openAttachmentMenu = (
@@ -287,130 +469,162 @@ export function CardGallery({
     setAttachMenu({ x: e.clientX, y: e.clientY, item });
   };
 
-  const lightboxAsItem = (): NoteMediaItem | null => {
-    if (!lightbox) return null;
-    if (lightbox.kind === "file") {
-      return {
-        kind: "file",
-        url: lightbox.url,
-        name: lightbox.name ?? fileLabelFromUrl(lightbox.url),
-      };
-    }
-    if (lightbox.kind === "audio") {
-      const name = lightbox.name ?? fileLabelFromUrl(lightbox.url);
-      return {
-        kind: "audio",
-        url: lightbox.url,
-        name,
-        ...(lightbox.coverUrl ? { coverUrl: lightbox.coverUrl } : {}),
-      };
-    }
-    if (lightbox.kind === "image" || lightbox.kind === "video") {
-      const name = lightbox.name ?? fileLabelFromUrl(lightbox.url);
-      return { kind: lightbox.kind, url: lightbox.url, name };
-    }
-    return { kind: lightbox.kind, url: lightbox.url };
-  };
+  function lightboxActiveItem(): NoteMediaItem | null {
+    if (!lightbox || n === 0) return null;
+    const idx = ((lightbox.index % n) + n) % n;
+    return items[idx] ?? null;
+  }
+
+  const lbItem = lightboxActiveItem();
+  const lbIdx = lightbox
+    ? ((lightbox.index % n) + n) % n
+    : 0;
 
   const lightboxPortal =
     lightbox &&
+    lbItem &&
     createPortal(
       <div
         className="image-lightbox"
         role="dialog"
         aria-modal="true"
-        aria-label="预览"
-        onClick={() => setLightbox(null)}
+        aria-label={
+          n > 1 ? ui.uiLightboxAria(lbIdx + 1, n) : ui.uiLightboxPreview
+        }
+        onClick={() => {
+          if (
+            performance.now() < lightboxSuppressClicksUntilRef.current
+          ) {
+            return;
+          }
+          closeLightbox();
+        }}
       >
         <button
           type="button"
           className="image-lightbox__close"
-          aria-label="关闭"
+          aria-label={ui.uiClose}
           onClick={(e) => {
             e.stopPropagation();
-            setLightbox(null);
+            closeLightbox();
           }}
         >
           ×
         </button>
-        {lightbox.kind === "image" ? (
-          <div
-            className="image-lightbox__media-stack"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              const it = lightboxAsItem();
-              if (it) openAttachmentMenu(e, it);
-            }}
-          >
-            <MediaLightboxImage
-              url={lightbox.url}
-              className="image-lightbox__img"
-            />
-            <p className="image-lightbox__media-caption">
-              {lightbox.name ?? fileLabelFromUrl(lightbox.url)}
-            </p>
-          </div>
-        ) : lightbox.kind === "video" ? (
-          <div
-            className="image-lightbox__media-stack"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              const it = lightboxAsItem();
-              if (it) openAttachmentMenu(e, it);
-            }}
-          >
-            <MediaLightboxVideo
-              url={lightbox.url}
-              className="image-lightbox__img image-lightbox__video"
-            />
-            <p className="image-lightbox__media-caption">
-              {lightbox.name ?? fileLabelFromUrl(lightbox.url)}
-            </p>
-          </div>
-        ) : lightbox.kind === "audio" ? (
-          <div
-            className="image-lightbox__audio-wrap"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              const it = lightboxAsItem();
-              if (it) openAttachmentMenu(e, it);
-            }}
-          >
-            {lightbox.coverUrl ? (
-              <MediaLightboxCover
-                url={lightbox.coverUrl}
-                className="image-lightbox__audio-cover"
+        <div
+          className="image-lightbox__swipe-area"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={onLightboxSwipePointerDown}
+          onPointerUp={onLightboxSwipePointerUp}
+          onPointerCancel={onLightboxSwipePointerCancel}
+          onClickCapture={onLightboxSwipeAreaClickCapture}
+        >
+          {n > 1 ? (
+            <span className="image-lightbox__pager" aria-live="polite">
+              {lbIdx + 1} / {n}
+            </span>
+          ) : null}
+          {n > 1 ? (
+            <>
+              <button
+                type="button"
+                className="image-lightbox__arrow image-lightbox__arrow--prev"
+                aria-label={ui.uiPrevItem}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goLightbox(-1);
+                }}
               />
-            ) : null}
-            <p className="image-lightbox__audio-title">
-              {lightbox.name ?? fileLabelFromUrl(lightbox.url)}
-            </p>
-            <MediaLightboxAudio
-              url={lightbox.url}
-              className="image-lightbox__audio"
-            />
-          </div>
-        ) : (
-          <div
-            className="image-lightbox__file"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              const it = lightboxAsItem();
-              if (it) openAttachmentMenu(e, it);
-            }}
-          >
-            <FileDocIcon className="image-lightbox__file-icon" />
-            <p className="image-lightbox__file-name">
-              {lightbox.name ?? fileLabelFromUrl(lightbox.url)}
-            </p>
-            <MediaOpenLink
-              url={lightbox.url}
-              className="image-lightbox__file-link"
+              <button
+                type="button"
+                className="image-lightbox__arrow image-lightbox__arrow--next"
+                aria-label={ui.uiNextItem}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goLightbox(1);
+                }}
+              />
+            </>
+          ) : null}
+          {lbItem.kind === "image" ? (
+            <div
+              className="image-lightbox__media-stack"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                const it = lightboxActiveItem();
+                if (it) openAttachmentMenu(e, it);
+              }}
             >
-              在新窗口打开
-            </MediaOpenLink>
-          </div>
-        )}
+              <MediaLightboxImage
+                url={lbItem.url}
+                className="image-lightbox__img"
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+            </div>
+          ) : lbItem.kind === "video" ? (
+            <div
+              className="image-lightbox__media-stack"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                const it = lightboxActiveItem();
+                if (it) openAttachmentMenu(e, it);
+              }}
+            >
+              <MediaLightboxVideo
+                url={lbItem.url}
+                className="image-lightbox__img image-lightbox__video"
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+            </div>
+          ) : lbItem.kind === "audio" ? (
+            <div
+              className="image-lightbox__audio-wrap"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                const it = lightboxActiveItem();
+                if (it) openAttachmentMenu(e, it);
+              }}
+            >
+              {lbItem.coverUrl ? (
+                <MediaLightboxCover
+                  url={lbItem.coverUrl}
+                  className="image-lightbox__audio-cover"
+                />
+              ) : null}
+              <p className="image-lightbox__audio-title">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaLightboxAudio
+                url={lbItem.url}
+                className="image-lightbox__audio"
+              />
+            </div>
+          ) : (
+            <div
+              className="image-lightbox__file"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                const it = lightboxActiveItem();
+                if (it) openAttachmentMenu(e, it);
+              }}
+            >
+              <FileDocIcon className="image-lightbox__file-icon" />
+              <p className="image-lightbox__file-name">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaOpenLink
+                url={lbItem.url}
+                className="image-lightbox__file-link"
+              >
+                {ui.uiOpenInNewWindow}
+              </MediaOpenLink>
+            </div>
+          )}
+        </div>
       </div>,
       document.body
     );
@@ -448,7 +662,7 @@ export function CardGallery({
               setLightbox(null);
             }}
           >
-            设为封面
+            {ui.uiSetCover}
           </button>
         ) : null}
         {attachMenu.item.kind === "image" ? (
@@ -461,7 +675,7 @@ export function CardGallery({
               setAttachMenu(null);
             }}
           >
-            复制图片
+            {ui.uiCopyImage}
           </button>
         ) : null}
         {onRemoveItem ? (
@@ -475,7 +689,7 @@ export function CardGallery({
               setLightbox(null);
             }}
           >
-            删除附件
+            {ui.uiDeleteAttachment}
           </button>
         ) : null}
       </div>,
@@ -485,6 +699,26 @@ export function CardGallery({
   const showPlayBadge =
     !inlineAv &&
     (current.kind === "audio" || current.kind === "video");
+
+  const thumbCtx = Boolean(onRemoveItem || onSetCoverItem);
+  const galleryThumbTitle = (kind: NoteMediaItem["kind"]): string => {
+    if (thumbCtx) {
+      if (kind === "image") return ui.uiGalleryThumbTitleImageRich;
+      if (kind === "file") return ui.uiGalleryThumbTitleFileRich;
+      if (kind === "audio") return ui.uiGalleryThumbTitleAudioRich;
+      return ui.uiGalleryThumbTitleVideoRich;
+    }
+    if (kind === "image") return ui.uiGalleryThumbTitleImagePlain;
+    if (kind === "file") return ui.uiGalleryThumbTitleFilePlain;
+    if (kind === "audio") return ui.uiGalleryThumbTitleAudioPlain;
+    return ui.uiGalleryThumbTitleVideoPlain;
+  };
+  const galleryThumbAria = (kind: NoteMediaItem["kind"]): string => {
+    if (kind === "video") return ui.uiGalleryAriaVideo;
+    if (kind === "image") return ui.uiGalleryAriaImage;
+    if (kind === "audio") return ui.uiGalleryAriaAudio;
+    return ui.uiGalleryAriaFile;
+  };
 
   const thumbInteractive = (() => {
     if (inlineAv && (current.kind === "video" || current.kind === "audio")) {
@@ -516,7 +750,7 @@ export function CardGallery({
                     />
                     <div className="card__gallery-audio-cover-caption">
                       <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
-                        {current.name ?? fileLabelFromUrl(current.url)}
+                        {current.name ?? labelFromUrl(current.url)}
                       </span>
                     </div>
                   </>
@@ -524,7 +758,7 @@ export function CardGallery({
                   <>
                     <AudioGlyphIcon className="card__gallery-audio-icon" />
                     <span className="card__gallery-audio-name">
-                      {current.name ?? fileLabelFromUrl(current.url)}
+                      {current.name ?? labelFromUrl(current.url)}
                     </span>
                   </>
                 )}
@@ -548,32 +782,8 @@ export function CardGallery({
               ? " card__gallery-thumb-hit--audio"
               : "")
         }
-        title={
-          onRemoveItem || onSetCoverItem
-            ? current.kind === "image"
-              ? "点击放大，右键可复制图片或更多"
-              : current.kind === "file"
-                ? "点击查看，右键更多"
-                : current.kind === "audio"
-                  ? "点击放大播放音频，右键更多"
-                  : "点击放大，右键更多"
-            : current.kind === "image"
-              ? "点击放大，右键可复制图片"
-              : current.kind === "file"
-                ? "点击查看"
-                : current.kind === "audio"
-                  ? "点击放大播放音频"
-                  : "点击放大"
-        }
-        aria-label={
-          current.kind === "video"
-            ? "点击放大播放视频"
-            : current.kind === "image"
-              ? "点击放大查看图片"
-              : current.kind === "audio"
-                ? "点击放大播放音频"
-                : "查看文件"
-        }
+        title={galleryThumbTitle(current.kind)}
+        aria-label={galleryThumbAria(current.kind)}
         onClick={(e) => {
           e.stopPropagation();
           openCurrentLightbox();
@@ -607,7 +817,7 @@ export function CardGallery({
                   />
                   <div className="card__gallery-audio-cover-caption">
                     <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
-                      {current.name ?? fileLabelFromUrl(current.url)}
+                      {current.name ?? labelFromUrl(current.url)}
                     </span>
                   </div>
                 </>
@@ -615,7 +825,7 @@ export function CardGallery({
                 <>
                   <AudioGlyphIcon className="card__gallery-audio-icon" />
                   <span className="card__gallery-audio-name">
-                    {current.name ?? fileLabelFromUrl(current.url)}
+                    {current.name ?? labelFromUrl(current.url)}
                   </span>
                 </>
               )}
@@ -636,7 +846,7 @@ export function CardGallery({
           <div className="card__gallery-file">
             <FileDocIcon className="card__gallery-file-icon" />
             <span className="card__gallery-file-name">
-              {current.name ?? fileLabelFromUrl(current.url)}
+              {current.name ?? labelFromUrl(current.url)}
             </span>
           </div>
         )}
@@ -648,16 +858,25 @@ export function CardGallery({
     <div className="card__gallery">
       {lightboxPortal}
       {attachMenuPortal}
-      <div className="card__gallery-viewport">
+      <div
+        ref={viewportRef}
+        className="card__gallery-viewport"
+        onPointerDown={onGalleryViewportPointerDown}
+        onPointerUp={onGalleryViewportPointerUp}
+        onPointerCancel={onGalleryViewportPointerCancel}
+        onClickCapture={onGalleryViewportClickCapture}
+      >
         {thumbInteractive}
         {uploadPending && n > 0 ? (
           <div
             className="card__gallery-upload-strip"
             aria-busy
-            aria-label="上传中"
+            aria-label={ui.uiUploading}
           >
             <span className="card__gallery-upload-spinner" aria-hidden />
-            <span className="card__gallery-upload-strip__text">上传中</span>
+            <span className="card__gallery-upload-strip__text">
+              {ui.uiUploading}
+            </span>
           </div>
         ) : null}
         {n > 1 ? (
@@ -670,7 +889,7 @@ export function CardGallery({
             <button
               type="button"
               className="card__gallery-arrow card__gallery-arrow--prev"
-              aria-label="上一项"
+              aria-label={ui.uiPrevItem}
               onClick={(e) => {
                 e.stopPropagation();
                 go(-1);
@@ -679,7 +898,7 @@ export function CardGallery({
             <button
               type="button"
               className="card__gallery-arrow card__gallery-arrow--next"
-              aria-label="下一项"
+              aria-label={ui.uiNextItem}
               onClick={(e) => {
                 e.stopPropagation();
                 go(1);
@@ -691,7 +910,7 @@ export function CardGallery({
           <div
             className="card__gallery-dots"
             role="tablist"
-            aria-label="分页"
+            aria-label={ui.uiPagination}
           >
             {items.map((_, idx) => (
               <button

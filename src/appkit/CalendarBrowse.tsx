@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useAppChrome } from "../i18n/useAppChrome";
 import { localDateString } from "./dateUtils";
 
 /** 年月分栏输入；避免 type=month 受控时逐字改年会被浏览器解析成 1902 等错误值 */
@@ -13,6 +14,7 @@ export function CalendarYearMonthFields({
   calendarViewMonth: Date;
   setCalendarViewMonth: (d: Date) => void;
 }) {
+  const c = useAppChrome();
   const syncKey = `${calendarViewMonth.getFullYear()}-${calendarViewMonth.getMonth()}`;
   const [yearField, setYearField] = useState(() =>
     String(calendarViewMonth.getFullYear())
@@ -52,7 +54,7 @@ export function CalendarYearMonthFields({
       <input
         type="text"
         className="sidebar__cal-year-field"
-        aria-label="年（四位数字）"
+        aria-label={c.calAriaYear}
         inputMode="numeric"
         autoComplete="off"
         maxLength={4}
@@ -68,12 +70,12 @@ export function CalendarYearMonthFields({
         }}
       />
       <span className="sidebar__cal-ym-sep" aria-hidden>
-        年
+        {c.calYearSuffix}
       </span>
       <input
         type="text"
         className="sidebar__cal-month-field"
-        aria-label="月（1–12）"
+        aria-label={c.calAriaMonth}
         inputMode="numeric"
         autoComplete="off"
         maxLength={2}
@@ -89,7 +91,7 @@ export function CalendarYearMonthFields({
         }}
       />
       <span className="sidebar__cal-ym-sep" aria-hidden>
-        月
+        {c.calMonthSuffix}
       </span>
     </div>
   );
@@ -116,13 +118,14 @@ export function CalendarBrowsePanel({
   datesWithRemindersSet: ReadonlySet<string>;
   onDayClick: (dateStr: string) => void;
 }) {
+  const c = useAppChrome();
   return (
     <>
       <div className="sidebar__cal-head">
         <button
           type="button"
           className="sidebar__cal-nav-btn"
-          aria-label="上一月"
+          aria-label={c.calPrevMonth}
           onClick={() => {
             const d = new Date(calendarViewMonth);
             d.setMonth(d.getMonth() - 1);
@@ -140,7 +143,7 @@ export function CalendarBrowsePanel({
         <button
           type="button"
           className="sidebar__cal-nav-btn"
-          aria-label="下一月"
+          aria-label={c.calNextMonth}
           onClick={() => {
             const d = new Date(calendarViewMonth);
             d.setMonth(d.getMonth() + 1);
@@ -153,7 +156,7 @@ export function CalendarBrowsePanel({
         </button>
       </div>
       <div className="sidebar__cal-weekdays" aria-hidden>
-        {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
+        {c.calWeekdays.map((w) => (
           <span key={w} className="sidebar__cal-wd">
             {w}
           </span>

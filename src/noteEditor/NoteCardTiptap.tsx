@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { useAppChrome } from "../i18n/useAppChrome";
 import { noteBodyToHtml } from "./plainHtml";
 import type { NoteCardTiptapProps } from "./NoteCardTiptapCore";
 
@@ -11,14 +12,12 @@ const NoteCardTiptapCore = lazy(() =>
 );
 
 /**
- * 与 CardRowInner 测量 `.ProseMirror` 兼容；chunk 加载前即可显示正文 HTML，利于 LCP。
+ * 卡片正文 chunk 懒加载；chunk 未到前可先渲染静态 HTML，利于 LCP。
  */
-function NoteCardTiptapFallback({
-  id,
-  value,
-  canEdit,
-  ariaLabel = "笔记正文",
-}: NoteCardTiptapProps) {
+function NoteCardTiptapFallback(
+  props: NoteCardTiptapProps & { ariaLabel: string }
+) {
+  const { id, value, canEdit, ariaLabel } = props;
   const html = noteBodyToHtml(value);
   return (
     <div
@@ -43,9 +42,12 @@ function NoteCardTiptapFallback({
 }
 
 export function NoteCardTiptap(props: NoteCardTiptapProps) {
+  const c = useAppChrome();
+  const ariaLabel = props.ariaLabel ?? c.uiNoteBodyAria;
+  const merged = { ...props, ariaLabel };
   return (
-    <Suspense fallback={<NoteCardTiptapFallback {...props} />}>
-      <NoteCardTiptapCore {...props} />
+    <Suspense fallback={<NoteCardTiptapFallback {...merged} />}>
+      <NoteCardTiptapCore {...merged} />
     </Suspense>
   );
 }

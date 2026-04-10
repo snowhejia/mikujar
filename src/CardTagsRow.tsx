@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppChrome } from "./i18n/useAppChrome";
 import type { NoteCard } from "./types";
 
 export function formatTagsForInput(tags: string[] | undefined): string {
@@ -23,6 +24,7 @@ export function CardTagsRow({
   canEdit: boolean;
   onCommit: (colId: string, cardId: string, tags: string[]) => void;
 }) {
+  const c = useAppChrome();
   const tags = card.tags ?? [];
   const tagsKey = tags.join("\u0001");
   const [draft, setDraft] = useState(() => formatTagsForInput(tags));
@@ -33,7 +35,7 @@ export function CardTagsRow({
 
   return (
     <div className="card__tags-row">
-      <span className="card__tags-label">标签：</span>
+      <span className="card__tags-label">{c.uiTagsLabel}</span>
       {canEdit ? (
         <input
           type="text"
@@ -47,7 +49,7 @@ export function CardTagsRow({
               (e.target as HTMLInputElement).blur();
             }
           }}
-          aria-label="标签"
+          aria-label={c.uiTagsAria}
         />
       ) : (
         <span className="card__tags-view">{formatTagsForInput(tags)}</span>

@@ -1,19 +1,31 @@
 import type { ReactNode } from "react";
-import type { NoteCard } from "../types";
+import { useAppUiLang } from "../appUiLang";
 import { formatReminderDateLabel } from "../cardTimeLabel";
+import { useAppChrome } from "../i18n/useAppChrome";
+import type { NoteCard } from "../types";
 import type { ReminderListEntry } from "./collectionModel";
+import {
+  MasonryShortestColumns,
+  useMasonryColumnCount,
+} from "./MasonryShortestColumns";
 
 export function AllRemindersView({
   entries,
   renderCard,
+  masonryLayout = false,
 }: {
   entries: ReminderListEntry[];
   renderCard: (colId: string, card: NoteCard) => ReactNode;
+  masonryLayout?: boolean;
 }) {
+  const c = useAppChrome();
+  const { lang } = useAppUiLang();
+  const masonryColumnCount = useMasonryColumnCount();
+
   if (entries.length === 0) {
     return (
       <div className="timeline__empty all-reminders-page__empty">
-        暂无带提醒的笔记～在卡片「⋯」里可设置提醒日；侧栏月历上有提醒的日期会显示小角标。
+        {c.allRemEmpty}
       </div>
     );
   }
@@ -30,14 +42,17 @@ export function AllRemindersView({
       <section
         key={date}
         className="timeline__pin-section timeline__reminder-section"
-        aria-label={`提醒 ${formatReminderDateLabel(date)}`}
+        aria-label={`${c.reminderAriaPrefix} ${formatReminderDateLabel(date, lang)}`}
       >
         <h2 className="timeline__pin-heading">
-          {formatReminderDateLabel(date)}
+          {formatReminderDateLabel(date, lang)}
         </h2>
-        <ul className="cards">
+        <MasonryShortestColumns
+          enabled={masonryLayout}
+          columnCount={masonryColumnCount}
+        >
           {group.map((ent) => renderCard(ent.col.id, ent.card))}
-        </ul>
+        </MasonryShortestColumns>
       </section>
     );
   }
@@ -45,7 +60,7 @@ export function AllRemindersView({
   return (
     <div className="all-reminders-page">
       <p className="all-reminders-page__intro">
-        共 {entries.length} 条提醒，按提醒日排序；与合集内卡片相同，可在此直接编辑或点「查看详情」。
+        {c.allRemFooter(entries.length)}
       </p>
       {sections}
     </div>

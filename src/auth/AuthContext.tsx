@@ -17,6 +17,9 @@ import {
   sendRegisterCode,
   type AuthUser,
 } from "../api/auth";
+import { useLegalPages } from "../legalPages";
+import { loginUiT } from "./loginUiI18n";
+import { useAppUiLang } from "../appUiLang";
 import { getAppDataMode } from "../appDataModeStorage";
 import {
   authUsesHttpOnlyCookie,
@@ -84,6 +87,8 @@ function LoginModal({
   const [sendSuccessHint, setSendSuccessHint] = useState("");
   const [busy, setBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
+  const { lang: uiLang, setLang: setUiLang } = useAppUiLang();
+  const t = useMemo(() => loginUiT(uiLang), [uiLang]);
 
   useEffect(() => {
     if (blockingWall) return;
@@ -99,7 +104,7 @@ function LoginModal({
     setBusy(true);
     try {
       const r = await onLogin(username.trim(), password);
-      if (!r.ok) setError(r.error ?? "登录失败惹，再检查一下？");
+      if (!r.ok) setError(r.error ?? t.errLoginDefault);
       else {
         setPassword("");
         setUsername("");
@@ -114,7 +119,7 @@ function LoginModal({
     setSendSuccessHint("");
     const em = regEmail.trim();
     if (!em) {
-      setError("请先填写邮箱");
+      setError(t.errEnterEmail);
       return;
     }
     setSendBusy(true);
@@ -124,9 +129,7 @@ function LoginModal({
         setError(r.error);
       } else {
         setError("");
-        setSendSuccessHint(
-          "验证码已发出，请查收邮件（含垃圾箱），10 分钟内填入下方即可～"
-        );
+        setSendSuccessHint(t.sendCodeOk);
       }
     } finally {
       setSendBusy(false);
@@ -143,7 +146,7 @@ function LoginModal({
         regPassword,
         regDisplayName.trim()
       );
-      if (!r.ok) setError(r.error ?? "注册翻车啦，再试一次？");
+      if (!r.ok) setError(r.error ?? t.errRegisterDefault);
       else {
         setRegEmail("");
         setRegCode("");
@@ -155,8 +158,7 @@ function LoginModal({
     }
   };
 
-  const legalTerms = `${import.meta.env.BASE_URL}legal/terms.html`;
-  const legalPrivacy = `${import.meta.env.BASE_URL}legal/privacy.html`;
+  const { openTerms, openPrivacy } = useLegalPages();
 
   return (
     <div
@@ -172,38 +174,67 @@ function LoginModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="auth-modal-brand-name"
+          lang={uiLang === "en" ? "en" : "zh-CN"}
           onClick={(e) => e.stopPropagation()}
         >
-        <div className="auth-modal__brand">
-          <img
-            src={`${import.meta.env.BASE_URL}favicon.svg`}
-            alt=""
-            width={48}
-            height={48}
-            className="auth-modal__brand-logo"
-            draggable={false}
-          />
-          <div className="auth-modal__brand-text">
-            <span
-              id="auth-modal-brand-name"
-              className="auth-modal__brand-title"
+        <div className="auth-modal__head-row">
+          <div className="auth-modal__brand">
+            <img
+              src={`${import.meta.env.BASE_URL}favicon.svg`}
+              alt=""
+              width={48}
+              height={48}
+              className="auth-modal__brand-logo"
+              draggable={false}
+            />
+            <div className="auth-modal__brand-text">
+              <span
+                id="auth-modal-brand-name"
+                className="auth-modal__brand-title"
+              >
+                未来罐
+              </span>
+              <span className="auth-modal__brand-slug">mikujar</span>
+            </div>
+          </div>
+          <div
+            className="auth-modal__lang"
+            role="group"
+            aria-label={t.langSwitchAria}
+          >
+            <button
+              type="button"
+              className={
+                "auth-modal__lang-btn" +
+                (uiLang === "zh" ? " auth-modal__lang-btn--active" : "")
+              }
+              aria-pressed={uiLang === "zh"}
+              onClick={() => setUiLang("zh")}
             >
-              未来罐
-            </span>
-            <span className="auth-modal__brand-slug">mikujar</span>
+              中
+            </button>
+            <button
+              type="button"
+              className={
+                "auth-modal__lang-btn" +
+                (uiLang === "en" ? " auth-modal__lang-btn--active" : "")
+              }
+              aria-pressed={uiLang === "en"}
+              onClick={() => setUiLang("en")}
+            >
+              EN
+            </button>
           </div>
         </div>
         {panel === "login" ? (
           <>
-            <h2 className="auth-modal__title">登录账号</h2>
-            <p className="auth-modal__hint">
-              用户名或邮箱 + 密码就能进来～笔记和小附件都会乖乖跟着你的账号走，新同学还会收到罐子里的小导览 ✨
-            </p>
+            <h2 className="auth-modal__title">{t.loginTitle}</h2>
+            <p className="auth-modal__hint">{t.loginHint}</p>
             <input
               type="text"
               className="auth-modal__input"
               autoComplete="username"
-              placeholder="用户名或邮箱"
+              placeholder={t.phUser}
               value={username}
               disabled={busy}
               onChange={(e) => setUsername(e.target.value)}
@@ -215,7 +246,7 @@ function LoginModal({
               type="password"
               className="auth-modal__input"
               autoComplete="current-password"
-              placeholder="口令 / 密码"
+              placeholder={t.phPassword}
               value={password}
               disabled={busy}
               onChange={(e) => setPassword(e.target.value)}
@@ -226,17 +257,14 @@ function LoginModal({
           </>
         ) : (
           <>
-            <h2 className="auth-modal__title">邮箱注册</h2>
-            <p className="auth-modal__hint">
-              填好邮箱点「发验证码」，收到信后把 6
-              位数字填进来，再设一个至少 6 位的密码，就注册完成啦～
-            </p>
+            <h2 className="auth-modal__title">{t.registerTitle}</h2>
+            <p className="auth-modal__hint">{t.registerHint}</p>
             <div className="auth-modal__input-row">
               <input
                 type="email"
                 className="auth-modal__input"
                 autoComplete="email"
-                placeholder="邮箱"
+                placeholder={t.phEmail}
                 value={regEmail}
                 disabled={busy || sendBusy}
                 onChange={(e) => {
@@ -250,7 +278,7 @@ function LoginModal({
                 disabled={busy || sendBusy || !regEmail.trim()}
                 onClick={() => void sendCode()}
               >
-                {sendBusy ? "…" : "发验证码"}
+                {sendBusy ? "…" : t.sendCode}
               </button>
             </div>
             <input
@@ -258,7 +286,7 @@ function LoginModal({
               inputMode="numeric"
               className="auth-modal__input"
               autoComplete="one-time-code"
-              placeholder="6 位验证码"
+              placeholder={t.phCode}
               value={regCode}
               disabled={busy}
               onChange={(e) => setRegCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -270,7 +298,7 @@ function LoginModal({
               type="password"
               className="auth-modal__input"
               autoComplete="new-password"
-              placeholder="密码（至少 6 位）"
+              placeholder={t.phRegPassword}
               value={regPassword}
               disabled={busy}
               onChange={(e) => setRegPassword(e.target.value)}
@@ -279,7 +307,7 @@ function LoginModal({
               type="text"
               className="auth-modal__input"
               autoComplete="nickname"
-              placeholder="昵称（可选，默认同邮箱前缀）"
+              placeholder={t.phNickname}
               value={regDisplayName}
               disabled={busy}
               onChange={(e) => setRegDisplayName(e.target.value)}
@@ -301,22 +329,22 @@ function LoginModal({
         ) : null}
         {panel === "register" ? (
           <p className="auth-modal__consent">
-            注册即表示你已阅读并同意
-            <a
-              href={legalTerms}
-              target="_blank"
-              rel="noopener noreferrer"
+            {t.consentBefore}
+            <button
+              type="button"
+              className="auth-modal__consent-link"
+              onClick={openTerms}
             >
-              《用户协议》
-            </a>
-            与
-            <a
-              href={legalPrivacy}
-              target="_blank"
-              rel="noopener noreferrer"
+              {t.termsLink}
+            </button>
+            {t.consentBetween}
+            <button
+              type="button"
+              className="auth-modal__consent-link"
+              onClick={openPrivacy}
             >
-              《隐私政策》
-            </a>
+              {t.privacyLink}
+            </button>
           </p>
         ) : null}
         <div className="auth-modal__actions">
@@ -327,7 +355,7 @@ function LoginModal({
               onClick={onClose}
               disabled={busy || sendBusy}
             >
-              稍后再说
+              {t.later}
             </button>
           )}
           {panel === "login" ? (
@@ -340,7 +368,7 @@ function LoginModal({
               onClick={() => void submitLogin()}
               disabled={busy || !username.trim() || !password}
             >
-              {busy ? "…" : "开罐！"}
+              {busy ? "…" : t.loginSubmit}
             </button>
           ) : (
             <button
@@ -357,14 +385,14 @@ function LoginModal({
                 regPassword.length < 6
               }
             >
-              {busy ? "…" : "注册并登录"}
+              {busy ? "…" : t.registerSubmit}
             </button>
           )}
         </div>
         <p className="auth-modal__sub">
           {panel === "login" ? (
             <>
-              还没有账号？{" "}
+              {t.subNoAccount}{" "}
               <button
                 type="button"
                 className="auth-modal__link"
@@ -375,12 +403,12 @@ function LoginModal({
                   setSendSuccessHint("");
                 }}
               >
-                邮箱注册
+                {t.linkRegister}
               </button>
             </>
           ) : (
             <>
-              已有账号？{" "}
+              {t.subHasAccount}{" "}
               <button
                 type="button"
                 className="auth-modal__link"
@@ -391,7 +419,7 @@ function LoginModal({
                   setSendSuccessHint("");
                 }}
               >
-                去登录
+                {t.linkLogin}
               </button>
             </>
           )}
@@ -403,24 +431,24 @@ function LoginModal({
         role="contentinfo"
         onClick={(e) => e.stopPropagation()}
       >
-        <a
-          href={legalTerms}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          className="auth-modal-backdrop__legal-btn"
+          onClick={openTerms}
         >
-          用户协议
-        </a>
+          {t.footerTerms}
+        </button>
         <span className="auth-modal-backdrop__legal-sep" aria-hidden>
           {" "}
           ·{" "}
         </span>
-        <a
-          href={legalPrivacy}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          className="auth-modal-backdrop__legal-btn"
+          onClick={openPrivacy}
         >
-          隐私政策
-        </a>
+          {t.footerPrivacy}
+        </button>
       </footer>
     </div>
   );

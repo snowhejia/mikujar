@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { Collection } from "./types";
 import type { MediaQuotaInfo } from "./api/auth";
+import { useAppChrome } from "./i18n/useAppChrome";
 import {
   formatByteSize,
   summarizeNoteLibraryStats,
@@ -27,6 +28,7 @@ export function DataStatsModal({
   role,
   onOpen,
 }: DataStatsModalProps) {
+  const c = useAppChrome();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -59,11 +61,11 @@ export function DataStatsModal({
 
   const roleLabel =
     role === "admin"
-      ? "站长"
+      ? c.dataStatsRoleAdmin
       : role === "subscriber"
-        ? "订阅用户"
+        ? c.dataStatsRoleSubscriber
         : role === "user"
-          ? "普通用户"
+          ? c.dataStatsRoleUser
           : null;
 
   const panel = (
@@ -80,26 +82,28 @@ export function DataStatsModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="data-stats-title" className="auth-modal__title">
-          数据统计
+          {c.dataStatsTitle}
         </h2>
         <p className="auth-modal__hint data-stats-modal__hint">
-          当前工作区内的合集、卡片与附件占用（按本机已记录或可推算的数据汇总）。
+          {c.dataStatsHint}
         </p>
 
         <dl className="data-stats-modal__list">
           <div className="data-stats-modal__row">
-            <dt>合集</dt>
+            <dt>{c.dataStatsCollections}</dt>
             <dd>{stats.collectionCount}</dd>
           </div>
           <div className="data-stats-modal__row">
-            <dt>卡片</dt>
+            <dt>{c.dataStatsCards}</dt>
             <dd>{stats.cardCount}</dd>
           </div>
           <div className="data-stats-modal__row">
-            <dt>附件</dt>
+            <dt>{c.dataStatsAttachments}</dt>
             <dd>
-              {stats.attachmentCount} 个 ·{" "}
-              {formatByteSize(stats.attachmentBytes)}
+              {c.dataStatsAttachmentLine(
+                stats.attachmentCount,
+                formatByteSize(stats.attachmentBytes)
+              )}
             </dd>
           </div>
         </dl>
@@ -108,13 +112,13 @@ export function DataStatsModal({
           <div className="data-stats-modal__quota">
             <div className="data-stats-modal__quota-head">
               <span className="data-stats-modal__quota-label">
-                云端附件额度
+                {c.dataStatsQuotaHead}
               </span>
               <span className="data-stats-modal__quota-plan">{roleLabel}</span>
             </div>
             {mediaQuota.quotaUnlimited ? (
               <p className="data-stats-modal__quota-meta data-stats-modal__quota-meta--admin">
-                站长账号不按普通/订阅额度；单文件大小仅受服务器配置上限（UPLOAD_MAX_MB）。
+                {c.dataStatsAdminUnlimited}
               </p>
             ) : (
               <>
@@ -124,7 +128,7 @@ export function DataStatsModal({
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(quotaPct)}
-                  aria-label="本月附件上传用量"
+                  aria-label={c.dataStatsQuotaAria}
                 >
                   <div
                     className="data-stats-modal__quota-bar"
@@ -132,19 +136,23 @@ export function DataStatsModal({
                   />
                 </div>
                 <p className="data-stats-modal__quota-meta">
-                  本月已上传 {formatByteSize(mediaQuota.uploadedBytesMonth)} /{" "}
-                  {formatByteSize(mediaQuota.monthlyLimitBytes)}（自然月{" "}
-                  {mediaQuota.usageMonth}，月初重置）
+                  {c.dataStatsQuotaLine(
+                    formatByteSize(mediaQuota.uploadedBytesMonth),
+                    formatByteSize(mediaQuota.monthlyLimitBytes),
+                    mediaQuota.usageMonth
+                  )}
                 </p>
                 <p className="data-stats-modal__quota-meta data-stats-modal__quota-meta--inline">
                   <span>
-                    单文件上限 {formatByteSize(mediaQuota.singleFileMaxBytes)}
+                    {c.dataStatsSingleFile(
+                      formatByteSize(mediaQuota.singleFileMaxBytes)
+                    )}
                   </span>
                   <span className="data-stats-modal__quota-meta-sep" aria-hidden>
                     ·
                   </span>
                   <span className="data-stats-modal__quota-meta-sub">
-                    删除已上传的附件不会恢复当月额度。
+                    {c.dataStatsDeleteNoRefund}
                   </span>
                 </p>
               </>
@@ -158,7 +166,7 @@ export function DataStatsModal({
             className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
             onClick={onClose}
           >
-            完成
+            {c.done}
           </button>
         </div>
       </div>

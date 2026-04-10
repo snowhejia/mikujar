@@ -6,7 +6,9 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import App from "./App";
 import { AppDataModeProvider } from "./appDataMode";
+import { AppUiLangProvider } from "./appUiLang";
 import { AuthProvider } from "./auth/AuthContext";
+import { LegalPagesProvider } from "./legalPages";
 import "./index.css";
 
 /** Capacitor iOS：辅助栏 + 浅色键盘（与页面一致，减轻黑底观感） */
@@ -38,11 +40,15 @@ disableIosPinchZoom();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppDataModeProvider>
-      <AuthProvider>
-        <App />
-        <Analytics />
-        <SpeedInsights />
-      </AuthProvider>
+      <AppUiLangProvider>
+        <LegalPagesProvider>
+          <AuthProvider>
+            <App />
+            <Analytics />
+            <SpeedInsights />
+          </AuthProvider>
+        </LegalPagesProvider>
+      </AppUiLangProvider>
     </AppDataModeProvider>
   </StrictMode>
 );

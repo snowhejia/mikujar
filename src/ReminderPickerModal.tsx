@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAppChrome } from "./i18n/useAppChrome";
 import type { Collection, NoteCard } from "./types";
 
 function findCard(
@@ -40,6 +41,7 @@ export function ReminderPickerModal({
   onSave: (isoDate: string) => void;
   onClear: () => void;
 }) {
+  const c = useAppChrome();
   const card = open ? findCard(collections, colId, cardId) : null;
   const [value, setValue] = useState("");
 
@@ -74,13 +76,11 @@ export function ReminderPickerModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="reminder-picker-title" className="reminder-picker-modal__title">
-          设置提醒
+          {c.remPickerTitle}
         </h2>
-        <p className="reminder-picker-modal__hint">
-          在侧栏日历中选中该日期时，这条笔记会出现在当日列表最上方的「提醒」区域。
-        </p>
+        <p className="reminder-picker-modal__hint">{c.remPickerHint}</p>
         <label className="reminder-picker-modal__label">
-          提醒日期
+          {c.remPickerDateLabel}
           <input
             type="date"
             className="reminder-picker-modal__input"
@@ -94,7 +94,7 @@ export function ReminderPickerModal({
             className="reminder-picker-modal__btn reminder-picker-modal__btn--ghost"
             onClick={onClose}
           >
-            取消
+            {c.remPickerCancel}
           </button>
           {card.reminderOn ? (
             <button
@@ -105,7 +105,7 @@ export function ReminderPickerModal({
                 onClose();
               }}
             >
-              清除提醒
+              {c.remPickerClear}
             </button>
           ) : null}
           <button
@@ -118,7 +118,7 @@ export function ReminderPickerModal({
               onClose();
             }}
           >
-            保存
+            {c.remPickerSave}
           </button>
         </div>
       </div>

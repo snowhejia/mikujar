@@ -2,18 +2,18 @@ import type { Dispatch, SetStateAction } from "react";
 import { CardGallery } from "../CardGallery";
 import { CardRowInner } from "../CardRowInner";
 import { CardTagsRow } from "../CardTagsRow";
+import { useAppChrome } from "../i18n/useAppChrome";
+import { useAppUiLang } from "../appUiLang";
 import { NoteCardTiptap } from "../noteEditor/NoteCardTiptap";
 import {
   formatCardReminderBesideTime,
   formatCardTimeLabel,
 } from "../cardTimeLabel";
 import type { TrashedNoteEntry } from "../types";
-import { cardNeedsMasonryCollapse } from "./masonryLayout";
 
 export type TrashNoteCardRowProps = {
   entry: TrashedNoteEntry;
   canEdit: boolean;
-  masonryLayout: boolean;
   cardMenuId: string | null;
   setCardMenuId: Dispatch<SetStateAction<string | null>>;
   restoreTrashedEntry: (entry: TrashedNoteEntry) => void;
@@ -24,37 +24,34 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
   const {
     entry,
     canEdit,
-    masonryLayout,
     cardMenuId,
     setCardMenuId,
     restoreTrashedEntry,
     purgeTrashedEntry,
   } = p;
 
+  const { lang } = useAppUiLang();
+  const c = useAppChrome();
   const card = entry.card;
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   const hasGallery = media.length > 0;
-  const trashReminderBeside = formatCardReminderBesideTime(card);
-  const trashHugeMasonry =
-    masonryLayout && cardNeedsMasonryCollapse(card);
+  const trashReminderBeside = formatCardReminderBesideTime(card, lang);
   const menuId = `__trash__${entry.trashId}`;
   return (
     <li
+      data-masonry-key={entry.trashId}
       className={
         "card card--in-trash" +
-        (cardMenuId === menuId ? " is-menu-open" : "") +
-        (trashHugeMasonry ? " card--masonry-collapsed" : "")
+        (cardMenuId === menuId ? " is-menu-open" : "")
       }
       title={
         entry.colPathLabel
-          ? `原所在合集：${entry.colPathLabel}`
+          ? c.uiTrashFromCollection(entry.colPathLabel)
           : undefined
       }
     >
       <CardRowInner
         hasGallery={hasGallery}
-        textRev={card.text}
-        masonryLayout={masonryLayout}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")
         }
@@ -67,7 +64,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
         >
           <div className="card__toolbar">
             <span className="card__time">
-              {formatCardTimeLabel(card)}
+              {formatCardTimeLabel(card, lang)}
               {trashReminderBeside ? (
                 <span className="card__time-reminder">
                   {trashReminderBeside}
@@ -83,7 +80,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
                   <button
                     type="button"
                     className="card__more"
-                    aria-label="更多操作"
+                    aria-label={c.uiMoreActions}
                     aria-expanded={cardMenuId === menuId}
                     onClick={() =>
                       setCardMenuId((id) =>
@@ -108,7 +105,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
                           restoreTrashedEntry(entry);
                         }}
                       >
-                        恢复到原合集
+                        {c.uiTrashRestore}
                       </button>
                       <button
                         type="button"
@@ -119,7 +116,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
                           purgeTrashedEntry(entry.trashId);
                         }}
                       >
-                        永久删除
+                        {c.uiTrashDeleteForever}
                       </button>
                     </div>
                   ) : null}
@@ -133,7 +130,6 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
             id={`trash-card-text-${entry.trashId}`}
             value={card.text}
             canEdit={false}
-            ariaLabel="笔记正文"
             onChange={() => {}}
           />
           <CardTagsRow

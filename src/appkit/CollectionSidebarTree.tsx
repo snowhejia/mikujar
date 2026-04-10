@@ -6,6 +6,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { DragEvent } from "react";
+import { useAppChrome } from "../i18n/useAppChrome";
 import type { Collection } from "../types";
 import { countSidebarCollectionCardBadge } from "./collectionModel";
 import { CollectionDragGripIcon } from "./AppIcons";
@@ -61,6 +62,7 @@ export type CollectionSidebarTreeProps = {
 };
 
 function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
+  const ui = useAppChrome();
   const {
     items,
     depth,
@@ -171,7 +173,11 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
                 "sidebar__chevron" +
                 (collapsed ? "" : " is-expanded")
               }
-              aria-label={collapsed ? "展开子合集" : "折叠子合集"}
+              aria-label={
+                collapsed
+                  ? ui.uiExpandSubcollections
+                  : ui.uiCollapseSubcollections
+              }
               aria-expanded={!collapsed}
               onClick={(e) => {
                 e.stopPropagation();
@@ -222,7 +228,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
                 type="text"
                 className="sidebar__name-input"
                 value={draftCollectionName}
-                aria-label="合集名称"
+                aria-label={ui.uiCollectionNameAria}
                 onChange={(e) =>
                   setDraftCollectionName(e.target.value)
                 }
@@ -244,7 +250,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
               <span
                 className="sidebar__name"
                 title={
-                  canEdit ? "双击修改名称；右键可删除合集" : undefined
+                  canEdit ? ui.uiCollectionNameHint : undefined
                 }
                 onDoubleClick={
                   canEdit
@@ -270,8 +276,8 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
                   type="button"
                   draggable={false}
                   className="sidebar__add-sub"
-                  aria-label="添加子合集"
-                  title="子合集"
+                  aria-label={ui.uiAddSubcollectionAria}
+                  title={ui.uiAddSubcollectionTitle}
                   onClick={(e) => {
                     e.stopPropagation();
                     addSubCollection(c.id);
@@ -294,8 +300,8 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
                       onCollectionRowDragStart(c.id, e)
                     }
                     onDragEnd={onCollectionRowDragEnd}
-                    aria-label="拖动调整合集顺序"
-                    title="拖动调整顺序"
+                    aria-label={ui.uiDragCollectionAria}
+                    title={ui.uiDragCollectionTitle}
                   >
                     <CollectionDragGripIcon className="sidebar__tree-drag-handle__svg" />
                   </div>

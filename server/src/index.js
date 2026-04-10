@@ -58,6 +58,10 @@ import {
   deleteTrashedNote,
   clearTrashedNotes,
 } from "./storage-pg.js";
+import {
+  broadcastCollectionsChanged,
+  subscribeCollectionsSync,
+} from "./syncFanout.js";
 import { pingDb, closePool } from "./db.js";
 import {
   completeRegistration,
@@ -259,6 +263,11 @@ function getJwtSession(req) {
     const cookies = parseCookies(req.headers.cookie);
     const c = cookies[AUTH_COOKIE_NAME];
     if (typeof c === "string" && c.trim()) token = c.trim();
+  }
+  // EventSource 无法携带 Authorization，允许通过查询参数传 JWT（生产环境务必 HTTPS）
+  if (!token && req.query && typeof req.query.access_token === "string") {
+    const q = req.query.access_token.trim();
+    if (q) token = q;
   }
   if (!token) return null;
   if (API_TOKEN && token === API_TOKEN) return { sub: null, role: "admin", apiToken: true };
@@ -709,6 +718,37 @@ app.get(
   }
 );
 
+/**
+ * GET /api/me/sync/events — SSE：笔记数据变更时推送，客户端防抖后拉取 GET /api/collections。
+ * 浏览器 EventSource 无法带 Authorization，可配合查询参数 access_token=JWT（须 HTTPS）。
+ */
+app.get(
+  "/api/me/sync/events",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  (req, res) => {
+    const key = preferencesOwnerKey(req);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+    subscribeCollectionsSync(key, res);
+    res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+    const ping = setInterval(() => {
+      try {
+        if (!res.writableEnded) res.write(": ping\n\n");
+      } catch {
+        clearInterval(ping);
+      }
+    }, 25_000);
+    const cleanup = () => clearInterval(ping);
+    res.on("close", cleanup);
+  }
+);
+
 /** PUT /api/collections：仅用于数据迁移 / 批量导入（生产日常写操作请用粒度化接口） */
 app.put(
   "/api/collections",
@@ -722,6 +762,7 @@ app.put(
       if (!Array.isArray(body)) return res.status(400).json({ error: "Body must be a JSON array" });
       const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
       await replaceCollectionsTree(userId, body);
+      notifyCollectionsSync(req);
       res.setHeader("X-Deprecated", "use granular card APIs");
       res.json({ ok: true });
     } catch (e) {
@@ -749,6 +790,10 @@ function preferencesOwnerKey(req) {
   return adminGateEnabled ? String(req.collectionsUserId ?? "") : "__single__";
 }
 
+function notifyCollectionsSync(req) {
+  broadcastCollectionsChanged(preferencesOwnerKey(req));
+}
+
 function preferencesReaderMw(req, res, next) {
   if (adminGateEnabled) return requireCollectionsReader(req, res, next);
   next();
@@ -772,6 +817,7 @@ app.post("/api/collections", collectionsWriterMw, async (req, res) => {
       parentId,
       sortOrder,
     });
+    notifyCollectionsSync(req);
     res.status(201).json(col);
   } catch (e) {
     console.error(e);
@@ -784,6 +830,7 @@ app.post("/api/collections", collectionsWriterMw, async (req, res) => {
 app.patch("/api/collections/:id", collectionsWriterMw, async (req, res) => {
   try {
     const col = await updateCollection(getUserId(req), req.params.id, req.body ?? {});
+    notifyCollectionsSync(req);
     res.json(col);
   } catch (e) {
     console.error(e);
@@ -796,6 +843,7 @@ app.patch("/api/collections/:id", collectionsWriterMw, async (req, res) => {
 app.delete("/api/collections/:id", collectionsWriterMw, async (req, res) => {
   try {
     await deleteCollection(getUserId(req), req.params.id);
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -808,6 +856,7 @@ app.delete("/api/collections/:id", collectionsWriterMw, async (req, res) => {
 app.post("/api/collections/:collectionId/cards", collectionsWriterMw, async (req, res) => {
   try {
     const card = await createCard(getUserId(req), req.params.collectionId, req.body ?? {});
+    notifyCollectionsSync(req);
     res.status(201).json(card);
   } catch (e) {
     console.error(e);
@@ -820,6 +869,7 @@ app.post("/api/collections/:collectionId/cards", collectionsWriterMw, async (req
 app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
   try {
     await updateCard(getUserId(req), req.params.id, req.body ?? {});
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -832,6 +882,7 @@ app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
 app.delete("/api/cards/:id", collectionsWriterMw, async (req, res) => {
   try {
     await deleteCard(getUserId(req), req.params.id);
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -870,6 +921,7 @@ app.put("/api/me/favorites", preferencesWriterMw, async (req, res) => {
     }
     const collectionIds = raw.filter((x) => typeof x === "string");
     await replaceFavoriteCollectionIds(key, collectionIds, getUserId(req));
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -913,6 +965,7 @@ app.post("/api/me/trash", preferencesWriterMw, async (req, res) => {
       card,
       deletedAt,
     });
+    notifyCollectionsSync(req);
     res.status(201).json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -929,6 +982,7 @@ app.delete("/api/me/trash", preferencesWriterMw, async (req, res) => {
       return res.status(401).json({ error: "未授权", code: "PUT_AUTH" });
     }
     await clearTrashedNotes(key);
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -945,6 +999,7 @@ app.delete("/api/me/trash/:trashId", preferencesWriterMw, async (req, res) => {
       return res.status(401).json({ error: "未授权", code: "PUT_AUTH" });
     }
     await deleteTrashedNote(key, trashId);
+    notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

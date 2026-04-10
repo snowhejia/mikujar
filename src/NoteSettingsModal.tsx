@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { isTauri } from "@tauri-apps/api/core";
+import { useAppChrome } from "./i18n/useAppChrome";
 import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
 
@@ -21,6 +22,7 @@ export function NoteSettingsModal({
   dataMode,
   setDataMode,
 }: NoteSettingsModalProps) {
+  const c = useAppChrome();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -48,17 +50,19 @@ export function NoteSettingsModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="note-settings-title" className="auth-modal__title">
-          笔记设置
+          {c.noteSettingsTitle}
         </h2>
         <p className="auth-modal__hint note-settings-modal__hint">
-          调整新建笔记出现的位置，以及笔记数据保存在本机还是云端。
+          {c.noteSettingsHint}
         </p>
 
-        <p className="note-settings-modal__label">新建笔记位置</p>
+        <p className="note-settings-modal__label">
+          {c.noteSettingsPlacementLabel}
+        </p>
         <div
           className="note-settings-modal__choice-row"
           role="group"
-          aria-label="新建笔记位置"
+          aria-label={c.noteSettingsPlacementAria}
         >
           <button
             type="button"
@@ -71,7 +75,7 @@ export function NoteSettingsModal({
             aria-pressed={newNotePlacement === "top"}
             onClick={() => setNewNotePlacement("top")}
           >
-            时间线顶部
+            {c.noteSettingsTop}
           </button>
           <button
             type="button"
@@ -84,15 +88,17 @@ export function NoteSettingsModal({
             aria-pressed={newNotePlacement === "bottom"}
             onClick={() => setNewNotePlacement("bottom")}
           >
-            时间线底部
+            {c.noteSettingsBottom}
           </button>
         </div>
 
-        <p className="note-settings-modal__label">数据存储位置</p>
+        <p className="note-settings-modal__label">
+          {c.noteSettingsStorageLabel}
+        </p>
         <div
           className="note-settings-modal__choice-row note-settings-modal__choice-row--stack"
           role="group"
-          aria-label="数据存储位置"
+          aria-label={c.noteSettingsStorageAria}
         >
           {tauri ? (
             <button
@@ -106,7 +112,7 @@ export function NoteSettingsModal({
               aria-pressed={dataMode === "local"}
               onClick={() => setDataMode("local")}
             >
-              本地（此设备）
+              {c.noteSettingsLocal}
             </button>
           ) : null}
           <button
@@ -120,7 +126,7 @@ export function NoteSettingsModal({
             aria-pressed={dataMode === "remote"}
             onClick={() => setDataMode("remote")}
           >
-            云端
+            {c.noteSettingsCloud}
           </button>
         </div>
 
@@ -130,7 +136,7 @@ export function NoteSettingsModal({
             className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
             onClick={onClose}
           >
-            完成
+            {c.done}
           </button>
         </div>
       </div>

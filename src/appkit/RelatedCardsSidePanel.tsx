@@ -18,6 +18,8 @@ import {
   RELATED_PICK_ROW_EST_PX,
   relatedPickSimilarity,
 } from "./relatedPick";
+import { useAppChrome } from "../i18n/useAppChrome";
+import { useRelatedPanelSwipe } from "./useRelatedPanelSwipe";
 
 export function RelatedCardsSidePanel({
   sourceColId,
@@ -38,6 +40,7 @@ export function RelatedCardsSidePanel({
   onAddRelation: (targetColId: string, targetCardId: string) => void;
   onNavigateToCard: (targetColId: string, targetCardId: string) => void;
 }) {
+  const c = useAppChrome();
   const [pickQuery, setPickQuery] = useState("");
   const [pickSlots, setPickSlots] = useState(14);
   const pickGrowRef = useRef<HTMLDivElement>(null);
@@ -117,27 +120,58 @@ export function RelatedCardsSidePanel({
     [pickCandidatesSorted, pickSlots]
   );
 
+  /** 打开时从右侧滑入（与侧栏 transition 节奏一致） */
+  const [slideIn, setSlideIn] = useState(false);
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setSlideIn(true);
+      return;
+    }
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => setSlideIn(true));
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      cancelAnimationFrame(innerRaf);
+    };
+  }, []);
+
+  const relatedSwipe = useRelatedPanelSwipe({ onClose });
+
   return (
-    <div className="related-panel-mount">
+    <div
+      className={
+        "related-panel-mount" + (slideIn ? " related-panel-mount--slide-in" : "")
+      }
+    >
       <div
         className="related-panel-backdrop"
         aria-hidden
         onClick={onClose}
       />
       <aside
-        className="related-panel"
+        className={
+          "related-panel" + (slideIn ? " related-panel--slide-in" : "")
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="related-panel-title"
+        onTouchStart={relatedSwipe.onTouchStart}
+        onTouchEnd={relatedSwipe.onTouchEnd}
+        onTouchCancel={relatedSwipe.onTouchCancel}
       >
         <div className="related-panel__head">
           <h2 id="related-panel-title" className="related-panel__title">
-            相关笔记
+            {c.uiRelatedNotes}
           </h2>
           <button
             type="button"
             className="related-panel__close"
-            aria-label="关闭"
+            aria-label={c.uiClose}
             onClick={onClose}
           >
             ×
@@ -150,15 +184,15 @@ export function RelatedCardsSidePanel({
           }
         >
           {!source ? (
-            <p className="related-panel__hint">源笔记好像蒸发啦…</p>
+            <p className="related-panel__hint">{c.uiRelatedSourceMissing}</p>
           ) : (
             <>
               <div className="related-panel__upper">
                 {relatedList.length === 0 ? (
                   <p className="related-panel__hint">
                     {canEdit
-                      ? "还没有关联笔记，可在下方按相似度搜索并粘贴关联～"
-                      : "还没有关联笔记。"}
+                      ? c.uiRelatedEmptySearch
+                      : c.uiRelatedEmptyPlain}
                   </p>
                 ) : (
                   <ul className="related-panel__list">
@@ -190,8 +224,8 @@ export function RelatedCardsSidePanel({
                               <button
                                 type="button"
                                 className="related-panel__unlink"
-                                aria-label="解除贴贴"
-                                title="解除贴贴"
+                                aria-label={c.uiRelatedUnlink}
+                                title={c.uiRelatedUnlink}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onRemoveRelation(ref.colId, ref.cardId);
@@ -204,14 +238,14 @@ export function RelatedCardsSidePanel({
                         ) : (
                           <div className="related-panel__missing-wrap related-panel__missing-row">
                             <p className="related-panel__missing">
-                              那边笔记不见啦或打不开惹
+                              {c.uiRelatedPeerMissing}
                             </p>
                             {canEdit ? (
                               <button
                                 type="button"
                                 className="related-panel__unlink"
-                                aria-label="撕掉坏掉的贴贴"
-                                title="撕掉坏掉的贴贴"
+                                aria-label={c.uiRelatedUnlinkBroken}
+                                title={c.uiRelatedUnlinkBroken}
                                 onClick={() =>
                                   onRemoveRelation(ref.colId, ref.cardId)
                                 }
@@ -228,11 +262,13 @@ export function RelatedCardsSidePanel({
               </div>
               {canEdit ? (
                 <div className="related-panel__add related-panel__add--fill">
-                  <p className="related-panel__add-label">粘贴关联</p>
+                  <p className="related-panel__add-label">
+                    {c.uiRelatedPasteLabel}
+                  </p>
                   <input
                     type="text"
                     className="related-panel__add-input"
-                    placeholder="搜索笔记（按与当前内容的相似度排序）…"
+                    placeholder={c.uiRelatedSearchPlaceholder}
                     value={pickQuery}
                     onChange={(e) => setPickQuery(e.target.value)}
                     autoComplete="off"
@@ -265,17 +301,19 @@ export function RelatedCardsSidePanel({
                       </ul>
                     ) : pickQuery.trim() ? (
                       <p className="related-panel__hint related-panel__hint--pick">
-                        没找到合拍笔记，换个关键词试试？
+                        {c.uiRelatedNoResults}
                       </p>
                     ) : null}
                   </div>
                 </div>
               ) : (
                 <div className="related-panel__add related-panel__add--fill related-panel__add--readonly">
-                  <p className="related-panel__add-label">粘贴关联</p>
+                  <p className="related-panel__add-label">
+                    {c.uiRelatedPasteLabel}
+                  </p>
                   <div className="related-panel__readonly-lower-body">
                     <p className="related-panel__hint">
-                      只读模式下无法搜索或添加关联。
+                      {c.uiRelatedReadOnly}
                     </p>
                   </div>
                 </div>

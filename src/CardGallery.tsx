@@ -436,11 +436,7 @@ export function CardGallery({
       y: e.clientY,
       pointerId: e.pointerId,
     };
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
+    /* 不在 viewport 上 setPointerCapture：否则部分浏览器上子元素单击放大不触发 click */
   }
 
   function onGalleryViewportPointerUp(
@@ -449,11 +445,6 @@ export function CardGallery({
     const st = swipeTrackRef.current;
     if (!st || st.pointerId !== e.pointerId) return;
     swipeTrackRef.current = null;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
     if (n <= 1) return;
     const dx = e.clientX - st.x;
     const dy = e.clientY - st.y;
@@ -494,11 +485,6 @@ export function CardGallery({
       y: e.clientY,
       pointerId: e.pointerId,
     };
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
   }
 
   function onLightboxSwipePointerUp(
@@ -507,11 +493,6 @@ export function CardGallery({
     const st = lightboxSwipeTrackRef.current;
     if (!st || st.pointerId !== e.pointerId) return;
     lightboxSwipeTrackRef.current = null;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
     if (n <= 1) return;
     const dx = e.clientX - st.x;
     const dy = e.clientY - st.y;

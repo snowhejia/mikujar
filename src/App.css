@@ -3463,15 +3463,18 @@ video.image-lightbox__video {
   margin-right: -2px;
 }
 
-/* 容器全宽且叠在缩略图之上：若整层 pointer-events:auto，底部空白区会挡住单击放大 */
+/* 仅占分页点实际宽度并居中，避免全宽条在部分内核下仍挡住中部单击；子项可点 */
 .card__gallery-dots {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: 8px;
+  transform: translateX(-50%);
   display: flex;
   justify-content: center;
   gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
   z-index: 2;
   pointer-events: none;
 }

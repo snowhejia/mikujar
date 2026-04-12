@@ -318,6 +318,58 @@ export function MediaLightboxAudio({
   );
 }
 
+/** 灯箱内嵌浏览器原生 PDF 阅读器（依赖 iframe + 直链 Content-Type） */
+export function MediaLightboxPdf({
+  url,
+  className,
+  title,
+}: {
+  url: string;
+  className?: string;
+  title?: string;
+}) {
+  const src = useMediaDisplaySrc(url);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(false);
+  }, [src]);
+
+  useEffect(() => {
+    if (!src) return;
+    const t = window.setTimeout(() => setReady(true), 2200);
+    return () => window.clearTimeout(t);
+  }, [src]);
+
+  const showLoading = !src || !ready;
+
+  return (
+    <div
+      className={
+        "image-lightbox__media-frame image-lightbox__media-frame--pdf" +
+        (!src ? " image-lightbox__media-frame--empty" : "")
+      }
+      aria-busy={showLoading || undefined}
+    >
+      {showLoading ? <MediaLightboxLoadingOverlay surface="dark" /> : null}
+      {src ? (
+        <iframe
+          key={src}
+          src={src}
+          title={title ?? "PDF"}
+          className={[
+            className ?? "image-lightbox__pdf",
+            ready ? "image-lightbox__pdf--ready" : "image-lightbox__pdf--pending",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          onLoad={() => setReady(true)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function MediaLightboxCover({
   url,
   className,

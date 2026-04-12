@@ -15,6 +15,7 @@ import {
   MediaLightboxAudio,
   MediaLightboxCover,
   MediaLightboxImage,
+  MediaLightboxPdf,
   MediaLightboxVideo,
   MediaOpenLink,
   MediaThumbImage,
@@ -22,6 +23,7 @@ import {
   MediaThumbVideo,
   useMediaDisplaySrc,
 } from "./mediaDisplay";
+import { isPdfAttachment } from "./noteMediaPdf";
 
 const SWIPE_MIN_PX = 44;
 const SWIPE_DOMINANCE_OVER_VERTICAL = 1.12;
@@ -707,6 +709,30 @@ export function CardGallery({
                 url={lbItem.url}
                 className="image-lightbox__audio"
               />
+            </div>
+          ) : lbItem.kind === "file" && isPdfAttachment(lbItem) ? (
+            <div
+              className="image-lightbox__media-stack image-lightbox__media-stack--pdf"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                const it = lightboxActiveItem();
+                if (it) openAttachmentMenu(e, it);
+              }}
+            >
+              <MediaLightboxPdf
+                url={lbItem.url}
+                className="image-lightbox__pdf"
+                title={lbItem.name ?? labelFromUrl(lbItem.url)}
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaOpenLink
+                url={lbItem.url}
+                className="image-lightbox__file-link image-lightbox__pdf-open-tab"
+              >
+                {ui.uiOpenInNewWindow}
+              </MediaOpenLink>
             </div>
           ) : (
             <div

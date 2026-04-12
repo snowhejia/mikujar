@@ -8,18 +8,34 @@ import {
   type ReactNode,
 } from "react";
 
-export const MASONRY_BREAKPOINT_3COL_PX = 1180;
+/** 视口 ≥ 此宽度用 3 列（原 1180 偏苛刻，大屏仍像「只排两列」） */
+export const MASONRY_BREAKPOINT_3COL_PX = 1024;
+/** 更宽屏再开第 4 列，利用右侧留白 */
+export const MASONRY_BREAKPOINT_4COL_PX = 1480;
 
-export function useMasonryColumnCount(): 2 | 3 {
-  const [n, setN] = useState<2 | 3>(2);
+export function useMasonryColumnCount(): 2 | 3 | 4 {
+  const [n, setN] = useState<2 | 3 | 4>(2);
   useLayoutEffect(() => {
-    const mq = window.matchMedia(
+    const sync = () => {
+      const w = window.innerWidth;
+      if (w >= MASONRY_BREAKPOINT_4COL_PX) setN(4);
+      else if (w >= MASONRY_BREAKPOINT_3COL_PX) setN(3);
+      else setN(2);
+    };
+    sync();
+    const mq3 = window.matchMedia(
       `(min-width: ${MASONRY_BREAKPOINT_3COL_PX}px)`
     );
-    const sync = () => setN(mq.matches ? 3 : 2);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
+    const mq4 = window.matchMedia(
+      `(min-width: ${MASONRY_BREAKPOINT_4COL_PX}px)`
+    );
+    const onChange = () => sync();
+    mq3.addEventListener("change", onChange);
+    mq4.addEventListener("change", onChange);
+    return () => {
+      mq3.removeEventListener("change", onChange);
+      mq4.removeEventListener("change", onChange);
+    };
   }, []);
   return n;
 }
@@ -55,7 +71,14 @@ function packShortestColumn(
     const h = heights[k] ?? defaultHeight;
     let best = 0;
     for (let c = 1; c < columnCount; c++) {
-      if (colHeights[c] < colHeights[best]) best = c;
+      const hc = colHeights[c];
+      const hb = colHeights[best];
+      if (hc < hb) {
+        best = c;
+      } else if (hc === hb && cols[c].length < cols[best].length) {
+        /* 并列最矮时优先卡片较少的列，避免总黏在左侧列、拉高整列 */
+        best = c;
+      }
     }
     cols[best].push(i);
     colHeights[best] += h;
@@ -74,7 +97,28 @@ function bucketsEqual(a: number[][], b: number[][]): boolean {
   return true;
 }
 
-const DEFAULT_CARD_H = 240;
+const DEFAULT_CARD_H = 280;
+
+/**
+ * 读卡片占位高度。getBoundingClientRect 在首帧/图为 0 时会是 0（`??` 不会替换 0），会导致
+ * 「误以为某列极矮」而把大量笔记塞进同一列，整体高度被拉高、旁列大片留白。
+ */
+function readCardHeight(el: HTMLElement | null): number {
+  if (!el) return DEFAULT_CARD_H;
+  const br = el.getBoundingClientRect().height;
+  const oh = el.offsetHeight;
+  const sh = el.scrollHeight;
+  const h = Math.max(
+    Number.isFinite(br) ? br : 0,
+    Number.isFinite(oh) ? oh : 0,
+    Number.isFinite(sh) ? sh : 0
+  );
+  if (!Number.isFinite(h) || h < 8) return DEFAULT_CARD_H;
+  return Math.ceil(h);
+}
+
+/** 图加载/布局抖动时多跑几步直到分桶与高度指纹都稳定 */
+const PACK_SETTLE_MAX_PASSES = 18;
 
 /**
  * 瀑布流：按时间线顺序将每张卡放入「当前累计高度最短」的一列（Pinterest 式接龙）。
@@ -88,7 +132,7 @@ export function MasonryShortestColumns({
   children,
 }: {
   enabled: boolean;
-  columnCount: 2 | 3;
+  columnCount: 2 | 3 | 4;
   className?: string;
   /** 启用瀑布流时包在容器上；关闭时为 ul 的 aria-label */
   ariaLabel?: string;
@@ -113,9 +157,16 @@ export function MasonryShortestColumns({
   const [buckets, setBuckets] = useState<number[][]>(() =>
     roundRobinBuckets(childList.length, columnCount)
   );
+  const bucketsRef = useRef(buckets);
+  bucketsRef.current = buckets;
 
   const packRef = useRef<HTMLDivElement>(null);
   const roRef = useRef<ResizeObserver | null>(null);
+  const roRafRef = useRef(0);
+  const lastHeightFpRef = useRef<string | null>(null);
+  /** 供 settle 链内同步比较，避免 setState 后 bucketsRef 尚未更新导致重复改桶 */
+  const lastPackedRef = useRef<number[][] | null>(null);
+  const loadCleanRef = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     if (!enabled) return;
@@ -127,28 +178,60 @@ export function MasonryShortestColumns({
     const root = packRef.current;
     if (!root) return;
 
-    const measureAndPack = () => {
+    lastHeightFpRef.current = null;
+    lastPackedRef.current = null;
+
+    const schedulePackFromResize = () => {
+      cancelAnimationFrame(roRafRef.current);
+      roRafRef.current = requestAnimationFrame(() => {
+        roRafRef.current = 0;
+        runSettleChain(0);
+      });
+    };
+
+    const runSettleChain = (pass: number) => {
+      if (pass > PACK_SETTLE_MAX_PASSES) return;
+
       const heights: Record<string, number> = {};
+      const hparts: string[] = [];
       for (const k of orderedKeys) {
         const el = root.querySelector<HTMLElement>(
           `[data-masonry-key="${escapeAttrSelector(k)}"]`
         );
-        heights[k] = el?.getBoundingClientRect().height ?? DEFAULT_CARD_H;
+        const h = readCardHeight(el);
+        heights[k] = h;
+        hparts.push(`${h.toFixed(1)}`);
       }
+      const heightFp = hparts.join("\u0002");
+
       const next = packShortestColumn(
         orderedKeys,
         heights,
         columnCount,
         DEFAULT_CARD_H
       );
-      setBuckets((prev) => (bucketsEqual(prev, next) ? prev : next));
+
+      const prev = lastPackedRef.current ?? bucketsRef.current;
+      const packChanged = !bucketsEqual(prev, next);
+      const heightChanged =
+        lastHeightFpRef.current === null || heightFp !== lastHeightFpRef.current;
+      lastHeightFpRef.current = heightFp;
+
+      if (packChanged) {
+        lastPackedRef.current = next;
+        setBuckets(next);
+      }
+
+      if ((packChanged || heightChanged) && pass < PACK_SETTLE_MAX_PASSES) {
+        requestAnimationFrame(() => runSettleChain(pass + 1));
+      }
     };
 
-    measureAndPack();
+    runSettleChain(0);
 
     roRef.current?.disconnect();
     const ro = new ResizeObserver(() => {
-      measureAndPack();
+      schedulePackFromResize();
     });
     roRef.current = ro;
     orderedKeys.forEach((k) => {
@@ -158,11 +241,22 @@ export function MasonryShortestColumns({
       if (el) ro.observe(el);
     });
 
+    const onLoadCapture = () => schedulePackFromResize();
+    root.addEventListener("load", onLoadCapture, true);
+
+    loadCleanRef.current = () => {
+      root.removeEventListener("load", onLoadCapture, true);
+    };
+
     return () => {
+      cancelAnimationFrame(roRafRef.current);
+      roRafRef.current = 0;
       ro.disconnect();
       roRef.current = null;
+      loadCleanRef.current?.();
+      loadCleanRef.current = null;
     };
-  }, [enabled, keysSig, columnCount, childList.length]);
+  }, [enabled, keysSig, columnCount, childList.length, orderedKeys]);
 
   if (!enabled) {
     return (

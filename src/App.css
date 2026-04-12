@@ -3040,6 +3040,50 @@ textarea.main__hint-editor:focus {
   word-break: break-word;
 }
 
+/* PDF：服务端首页 JPEG 预览 + 底部文件名（与音频封面条类似） */
+.card__gallery-file-thumb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ebe8e3;
+  border-radius: inherit;
+}
+
+.card__gallery-thumb--pdf {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.card__gallery-file-thumb-caption {
+  flex-shrink: 0;
+  padding: 4px 8px 6px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.card__gallery-file-name--on-thumb {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  word-break: break-word;
+}
+
 .card__gallery-thumb-wrap {
   position: absolute;
   inset: 0;

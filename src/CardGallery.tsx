@@ -962,6 +962,21 @@ export function CardGallery({
             className="card__gallery-thumb card__gallery-thumb--video"
             playBadge={showPlayBadge}
           />
+        ) : current.kind === "file" && current.thumbnailUrl ? (
+          <>
+            <div className="card__gallery-file-thumb">
+              <MediaThumbImage
+                url={current.thumbnailUrl}
+                className="card__gallery-thumb card__gallery-thumb--pdf"
+                alt=""
+              />
+              <div className="card__gallery-file-thumb-caption">
+                <span className="card__gallery-file-name card__gallery-file-name--on-thumb">
+                  {current.name ?? labelFromUrl(current.url)}
+                </span>
+              </div>
+            </div>
+          </>
         ) : (
           <div className="card__gallery-file">
             <FileDocIcon className="card__gallery-file-icon" />

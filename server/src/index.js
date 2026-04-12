@@ -11,6 +11,7 @@ import {
   assertMediaKeyAllowedForUpload,
   finalizeAudioCoverAfterCosUpload,
   finalizeImagePreviewAfterCosUpload,
+  finalizePdfThumbnailAfterCosUpload,
   finalizeVideoThumbnailAfterCosUpload,
   getMediaUploadMode,
   planMediaCosDirectUpload,
@@ -1329,6 +1330,29 @@ app.post(
       const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
       if (!key) return res.status(400).json({ error: "缺少 key" });
       const out = await finalizeImagePreviewAfterCosUpload(
+        key,
+        adminGateEnabled ? req.uploadUserId : undefined
+      );
+      res.json(out);
+    } catch (e) {
+      res.status(400).json({ error: e.message || "处理失败" });
+    }
+  }
+);
+
+/** POST /api/upload/finalize-pdf — PDF 首页缩略图写入 COS（列表用 thumbnailUrl） */
+app.post(
+  "/api/upload/finalize-pdf",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) return res.status(400).json({ error: "未配置 COS" });
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      if (!key) return res.status(400).json({ error: "缺少 key" });
+      const out = await finalizePdfThumbnailAfterCosUpload(
         key,
         adminGateEnabled ? req.uploadUserId : undefined
       );

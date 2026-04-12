@@ -20,7 +20,7 @@ export type UploadMediaResult = {
   name?: string;
   /** 音频内嵌封面 */
   coverUrl?: string;
-  /** 视频截帧 / 图片 WebP 列表预览（thumbnailUrl） */
+  /** 视频截帧 / 图片 WebP / PDF 首页（thumbnailUrl） */
   thumbnailUrl?: string;
   /** 主文件大小（写入笔记 JSON 供统计） */
   sizeBytes?: number;
@@ -135,6 +135,30 @@ async function finalizeAfterUpload(
     try {
       const fin = await fetch(
         `${base}/api/upload/finalize-image`,
+        apiFetchInit({
+          method: "POST",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ key }),
+        })
+      );
+      const fj = (await fin.json().catch(() => ({}))) as {
+        thumbnailUrl?: unknown;
+      };
+      if (fin.ok && typeof fj.thumbnailUrl === "string" && fj.thumbnailUrl.trim()) {
+        thumbnailUrl = fj.thumbnailUrl.trim();
+      }
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  if (kind === "file" && /\.pdf$/i.test(key)) {
+    try {
+      const fin = await fetch(
+        `${base}/api/upload/finalize-pdf`,
         apiFetchInit({
           method: "POST",
           headers: {

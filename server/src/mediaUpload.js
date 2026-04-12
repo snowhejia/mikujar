@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { createRequire } from "module";
 import { spawn } from "child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -6,6 +7,8 @@ import { basename, dirname, join } from "path";
 import ffmpegStatic from "ffmpeg-static";
 import { parseBuffer } from "music-metadata";
 import sharp from "sharp";
+
+const nodeRequire = createRequire(import.meta.url);
 import {
   buildObjectPublicUrl,
   cosMediaPrefix,
@@ -382,6 +385,106 @@ export async function tryExtractVideoThumbnail(buffer, mimetype) {
   }
 }
 
+/** PDF 首页渲染上限（防异常大文件占满内存） */
+const MAX_PDF_THUMB_INPUT_BYTES = 80 * 1024 * 1024;
+
+/**
+ * 若 libvips 编译了 PDF 支持则走 sharp（快）；否则返回 null。
+ * @param {Buffer} buffer
+ * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
+ */
+async function tryExtractPdfThumbnailSharp(buffer) {
+  if (!buffer || buffer.length < 8) return null;
+  try {
+    let jpeg = await sharp(buffer, {
+      density: 144,
+      page: 0,
+      limitInputPixels: 268_402_689,
+    })
+      .rotate()
+      .resize(960, 960, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    if (jpeg.length > MAX_EMBEDDED_COVER_BYTES) {
+      jpeg = await sharp(buffer, { density: 120, page: 0 })
+        .resize(640, 640, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 76, mozjpeg: true })
+        .toBuffer();
+    }
+    if (!jpeg.length || jpeg.length > MAX_EMBEDDED_COVER_BYTES) return null;
+    return { buffer: jpeg, mimeType: "image/jpeg", ext: "jpg" };
+  } catch {
+    return null;
+  }
+}
+
+let pdfjsWorkerConfigured = false;
+
+/**
+ * pdfjs-dist + canvas：不依赖系统 poppler，与 sharp 互补。
+ * @param {Buffer} buffer
+ * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
+ */
+async function tryExtractPdfThumbnailPdfjs(buffer) {
+  if (!buffer || buffer.length < 8) return null;
+  if (buffer.length > MAX_PDF_THUMB_INPUT_BYTES) return null;
+  if (String.fromCharCode(buffer[0], buffer[1], buffer[2], buffer[3]) !== "%PDF") {
+    return null;
+  }
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const { createCanvas } = await import("canvas");
+    if (!pdfjsWorkerConfigured) {
+      pdfjs.GlobalWorkerOptions.workerSrc = nodeRequire.resolve(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs"
+      );
+      pdfjsWorkerConfigured = true;
+    }
+    const data = new Uint8Array(buffer);
+    const pdf = await pdfjs.getDocument({ data, verbosity: 0 }).promise;
+    const page = await pdf.getPage(1);
+    const baseVp = page.getViewport({ scale: 1 });
+    const maxEdge = 960;
+    const fitScale = Math.min(
+      maxEdge / Math.max(baseVp.width, 1),
+      maxEdge / Math.max(baseVp.height, 1),
+      2
+    );
+    const viewport = page.getViewport({ scale: fitScale });
+    const w = Math.ceil(viewport.width);
+    const h = Math.ceil(viewport.height);
+    if (w < 1 || h < 1 || w > 8000 || h > 8000) return null;
+    const canvas = createCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const pngBuf = canvas.toBuffer("image/png");
+    let jpeg = await sharp(pngBuf)
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    if (jpeg.length > MAX_EMBEDDED_COVER_BYTES) {
+      jpeg = await sharp(pngBuf)
+        .resize(640, 640, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 76, mozjpeg: true })
+        .toBuffer();
+    }
+    if (!jpeg.length || jpeg.length > MAX_EMBEDDED_COVER_BYTES) return null;
+    return { buffer: jpeg, mimeType: "image/jpeg", ext: "jpg" };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * PDF 第一页 → JPEG 列表预览（thumbnailUrl）；sharp 优先，否则 pdf.js。
+ * @param {Buffer} buffer
+ * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
+ */
+export async function tryExtractPdfThumbnail(buffer) {
+  const fromSharp = await tryExtractPdfThumbnailSharp(buffer);
+  if (fromSharp) return fromSharp;
+  return tryExtractPdfThumbnailPdfjs(buffer);
+}
+
 /** 列表预览：限边长 WebP，与视频共用字段名 thumbnailUrl */
 const MAX_IMAGE_PREVIEW_EDGE = 1280;
 const MAX_IMAGE_PREVIEW_BYTES = 600 * 1024;
@@ -527,6 +630,22 @@ export async function saveUploadedMedia(file, opts) {
     }
   }
 
+  if (kind === "file" && normalizeMime(mimetype) === "application/pdf") {
+    const thumb = await tryExtractPdfThumbnail(file.buffer);
+    if (thumb) {
+      const thumbFilename = `${token}-thumb.${thumb.ext}`;
+      if (isCosConfigured()) {
+        const thumbKey = `${cosSub}/${thumbFilename}`;
+        await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+        thumbnailUrl = buildObjectPublicUrl(thumbKey);
+      } else {
+        await mkdir(localBase, { recursive: true });
+        await writeFile(join(localBase, thumbFilename), thumb.buffer);
+        thumbnailUrl = `/uploads/${urlSub}${thumbFilename}`;
+      }
+    }
+  }
+
   if (isCosConfigured()) {
     const key = `${cosSub}/${filename}`;
     await putCosObject(key, file.buffer, mimetype);
@@ -647,6 +766,44 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
   }
   const buffer = await getCosObjectBuffer(k);
   const thumb = await tryExtractVideoThumbnail(buffer, mimetype);
+  if (!thumb) return {};
+  const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
+  const thumbKey = `${cosSub}/${thumbFilename}`;
+  await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+}
+
+/**
+ * PDF 已直传 COS 后：首页渲染为 JPEG 写入 COS（列表用 thumbnailUrl）
+ */
+export async function finalizePdfThumbnailAfterCosUpload(objectKey, userId) {
+  if (!isCosConfigured()) {
+    throw new Error("未配置 COS");
+  }
+  const sub = mediaPathSegment(userId);
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
+  const prefix = `${cosSub}/`;
+  const k = String(objectKey || "").replace(/^\//, "");
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的对象路径");
+  }
+  const base = basename(k);
+  const dot = base.lastIndexOf(".");
+  if (dot < 1) throw new Error("无效的对象路径");
+  const tokenPart = base.slice(0, dot);
+  const ext = base.slice(dot + 1).toLowerCase();
+  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+    throw new Error("无效的对象路径");
+  }
+  if (ext !== "pdf") {
+    throw new Error("仅支持 PDF 对象");
+  }
+  const mimetype = EXT_TO_MIME[ext] || "application/pdf";
+  if (normalizeMime(mimetype) !== "application/pdf") {
+    throw new Error("仅支持 PDF 对象");
+  }
+  const buffer = await getCosObjectBuffer(k);
+  const thumb = await tryExtractPdfThumbnail(buffer);
   if (!thumb) return {};
   const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
   const thumbKey = `${cosSub}/${thumbFilename}`;

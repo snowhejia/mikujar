@@ -97,18 +97,20 @@ function bucketsEqual(a: number[][], b: number[][]): boolean {
 const DEFAULT_CARD_H = 280;
 
 /**
- * 读卡片占位高度。getBoundingClientRect 在首帧/图为 0 时会是 0（`??` 不会替换 0），会导致
- * 「误以为某列极矮」而把大量笔记塞进同一列，整体高度被拉高、旁列大片留白。
+ * 读卡片在列里的**实际占位高度**（与布局一致）。
+ *
+ * 勿用 `scrollHeight`：正文区可滚时它往往是全文高度，会远大于 `li.card` 的可见高度，
+ * 瀑布流会误以为该列已极高，后续笔记全挤到另一列、旁列大片留白。
+ *
+ * `getBoundingClientRect` 在首帧/图为 0 时仍是 0，与 offsetHeight 取 max 后仍过小再回退默认。
  */
 function readCardHeight(el: HTMLElement | null): number {
   if (!el) return DEFAULT_CARD_H;
   const br = el.getBoundingClientRect().height;
   const oh = el.offsetHeight;
-  const sh = el.scrollHeight;
   const h = Math.max(
     Number.isFinite(br) ? br : 0,
-    Number.isFinite(oh) ? oh : 0,
-    Number.isFinite(sh) ? sh : 0
+    Number.isFinite(oh) ? oh : 0
   );
   if (!Number.isFinite(h) || h < 8) return DEFAULT_CARD_H;
   return Math.ceil(h);

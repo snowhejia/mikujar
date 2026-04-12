@@ -1,8 +1,9 @@
-import type {
-  Dispatch,
-  DragEvent,
-  MutableRefObject,
-  SetStateAction,
+import {
+  useMemo,
+  type Dispatch,
+  type DragEvent,
+  type MutableRefObject,
+  type SetStateAction,
 } from "react";
 import type { AppDataMode } from "../appDataModeStorage";
 import { useAppChrome } from "../i18n/useAppChrome";
@@ -28,6 +29,7 @@ import {
   persistNoteCardDropToRemote,
   readNoteCardDragPayload,
 } from "./noteCardDrag";
+import { estimateNoteBodyLines } from "./estimateNoteBodyLines";
 
 export type NoteTimelineCardProps = {
   card: NoteCard;
@@ -136,6 +138,10 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   const mediaUploadPending = uploadBusyCardId === card.id;
   const galleryUploadProgress = mediaUploadPending ? uploadCardProgress : null;
   const hasGallery = media.length > 0 || mediaUploadPending;
+  const bodyLineEstimate = useMemo(
+    () => estimateNoteBodyLines(card.text),
+    [card.text]
+  );
   const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const noteKey = `${colId}-${card.id}`;
   const dropEdgeActive =
@@ -252,6 +258,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     >
       <CardRowInner
         hasGallery={hasGallery}
+        bodyLineEstimate={bodyLineEstimate}
         timelineColumnCount={timelineColumnCount}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")

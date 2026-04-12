@@ -25,6 +25,41 @@ function roundRobinBuckets(
   return cols;
 }
 
+function pickShortestColumnIndex(
+  colHeights: number[],
+  cols: number[][],
+  columnCount: number,
+  itemIndex: number
+): number {
+  let minH = Infinity;
+  for (let c = 0; c < columnCount; c++) {
+    if (colHeights[c] < minH) minH = colHeights[c];
+  }
+  const atMinH: number[] = [];
+  for (let c = 0; c < columnCount; c++) {
+    if (colHeights[c] <= minH + 1e-6) atMinH.push(c);
+  }
+  let minCards = Infinity;
+  for (const c of atMinH) {
+    if (cols[c].length < minCards) minCards = cols[c].length;
+  }
+  const candidates = atMinH.filter((c) => cols[c].length === minCards);
+  if (candidates.length === 1) return candidates[0];
+
+  const totalPlaced = cols.reduce((s, col) => s + col.length, 0);
+  /* 前几格按序铺一行，避免首卡全挤最右/最左 */
+  if (totalPlaced < columnCount) {
+    return candidates.includes(itemIndex % columnCount)
+      ? itemIndex % columnCount
+      : candidates[0];
+  }
+  /*
+   * 高度与卡数仍并列时：之前实现固定保留 best=0，在大量卡片被估成同一默认高度时会整列黏在左侧。
+   * 偏右列打破平局，使两列更均衡。
+   */
+  return Math.max(...candidates);
+}
+
 function packShortestColumn(
   orderedKeys: string[],
   heights: Record<string, number>,
@@ -36,17 +71,12 @@ function packShortestColumn(
   for (let i = 0; i < orderedKeys.length; i++) {
     const k = orderedKeys[i];
     const h = heights[k] ?? defaultHeight;
-    let best = 0;
-    for (let c = 1; c < columnCount; c++) {
-      const hc = colHeights[c];
-      const hb = colHeights[best];
-      if (hc < hb) {
-        best = c;
-      } else if (hc === hb && cols[c].length < cols[best].length) {
-        /* 并列最矮时优先卡片较少的列，避免总黏在左侧列、拉高整列 */
-        best = c;
-      }
-    }
+    const best = pickShortestColumnIndex(
+      colHeights,
+      cols,
+      columnCount,
+      i
+    );
     cols[best].push(i);
     colHeights[best] += h;
   }

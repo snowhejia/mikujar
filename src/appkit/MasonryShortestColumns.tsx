@@ -15,70 +15,47 @@ function escapeAttrSelector(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** 首帧占位：按序号轮流分到各列，避免全堆一列 */
-function roundRobinBuckets(
-  nItems: number,
-  columnCount: number
-): number[][] {
-  const cols: number[][] = Array.from({ length: columnCount }, () => []);
-  for (let i = 0; i < nItems; i++) {
-    cols[i % columnCount].push(i);
-  }
-  return cols;
+const DEFAULT_CARD_H = 280;
+
+/** 按序号 0,1,0,1… 分到各列，首帧占位 */
+function splitRoundRobin(n: number, cols: number): number[][] {
+  const out: number[][] = Array.from({ length: cols }, () => []);
+  for (let i = 0; i < n; i++) out[i % cols].push(i);
+  return out;
 }
 
-/**
- * 最短列接龙：每张卡放进「当前累计高度最小」的列；并列时取列下标最小（靠左）。
- */
-function packShortestColumn(
-  orderedKeys: string[],
-  heights: Record<string, number>,
-  columnCount: number,
-  defaultHeight: number
-): number[][] {
-  const colHeights = Array(columnCount).fill(0) as number[];
-  const cols: number[][] = Array.from({ length: columnCount }, () => []);
-  for (let i = 0; i < orderedKeys.length; i++) {
-    const h = heights[orderedKeys[i]] ?? defaultHeight;
-    let best = 0;
-    for (let c = 1; c < columnCount; c++) {
-      if (colHeights[c] < colHeights[best]) best = c;
-    }
-    cols[best].push(i);
-    colHeights[best] += h;
+/** 每张卡进「当前累计高度最小」的那一列（并列取最左列） */
+function packToShortest(heights: number[], columnCount: number): number[][] {
+  const colH = Array(columnCount).fill(0);
+  const buckets: number[][] = Array.from({ length: columnCount }, () => []);
+  for (let i = 0; i < heights.length; i++) {
+    const h = heights[i] ?? DEFAULT_CARD_H;
+    const c = colH.indexOf(Math.min(...colH));
+    buckets[c].push(i);
+    colH[c] += h;
   }
-  return cols;
+  return buckets;
 }
 
-function bucketsEqual(a: number[][], b: number[][]): boolean {
+function sameBuckets(a: number[][], b: number[][]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (a[i].length !== b[i].length) return false;
-    for (let j = 0; j < a[i].length; j++) {
-      if (a[i][j] !== b[i][j]) return false;
-    }
+    for (let j = 0; j < a[i].length; j++) if (a[i][j] !== b[i][j]) return false;
   }
   return true;
 }
 
-const DEFAULT_CARD_H = 280;
-
 function readCardHeight(el: HTMLElement | null): number {
   if (!el) return DEFAULT_CARD_H;
-  const br = el.getBoundingClientRect().height;
-  const oh = el.offsetHeight;
   const h = Math.max(
-    Number.isFinite(br) ? br : 0,
-    Number.isFinite(oh) ? oh : 0
+    el.getBoundingClientRect().height,
+    el.offsetHeight
   );
   if (!Number.isFinite(h) || h < 8) return DEFAULT_CARD_H;
   return Math.ceil(h);
 }
 
-/**
- * 瀑布流：按时间线顺序将每张卡放入累计高度最短的一列。
- * 子节点根元素须为带 `data-masonry-key` 的 `li.card`。
- */
 export function MasonryShortestColumns({
   columnCount,
   className,
@@ -91,60 +68,53 @@ export function MasonryShortestColumns({
   children: ReactNode;
 }) {
   const enabled = columnCount > 1;
-  const packColumns = (enabled ? columnCount : 2) as 2 | 3 | 4 | 5 | 6;
+  const nCols = (enabled ? columnCount : 2) as 2 | 3 | 4 | 5 | 6;
   const childList = useMemo(
     () => Children.toArray(children) as ReactElement[],
     [children]
   );
 
-  const orderedKeys = useMemo(
+  const keys = useMemo(
     () =>
-      childList.map((c, i) => {
-        if (c.key != null && c.key !== "") return String(c.key);
-        return `__idx_${i}`;
-      }),
+      childList.map((c, i) =>
+        c.key != null && c.key !== "" ? String(c.key) : `__idx_${i}`
+      ),
     [childList]
   );
 
-  const keysSig = orderedKeys.join("\u0001");
+  const keysSig = keys.join("\u0001");
 
   const [buckets, setBuckets] = useState<number[][]>(() =>
-    roundRobinBuckets(childList.length, packColumns)
+    splitRoundRobin(childList.length, nCols)
   );
 
-  const packRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef(0);
 
   useLayoutEffect(() => {
     if (!enabled) return;
-    setBuckets(roundRobinBuckets(childList.length, packColumns));
-  }, [enabled, keysSig, childList.length, packColumns]);
+    setBuckets(splitRoundRobin(childList.length, nCols));
+  }, [enabled, keysSig, childList.length, nCols]);
 
   useLayoutEffect(() => {
     if (!enabled || childList.length === 0) return;
-    const root = packRef.current;
+    const root = rootRef.current;
     if (!root) return;
 
     const pack = () => {
-      const heights: Record<string, number> = {};
-      for (const k of orderedKeys) {
+      const heights = keys.map((k) => {
         const el = root.querySelector<HTMLElement>(
           `[data-masonry-key="${escapeAttrSelector(k)}"]`
         );
-        heights[k] = readCardHeight(el);
-      }
-      const next = packShortestColumn(
-        orderedKeys,
-        heights,
-        packColumns,
-        DEFAULT_CARD_H
-      );
-      setBuckets((prev) => (bucketsEqual(prev, next) ? prev : next));
+        return readCardHeight(el);
+      });
+      const next = packToShortest(heights, nCols);
+      setBuckets((prev) => (sameBuckets(prev, next) ? prev : next));
     };
 
     pack();
 
-    const schedulePack = () => {
+    const onResize = () => {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
@@ -152,23 +122,22 @@ export function MasonryShortestColumns({
       });
     };
 
-    const ro = new ResizeObserver(schedulePack);
-    orderedKeys.forEach((k) => {
+    const ro = new ResizeObserver(onResize);
+    keys.forEach((k) => {
       const el = root.querySelector<HTMLElement>(
         `[data-masonry-key="${escapeAttrSelector(k)}"]`
       );
       if (el) ro.observe(el);
     });
-
-    root.addEventListener("load", schedulePack, true);
+    root.addEventListener("load", onResize, true);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
       ro.disconnect();
-      root.removeEventListener("load", schedulePack, true);
+      root.removeEventListener("load", onResize, true);
     };
-  }, [enabled, keysSig, packColumns, childList.length, orderedKeys]);
+  }, [enabled, keysSig, nCols, childList.length, keys]);
 
   if (!enabled) {
     return (
@@ -184,10 +153,10 @@ export function MasonryShortestColumns({
 
   return (
     <div
-      ref={packRef}
+      ref={rootRef}
       className="masonry-shortest-pack"
       data-masonry-pack="on"
-      data-masonry-cols={String(packColumns)}
+      data-masonry-cols={String(nCols)}
       aria-label={ariaLabel}
       role={ariaLabel ? "region" : undefined}
     >

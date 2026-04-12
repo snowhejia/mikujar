@@ -19,6 +19,8 @@ export type TrashNoteCardRowProps = {
   restoreTrashedEntry: (entry: TrashedNoteEntry) => void;
   purgeTrashedEntry: (trashId: string) => void;
   timelineColumnCount: number;
+  /** MasonryShortestColumns 注入，须落到根 li 供量高 */
+  "data-masonry-slot"?: number;
 };
 
 export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
@@ -30,6 +32,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
     restoreTrashedEntry,
     purgeTrashedEntry,
     timelineColumnCount,
+    "data-masonry-slot": dataMasonrySlot,
   } = p;
 
   const { lang } = useAppUiLang();
@@ -42,6 +45,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
   return (
     <li
       data-masonry-key={entry.trashId}
+      data-masonry-slot={dataMasonrySlot}
       className={
         "card card--in-trash" +
         (cardMenuId === menuId ? " is-menu-open" : "")

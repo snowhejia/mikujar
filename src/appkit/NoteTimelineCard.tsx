@@ -92,6 +92,8 @@ export type NoteTimelineCardProps = {
   setCardTags: (colId: string, cardId: string, tags: string[]) => void;
   /** 时间线列数（用于大屏触控平板 1 列时附件与正文左右分栏） */
   timelineColumnCount: number;
+  /** MasonryShortestColumns 注入，须落到根 li 供量高 */
+  "data-masonry-slot"?: number;
 };
 
 export function NoteTimelineCard(p: NoteTimelineCardProps) {
@@ -128,6 +130,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     setCardText,
     setCardTags,
     timelineColumnCount,
+    "data-masonry-slot": dataMasonrySlot,
   } = p;
 
   const { lang } = useAppUiLang();
@@ -146,6 +149,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   return (
     <li
       data-masonry-key={noteKey}
+      data-masonry-slot={dataMasonrySlot}
       className={
         "card" +
         (cardMenuId === card.id ? " is-menu-open" : "") +

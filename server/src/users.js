@@ -8,6 +8,7 @@ import { query } from "./db.js";
 import { snapshotMediaQuota } from "./mediaQuota.js";
 import {
   buildObjectPublicUrl,
+  cosAvatarPrefix,
   isCosConfigured,
   putCosObject,
 } from "./storage.js";
@@ -66,16 +67,22 @@ export function planAvatarCosDirectUpload(userId, contentType, fileSize) {
     throw new Error("仅支持 JPEG / PNG / GIF / WebP / AVIF 图片");
   }
   const ext = MIME_EXT[mime] || "jpg";
-  const key = `mikujar/avatars/${userId}.${ext}`;
+  const key = `${cosAvatarPrefix()}/${userId}.${ext}`;
   return { key, contentType: mime };
 }
 
 export function assertValidAvatarCosKey(userId, key) {
   const k = String(key || "").replace(/^\//, "");
-  const prefix = `mikujar/avatars/${userId}.`;
-  if (!k.startsWith(prefix)) throw new Error("无效的头像路径");
-  const ext = k.slice(prefix.length);
-  if (!AVATAR_EXT_SET.has(ext)) throw new Error("无效的头像路径");
+  const tryPrefixes = [
+    `${cosAvatarPrefix()}/${userId}.`,
+    `mikujar/avatars/${userId}.`,
+  ];
+  for (const prefix of tryPrefixes) {
+    if (!k.startsWith(prefix)) continue;
+    const ext = k.slice(prefix.length);
+    if (AVATAR_EXT_SET.has(ext)) return;
+  }
+  throw new Error("无效的头像路径");
 }
 
 export async function confirmAvatarCosUpload(_filePath, userId, key) {
@@ -447,7 +454,7 @@ export async function saveAvatarFile(userId, buffer, mimetype, opts) {
 
   const ext = MIME_EXT[mime] || "jpg";
   if (isCosConfigured()) {
-    const key = `mikujar/avatars/${userId}.${ext}`;
+    const key = `${cosAvatarPrefix()}/${userId}.${ext}`;
     await putCosObject(key, buffer, mime);
     return withAvatarCacheBust(buildObjectPublicUrl(key));
   }

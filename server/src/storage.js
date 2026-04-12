@@ -18,9 +18,9 @@ export function storageMode() {
 let cosClient = null;
 
 /**
- * 全球加速：须在控制台为存储桶启用「全球加速」后再打开，见
+ * 全球加速（默认关闭）：仅当 COS_USE_ACCELERATE=1/true 且控制台已开启全球加速时生效，见
  * https://cloud.tencent.com/document/product/436/55590
- * 预签名 PUT、服务端 API、对外访问 URL 会统一走 *.cos.accelerate.myqcloud.com
+ * 迁移到地域域名（如 ap-singapore）后一般应关闭控制台「全球加速」并保持此处为关。
  */
 function cosUseAccelerate() {
   const v = process.env.COS_USE_ACCELERATE?.trim().toLowerCase();
@@ -43,6 +43,19 @@ function cosBucket() {
 
 function cosRegion() {
   return process.env.COS_REGION.trim();
+}
+
+/** 附件对象键前缀，默认 media（如 media/u-xxx/文件名） */
+export function cosMediaPrefix() {
+  return (process.env.COS_MEDIA_PREFIX?.trim() || "media").replace(/\/$/, "");
+}
+
+/** 头像对象键前缀，默认 avatars（如 avatars/{userId}.jpg） */
+export function cosAvatarPrefix() {
+  return (process.env.COS_AVATAR_PREFIX?.trim() || "avatars").replace(
+    /\/$/,
+    ""
+  );
 }
 
 function cosObjectKey() {

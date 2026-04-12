@@ -12,6 +12,7 @@ import { parseBuffer } from "music-metadata";
 import sharp from "sharp";
 import {
   buildObjectPublicUrl,
+  cosMediaPrefix,
   getCosObjectBuffer,
   isCosConfigured,
   putCosObject,
@@ -141,11 +142,6 @@ function normalizeMime(m) {
     .trim()
     .toLowerCase();
   return s || "application/octet-stream";
-}
-
-function mediaPrefix() {
-  const p = process.env.COS_MEDIA_PREFIX?.trim() || "mikujar/media";
-  return p.replace(/\/$/, "");
 }
 
 function kindFromMime(mimetype) {
@@ -286,7 +282,7 @@ export async function saveUploadedMedia(file, opts) {
   /** 对象键仍用随机名；前端用 name 展示原始文件名 */
   const name = attachmentDisplayName(file.originalname);
   const sub = mediaPathSegment(opts.userId);
-  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
   const localBase = sub
     ? join(opts.publicUploadsDir, sub)
     : opts.publicUploadsDir;
@@ -354,7 +350,7 @@ export function planMediaCosDirectUpload(p) {
   const kind = kindFromMime(mimetype);
   const name = attachmentDisplayName(p.originalname);
   const sub = mediaPathSegment(p.userId);
-  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
   const key = `${cosSub}/${filename}`;
   return { key, kind, name, contentType: mimetype };
 }
@@ -367,7 +363,7 @@ export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
     throw new Error("未配置 COS");
   }
   const sub = mediaPathSegment(userId);
-  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
   const prefix = `${cosSub}/`;
   const k = String(objectKey || "").replace(/^\//, "");
   if (!k.startsWith(prefix)) {

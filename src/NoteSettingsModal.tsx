@@ -14,6 +14,7 @@ type NoteSettingsModalProps = {
   dataMode: AppDataMode;
   setDataMode: (mode: AppDataMode) => void;
   onOpenAppleNotesImport?: () => void;
+  onOpenFlomoImport?: () => void;
 };
 
 export function NoteSettingsModal({
@@ -26,6 +27,7 @@ export function NoteSettingsModal({
   dataMode,
   setDataMode,
   onOpenAppleNotesImport,
+  onOpenFlomoImport,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   useEffect(() => {
@@ -154,17 +156,30 @@ export function NoteSettingsModal({
           </button>
         </div>
 
-        {onOpenAppleNotesImport ? (
+        {onOpenAppleNotesImport || onOpenFlomoImport ? (
           <div className="auth-modal__actions note-settings-modal__import-row">
-            <button
-              type="button"
-              className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
-              onClick={() => {
-                onOpenAppleNotesImport();
-              }}
-            >
-              {c.importAppleNotesFromSettings}
-            </button>
+            {onOpenAppleNotesImport ? (
+              <button
+                type="button"
+                className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
+                onClick={() => {
+                  onOpenAppleNotesImport();
+                }}
+              >
+                {c.importAppleNotesFromSettings}
+              </button>
+            ) : null}
+            {onOpenFlomoImport ? (
+              <button
+                type="button"
+                className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
+                onClick={() => {
+                  onOpenFlomoImport();
+                }}
+              >
+                {c.importFlomoFromSettings}
+              </button>
+            ) : null}
           </div>
         ) : null}
 

@@ -138,6 +138,13 @@ export type AppChrome = {
   importAppleNotesFromSettings: string;
   /** 导入时新建的顶层合集名称（下挂导出的笔记本子合集） */
   importAppleNotesRootCollectionName: string;
+  /** 笔记设置：从 flomo 导出导入 */
+  importFlomoFromSettings: string;
+  /** flomo 导入时顶层合集名称 */
+  importFlomoRootCollectionName: string;
+  importFlomoTitle: string;
+  importFlomoHint: string;
+  importFlomoErrNone: string;
   importAppleNotesTitle: string;
   importAppleNotesHint: string;
   importAppleNotesTargetLabel: (collectionLabel: string) => string;
@@ -332,6 +339,13 @@ const zh: AppChrome = {
   menuDataStats: "数据统计",
   importAppleNotesFromSettings: "从苹果备忘录导出导入…",
   importAppleNotesRootCollectionName: "Apple 备忘录",
+  importFlomoFromSettings: "从 flomo 导出导入…",
+  importFlomoRootCollectionName: "Flomo",
+  importFlomoTitle: "flomo 导出 → 导入",
+  importFlomoHint:
+    "在 flomo 中导出为 HTML（含主 HTML 与同级的 file 资源目录）。在此选择整个导出文件夹，或先打成 zip 再上传。每条 MEMO 对应一张小笔记，正文保留 HTML，图片/视频等会进入附件。若导出目录名作为子结构，会新建顶层「Flomo」合集并恢复子文件夹。手机浏览器可优先使用 zip。",
+  importFlomoErrNone:
+    "没有识别到 flomo 导出（需含「…的笔记.html」及 file 目录下的附件）。",
   importAppleNotesTitle: "苹果备忘录导出 → 导入",
   importAppleNotesHint:
     "系统自带备忘录没有「一键全部导出」开放接口；可在 Mac 上单条用「文件 → 导出为…」（如 Markdown），或用第三方工具批量导出为文件夹。此处支持两种目录结构：① 选择整个导出文件夹——每条笔记一个子文件夹，内含正文（.txt / .md / .html）与同目录附件；② 多选若干 .md / .txt 文件——每条文件一张卡片。Markdown 里 data URL 内嵌图会拆成附件。若文件夹名或文件名里带有日期/时间（如 2024-03-15、14-30、202403151430 等），会写入卡片的日历日与时刻。若你为 Mac「导出为 HTML」得到多个「YYYY-MM-DD HHMM 标题.html」与同前缀的「…(Attachments)」附件夹，会按该前缀自动合并为一条笔记并带上附件。手机或部分浏览器没有「选文件夹」时，请先在电脑上把导出目录打成 zip 再选「ZIP 压缩包」上传。若导出里带有 iCloud 下的多个笔记本子文件夹，会新建顶层「Apple 备忘录」合集并把各子文件夹恢复为子合集。",
@@ -534,6 +548,13 @@ const en: AppChrome = {
   menuDataStats: "Usage stats",
   importAppleNotesFromSettings: "Import from Apple Notes export…",
   importAppleNotesRootCollectionName: "Apple Notes",
+  importFlomoFromSettings: "Import from flomo export…",
+  importFlomoRootCollectionName: "Flomo",
+  importFlomoTitle: "Import flomo export",
+  importFlomoHint:
+    "Export from flomo as HTML (main `.html` plus the sibling `file/` asset folder). Choose the whole export folder here, or zip it first and upload the archive. Each MEMO becomes one card; HTML is preserved and images/videos go to attachments. If the export uses subfolders, a top-level “Flomo” collection is created. On mobile, ZIP is easiest.",
+  importFlomoErrNone:
+    "No flomo export detected (need the main “…notes.html” with flomo branding and the `file/` assets folder).",
   importAppleNotesTitle: "Import Apple Notes export",
   importAppleNotesHint:
     "Apple Notes has no official bulk export API. On a Mac you can export individual notes (e.g. File → Export as Markdown), or use a third-party exporter to write a folder tree. This importer supports: (1) choose a folder where each note is a subfolder containing a .txt / .md / .html plus attachments; or (2) multi-select .md / .txt files—one file becomes one card. Inline data-URL images in Markdown are split into attachments. If a folder or file name contains a date/time (e.g. 2024-03-15, 14-30, 202403151430), it is applied to the card’s day and clock time. If you used “Export as HTML” on Mac and got many “YYYY-MM-DD HHMM title.html” files plus matching “…(Attachments)” folders, they are merged by that timestamp prefix into one card with attachments. On phones or browsers without a folder picker, zip the export folder on a computer and use “Choose ZIP archive”. If the export includes several notebook folders under iCloud, a top-level “Apple Notes” collection is created and each subfolder becomes a sub-collection.",

@@ -6348,6 +6348,15 @@ div.card__text--readonly:not(.card__text--preview) {
 .note-settings-modal__import-row {
   margin-top: 0.5rem;
   margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.note-settings-modal__import-row .auth-modal__btn--primary--full {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  padding: 0.45rem 0.5rem;
 }
 
 .apple-notes-import-modal {

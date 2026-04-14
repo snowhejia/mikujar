@@ -21,6 +21,15 @@ function isTextExt(ext: string): boolean {
   return (TEXT_EXT_PRIORITY as readonly string[]).includes(ext);
 }
 
+/** 列表中的系统/元数据文件，不算「附件」，也不阻止「一夹多条纯文本」拆分 */
+function isIgnorableListingFile(name: string): boolean {
+  const n = name.trim();
+  if (n === ".DS_Store") return true;
+  if (n.startsWith("._")) return true;
+  if (/^thumbs\.db$/i.test(n)) return true;
+  return false;
+}
+
 /** 估算正文长度，用于在多个 .txt/.html/.md 中选「主正文」 */
 async function measureTextFileBodyLength(f: File): Promise<number> {
   const raw = await f.text();
@@ -467,6 +476,37 @@ export async function parseAppleNotesExportDirectory(
 
   const out: ParsedExportNote[] = [];
   for (const [dir, group] of byDir) {
+    const textFiles = group.filter(
+      (f) => isTextExt(extOf(f.name)) && !isIgnorableListingFile(f.name)
+    );
+    const hasRealBinary = group.some(
+      (f) =>
+        !isTextExt(extOf(f.name)) && !isIgnorableListingFile(f.name)
+    );
+
+    // 苹果「笔记本」导出：同一文件夹内多条独立 .html，无图片/音视频等 → 每条一条卡片
+    if (textFiles.length > 1 && !hasRealBinary) {
+      textFiles.sort((a, b) =>
+        a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true })
+      );
+      for (const textFile of textFiles) {
+        const { bodyHtml, inlineFiles } = await fileToBodyAndExtras(textFile);
+        const title = titleFromAppleFlatNoteFilename(textFile.name);
+        const timeFromFilename = resolveTimeFromExportPath(dir, textFile);
+        const folderSegments = normalizeExportFolderSegments(
+          dir.split("/").filter(Boolean)
+        );
+        out.push({
+          title,
+          bodyHtml,
+          attachmentFiles: inlineFiles,
+          folderSegments,
+          ...(timeFromFilename ? { timeFromFilename } : {}),
+        });
+      }
+      continue;
+    }
+
     const textFile = await pickBestTextFileForGroup(group, {
       tieBreakPreferOutsideAttachments: false,
     });
@@ -475,6 +515,7 @@ export async function parseAppleNotesExportDirectory(
     const attachmentFiles = group.filter((f) => {
       if (f === textFile) return false;
       if (isTextExt(extOf(f.name))) return false;
+      if (isIgnorableListingFile(f.name)) return false;
       return true;
     });
     const title = titleFromDir(dir, textFile);

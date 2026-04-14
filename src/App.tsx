@@ -2482,6 +2482,7 @@ export default function App() {
   } = useCollectionRowDnD({
     canEdit,
     dataMode,
+    dropOnCollectionToTop: newNotePlacement === "top",
     noteCardDragActiveRef,
     draggingCollectionIdRef,
     setCollections,

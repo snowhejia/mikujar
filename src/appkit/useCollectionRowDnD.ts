@@ -32,6 +32,8 @@ type DropIndicatorState = {
 export function useCollectionRowDnD(p: {
   canEdit: boolean;
   dataMode: AppDataMode;
+  /** 与笔记设置「新笔记在时间线顶部」一致：拖到侧栏合集时插到该合集最前 */
+  dropOnCollectionToTop: boolean;
   noteCardDragActiveRef: MutableRefObject<boolean>;
   draggingCollectionIdRef: MutableRefObject<string | null>;
   setCollections: Dispatch<SetStateAction<Collection[]>>;
@@ -51,6 +53,7 @@ export function useCollectionRowDnD(p: {
   const {
     canEdit,
     dataMode,
+    dropOnCollectionToTop,
     noteCardDragActiveRef,
     draggingCollectionIdRef,
     setCollections,
@@ -135,10 +138,15 @@ export function useCollectionRowDnD(p: {
       if (noteFrom) {
         if (noteFrom.colId !== targetId) {
           setCollections((prev) => {
-            const next = applyNoteCardDrop(prev, noteFrom, {
-              type: "collection",
-              colId: targetId,
-            });
+            const next = applyNoteCardDrop(
+              prev,
+              noteFrom,
+              {
+                type: "collection",
+                colId: targetId,
+              },
+              { dropOnCollectionToTop }
+            );
             if (dataMode === "remote" && canEdit) {
               void persistNoteCardDropToRemote(noteFrom, next).then((ok) => {
                 if (!ok) {
@@ -195,6 +203,7 @@ export function useCollectionRowDnD(p: {
     [
       canEdit,
       dataMode,
+      dropOnCollectionToTop,
       setCollections,
       setCollapsedFolderIds,
       setNoteCardDropCollectionId,

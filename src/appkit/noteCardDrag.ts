@@ -8,6 +8,7 @@ import {
   extractCardFromCollections,
   findCollectionById,
   insertCardRelativeTo,
+  prependCardToCollection,
 } from "./collectionModel";
 
 export type NoteCardDragPayload = {
@@ -106,7 +107,11 @@ export async function persistNoteCardDropToRemote(
 export function applyNoteCardDrop(
   prev: Collection[],
   from: NoteCardDragPayload,
-  to: NoteCardDropTarget
+  to: NoteCardDropTarget,
+  opts?: {
+    /** 与「新笔记加到时间线顶部」一致：拖到侧栏合集时插到该合集最前 */
+    dropOnCollectionToTop?: boolean;
+  }
 ): Collection[] {
   if (
     to.type !== "collection" &&
@@ -129,7 +134,9 @@ export function applyNoteCardDrop(
 
   if (to.type === "collection") {
     if (from.colId === to.colId) return prev;
-    return appendCardToCollection(next, to.colId, card);
+    return opts?.dropOnCollectionToTop
+      ? prependCardToCollection(next, to.colId, card)
+      : appendCardToCollection(next, to.colId, card);
   }
 
   const place = to.type === "before" ? "before" : "after";

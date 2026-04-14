@@ -497,6 +497,17 @@ export function appendCardToCollection(
   }));
 }
 
+export function prependCardToCollection(
+  cols: Collection[],
+  colId: string,
+  card: NoteCard
+): Collection[] {
+  return mapCollectionById(cols, colId, (col) => ({
+    ...col,
+    cards: [card, ...col.cards],
+  }));
+}
+
 export function splitPinnedCards(cards: NoteCard[]): {
   pinned: NoteCard[];
   rest: NoteCard[];

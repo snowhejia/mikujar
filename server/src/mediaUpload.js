@@ -124,6 +124,10 @@ const MIME_TO_EXT = {
   "image/avif": "avif",
   "image/svg+xml": "svg",
   "image/bmp": "bmp",
+  /** iPhone 默认照片；浏览器普遍不能直接解码，finalize 时转 JPEG */
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/tiff": "tiff",
   "video/mp4": "mp4",
   "video/webm": "webm",
   "video/quicktime": "mov",
@@ -560,16 +564,110 @@ export async function tryGenerateAvatarThumb(buffer, mimetype) {
   }
 }
 
+/** 从扩展名推断 MIME（文件夹选入时浏览器常给空 File.type） */
+function inferMimeFromFilename(originalname) {
+  const ext = safeExtFromOriginalName(
+    typeof originalname === "string" ? originalname : ""
+  );
+  if (!ext) return null;
+  const map = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    avif: "image/avif",
+    bmp: "image/bmp",
+    heic: "image/heic",
+    heif: "image/heif",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    svg: "image/svg+xml",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    pdf: "application/pdf",
+  };
+  return map[ext] || null;
+}
+
+/**
+ * HEIC/HEIF/TIFF 等常见「上传成功但 <img> 裂图」：统一转 JPEG；错标/损坏栅格也可修复。
+ * @returns {Promise<{ buffer: Buffer; mimeType: string } | null>} null 表示保留原文件
+ */
+async function normalizeImageBufferForWeb(buffer, extRaw, mimetypeRaw) {
+  const ext = String(extRaw || "").toLowerCase();
+  const m = normalizeMime(mimetypeRaw);
+  if (m === "image/svg+xml") return null;
+  if (!buffer || buffer.length < 16) return null;
+
+  const mustByExt = ["heic", "heif", "tif", "tiff"].includes(ext);
+  const mustByMime =
+    m === "image/tiff" || m.includes("heic") || m.includes("heif");
+
+  const sniff = sniffEmbeddedImageBuffer(buffer);
+  const sniffOk =
+    sniff &&
+    ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+      sniff.mimeType
+    );
+
+  if (!mustByExt && !mustByMime) {
+    if (sniffOk) {
+      try {
+        await sharp(buffer, {
+          failOn: "warning",
+          limitInputPixels: 268_402_689,
+        }).metadata();
+        return null;
+      } catch {
+        /* 魔数像常见图但无法解码：尝试转 JPEG */
+      }
+    }
+  }
+
+  try {
+    const out = await sharp(buffer, {
+      failOn: "warning",
+      limitInputPixels: 268_402_689,
+    })
+      .rotate()
+      .jpeg({ quality: 88, mozjpeg: true })
+      .toBuffer();
+    if (!out?.length) return null;
+    return { buffer: out, mimeType: "image/jpeg" };
+  } catch (e) {
+    console.warn("[media] normalizeImageBufferForWeb", e?.message || e);
+    return null;
+  }
+}
+
 /**
  * @param {{ buffer: Buffer; mimetype: string; originalname?: string }} file
  * @param {{ publicUploadsDir: string; userId?: string | null }} opts
  */
 export async function saveUploadedMedia(file, opts) {
-  const mimetype = normalizeMime(file.mimetype);
-  const ext = extForStoredFile(mimetype, file.originalname);
+  let mimetype = normalizeMime(file.mimetype);
+  if (mimetype === "application/octet-stream" || mimetype === "") {
+    const inf = inferMimeFromFilename(file.originalname);
+    if (inf) mimetype = normalizeMime(inf);
+  }
   const token = `${Date.now()}-${randomBytes(12).toString("hex")}`;
-  const filename = `${token}.${ext}`;
-  const kind = kindFromMime(mimetype);
+  let ext = extForStoredFile(mimetype, file.originalname);
+  let filename = `${token}.${ext}`;
+  let kind = kindFromMime(mimetype);
+  if (kind === "file") {
+    const inf2 = inferMimeFromFilename(file.originalname);
+    if (inf2) {
+      mimetype = normalizeMime(inf2);
+      ext = extForStoredFile(mimetype, file.originalname);
+      filename = `${token}.${ext}`;
+      kind = kindFromMime(mimetype);
+    }
+  }
   /** 对象键仍用随机名；前端用 name 展示原始文件名 */
   const name = attachmentDisplayName(file.originalname);
   const sub = mediaPathSegment(opts.userId);
@@ -578,6 +676,10 @@ export async function saveUploadedMedia(file, opts) {
     ? join(opts.publicUploadsDir, sub)
     : opts.publicUploadsDir;
   const urlSub = sub ? `${sub}/` : "";
+
+  let bodyBuf = file.buffer;
+  let bodyMime = mimetype;
+  let outFilename = filename;
 
   let coverUrl;
   if (kind === "audio") {
@@ -615,7 +717,13 @@ export async function saveUploadedMedia(file, opts) {
   }
 
   if (kind === "image") {
-    const prev = await tryGenerateImagePreviewThumb(file.buffer, mimetype);
+    const norm = await normalizeImageBufferForWeb(bodyBuf, ext, bodyMime);
+    if (norm) {
+      bodyBuf = norm.buffer;
+      bodyMime = norm.mimeType;
+      outFilename = `${token}.jpg`;
+    }
+    const prev = await tryGenerateImagePreviewThumb(bodyBuf, bodyMime);
     if (prev) {
       const thumbFilename = `${token}-thumb.${prev.ext}`;
       if (isCosConfigured()) {
@@ -647,8 +755,8 @@ export async function saveUploadedMedia(file, opts) {
   }
 
   if (isCosConfigured()) {
-    const key = `${cosSub}/${filename}`;
-    await putCosObject(key, file.buffer, mimetype);
+    const key = `${cosSub}/${outFilename}`;
+    await putCosObject(key, bodyBuf, bodyMime);
     const url = buildObjectPublicUrl(key);
     const out = { url, kind, name };
     if (coverUrl) out.coverUrl = coverUrl;
@@ -657,9 +765,9 @@ export async function saveUploadedMedia(file, opts) {
   }
 
   await mkdir(localBase, { recursive: true });
-  const diskPath = join(localBase, filename);
-  await writeFile(diskPath, file.buffer);
-  const url = `/uploads/${urlSub}${filename}`;
+  const diskPath = join(localBase, outFilename);
+  await writeFile(diskPath, bodyBuf);
+  const url = `/uploads/${urlSub}${outFilename}`;
   const out = { url, kind, name };
   if (coverUrl) out.coverUrl = coverUrl;
   if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
@@ -689,11 +797,26 @@ export function planMediaCosDirectUpload(p) {
   if (fileSize > effectiveMax) {
     throw new Error(`文件过大（上限 ${maxMbLabel}MB）`);
   }
-  const mimetype = normalizeMime(p.contentType);
-  const ext = extForStoredFile(mimetype, p.originalname);
+  const orig =
+    typeof p.originalname === "string" ? p.originalname.trim() : "";
+  let mimetype = normalizeMime(p.contentType);
+  if (mimetype === "application/octet-stream" || mimetype === "") {
+    const inf = inferMimeFromFilename(orig);
+    if (inf) mimetype = normalizeMime(inf);
+  }
   const token = `${Date.now()}-${randomBytes(12).toString("hex")}`;
-  const filename = `${token}.${ext}`;
-  const kind = kindFromMime(mimetype);
+  let ext = extForStoredFile(mimetype, p.originalname);
+  let filename = `${token}.${ext}`;
+  let kind = kindFromMime(mimetype);
+  if (kind === "file") {
+    const inf2 = inferMimeFromFilename(orig);
+    if (inf2) {
+      mimetype = normalizeMime(inf2);
+      ext = extForStoredFile(mimetype, p.originalname);
+      filename = `${token}.${ext}`;
+      kind = kindFromMime(mimetype);
+    }
+  }
   const name = attachmentDisplayName(p.originalname);
   const sub = mediaPathSegment(p.userId);
   const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
@@ -841,8 +964,15 @@ export async function finalizeImagePreviewAfterCosUpload(objectKey, userId) {
   if (normalizeMime(mimetype) === "image/svg+xml") {
     return {};
   }
-  const buffer = await getCosObjectBuffer(k);
-  const prev = await tryGenerateImagePreviewThumb(buffer, mimetype);
+  let buffer = await getCosObjectBuffer(k);
+  let mt = mimetype;
+  const norm = await normalizeImageBufferForWeb(buffer, ext, mt);
+  if (norm) {
+    buffer = norm.buffer;
+    mt = norm.mimeType;
+    await putCosObject(k, buffer, mt);
+  }
+  const prev = await tryGenerateImagePreviewThumb(buffer, mt);
   if (!prev) return {};
   const thumbFilename = `${tokenPart}-thumb.${prev.ext}`;
   const thumbKey = `${cosSub}/${thumbFilename}`;

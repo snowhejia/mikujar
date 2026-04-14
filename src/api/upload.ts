@@ -3,6 +3,35 @@ import type { NoteMediaKind } from "../types";
 import { apiBase, apiFetchInit } from "./apiBase";
 import { xhrPutBlob, xhrPutBlobEtag } from "./xhrUpload";
 
+/** 文件夹拖入等场景下 File.type 常为空，避免被当成 octet-stream 导致 kind/COS Content-Type 错误 */
+function inferContentTypeForUpload(file: File): string {
+  const raw = file.type?.trim();
+  if (raw && raw !== "application/octet-stream") return raw;
+  const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/i)?.[1];
+  if (!ext) return raw || "application/octet-stream";
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    avif: "image/avif",
+    bmp: "image/bmp",
+    heic: "image/heic",
+    heif: "image/heif",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    pdf: "application/pdf",
+  };
+  return map[ext] ?? raw ?? "application/octet-stream";
+}
+
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = {};
   const admin = getAdminToken();
@@ -202,7 +231,7 @@ export async function uploadCardMedia(
       },
       body: JSON.stringify({
         filename: file.name,
-        contentType: file.type || "application/octet-stream",
+        contentType: inferContentTypeForUpload(file),
         fileSize: file.size,
       }),
     })

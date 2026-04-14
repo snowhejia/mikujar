@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
+import { existsSync } from "fs";
 import { createRequire } from "module";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { basename, dirname, join } from "path";
@@ -576,6 +577,132 @@ function isLikelyHeifOrAvifContainer(buffer) {
 }
 
 /**
+ * 优先用系统/PATH 上的新版 ffmpeg（6.1+ 才较完整支持 HEIF 瓦片网格）；否则退回 ffmpeg-static。
+ * @returns {string | null}
+ */
+function resolveFfmpegBinaryPath() {
+  const env = process.env.MIKUJAR_FFMPEG || process.env.FFMPEG_PATH;
+  if (typeof env === "string" && env && existsSync(env)) return env;
+  try {
+    const r = spawnSync("ffmpeg", ["-hide_banner", "-version"], {
+      encoding: "utf8",
+      timeout: 8000,
+    });
+    if (r.status === 0) return "ffmpeg";
+  } catch {
+    /* PATH 上无 ffmpeg */
+  }
+  const s = ffmpegStatic;
+  return typeof s === "string" && s ? s : null;
+}
+
+/**
+ * 解析 Tile Grid 需 ffprobe 的 `-show_stream_groups`（约 6.1+）。仅用 PATH / 环境变量（勿依赖过旧的静态包）。
+ * @returns {string | null}
+ */
+function resolveFfprobeBinaryPath() {
+  const env = process.env.MIKUJAR_FFPROBE || process.env.FFPROBE_PATH;
+  if (typeof env === "string" && env && existsSync(env)) return env;
+  try {
+    const r = spawnSync("ffprobe", ["-version"], {
+      encoding: "utf8",
+      timeout: 8000,
+    });
+    if (r.status === 0) return "ffprobe";
+  } catch {
+    /* PATH 上无 ffprobe */
+  }
+  return null;
+}
+
+/**
+ * @param {string} ffprobePath
+ * @param {string} inputPath
+ * @returns {{ layout: string; cropW: number; cropH: number; streams: number[] } | null}
+ */
+function probeHeifTileGridLayout(ffprobePath, inputPath) {
+  const r = spawnSync(
+    ffprobePath,
+    [
+      "-v",
+      "error",
+      "-print_format",
+      "json",
+      "-show_stream_groups",
+      "-i",
+      inputPath,
+    ],
+    { encoding: "utf8", maxBuffer: 12 * 1024 * 1024 }
+  );
+  if (r.status !== 0) return null;
+  let json;
+  try {
+    json = JSON.parse(r.stdout);
+  } catch {
+    return null;
+  }
+  const groups = json.stream_groups;
+  if (!Array.isArray(groups)) return null;
+  const tileGroup = groups.find((g) =>
+    /tile\s*grid/i.test(String(g?.type ?? ""))
+  );
+  const comp = tileGroup?.components?.[0];
+  const subs = comp?.subcomponents;
+  if (!Array.isArray(subs) || subs.length < 2) return null;
+  const sorted = [...subs].sort(
+    (a, b) => (a.stream_index ?? 0) - (b.stream_index ?? 0)
+  );
+  const cw = Number(comp.width);
+  const ch = Number(comp.height);
+  if (!Number.isFinite(cw) || !Number.isFinite(ch) || cw < 1 || ch < 1) {
+    return null;
+  }
+  const layout = sorted
+    .map((s) => `${s.tile_horizontal_offset}_${s.tile_vertical_offset}`)
+    .join("|");
+  const streams = sorted.map((s) => s.stream_index);
+  return { layout, cropW: cw, cropH: ch, streams };
+}
+
+/**
+ * @param {string} ffmpeg
+ * @param {string} inputPath
+ * @param {string} outputPath
+ * @param {{ layout: string; cropW: number; cropH: number; streams: number[] }} grid
+ * @returns {Promise<boolean>}
+ */
+function runFfmpegHeifTileGrid(ffmpeg, inputPath, outputPath, grid) {
+  const n = grid.streams.length;
+  const inputLabels = grid.streams.map((si) => `[0:v:${si}]`).join("");
+  const filter = `${inputLabels}xstack=inputs=${n}:layout=${grid.layout}[xg];[xg]crop=${grid.cropW}:${grid.cropH}:0:0[out]`;
+  return new Promise((resolve) => {
+    const child = spawn(
+      ffmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        inputPath,
+        "-filter_complex",
+        filter,
+        "-map",
+        "[out]",
+        "-frames:v",
+        "1",
+        "-q:v",
+        "3",
+        outputPath,
+      ],
+      { stdio: "ignore" }
+    );
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+/**
  * HEIF/HEIC 常含多路「视频」轨：封面/缩略图 + 全尺寸主图。不指定 map 时 ffmpeg 可能只解到第一路小图。
  * @param {string} ffmpeg
  * @param {string} inputPath
@@ -615,13 +742,42 @@ function runFfmpegHeifSingleStream(ffmpeg, inputPath, outputPath, streamIndex) {
  * @param {Buffer} buffer
  * @returns {Promise<{ buffer: Buffer; mimeType: string } | null>}
  */
-async function tryHeifLikeToJpegViaFfmpeg(buffer) {
-  const ffmpeg = ffmpegStatic;
+export async function tryHeifLikeToJpegViaFfmpeg(buffer) {
+  const ffmpeg = resolveFfmpegBinaryPath();
+  const ffprobe = resolveFfprobeBinaryPath();
   if (typeof ffmpeg !== "string" || !ffmpeg || !buffer?.length) return null;
   const dir = await mkdtemp(join(tmpdir(), "mj-heif-"));
   const inputPath = join(dir, "in.heic");
   try {
     await writeFile(inputPath, buffer);
+    if (ffprobe) {
+      const grid = probeHeifTileGridLayout(ffprobe, inputPath);
+      if (grid) {
+        const tileOut = join(dir, "tile.jpg");
+        const okGrid = await runFfmpegHeifTileGrid(
+          ffmpeg,
+          inputPath,
+          tileOut,
+          grid
+        );
+        if (okGrid) {
+          try {
+            const raw = await readFile(tileOut);
+            if (raw.length) {
+              const jpeg = await sharp(raw)
+                .rotate()
+                .jpeg({ quality: 88, mozjpeg: true })
+                .toBuffer();
+              if (jpeg.length) {
+                return { buffer: jpeg, mimeType: "image/jpeg" };
+              }
+            }
+          } catch {
+            /* 继续走逐轨逻辑 */
+          }
+        }
+      }
+    }
     let bestRaw = /** @type {Buffer | null} */ (null);
     let bestArea = 0;
     let hadFfmpegSuccess = false;
@@ -751,10 +907,30 @@ async function normalizeImageBufferForWeb(buffer, extRaw, mimetypeRaw) {
     mustByMime ||
     ["heic", "heif"].includes(ext);
 
+  /** HEIF 多页 / 主图非第 0 页时（如部分 AVIF）用 pagePrimary */
+  let heifPageOpt = {};
+  if (needsHeifWorkaround) {
+    try {
+      const hm = await sharp(buffer, {
+        failOn: "none",
+        limitInputPixels: 268_402_689,
+      }).metadata();
+      if (
+        (hm.pages != null && hm.pages > 1) ||
+        (hm.pagePrimary != null && hm.pagePrimary > 0)
+      ) {
+        heifPageOpt = { page: hm.pagePrimary ?? 0 };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   try {
     const out = await sharp(buffer, {
       failOn: needsHeifWorkaround ? "none" : "warning",
       limitInputPixels: 268_402_689,
+      ...heifPageOpt,
     })
       .rotate()
       .jpeg({ quality: 88, mozjpeg: true })

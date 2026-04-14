@@ -13,6 +13,8 @@ RUN npm run build && npm run export:collections
 FROM node:22-alpine AS prod
 WORKDIR /app
 ENV NODE_ENV=production
+# HEIF 瓦片拼图需较新 ffmpeg/ffprobe（PATH 优先于 ffmpeg-static）；静态包在部分 HEIC 上会无法打开文件
+RUN apk add --no-cache ffmpeg
 COPY server/package.json ./server/
 RUN cd server && npm install --omit=dev
 COPY server/src ./server/src

@@ -1,0 +1,307 @@
+/**
+ * Google Gemini（服务端代理，密钥仅环境变量 GEMINI_API_KEY）。
+ */
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+
+const MAX_CARD_TEXT = 32000;
+const MAX_TITLE = 500;
+const MAX_CHAT = 8000;
+const MAX_TAGS = 800;
+const MAX_ATTACHMENTS_LINE = 4000;
+const MAX_CARD_EXTRAS = 2000;
+const MAX_RELATED_EACH = 12000;
+const MAX_RELATED_TOTAL = 24000;
+const MAX_IMAGE_B64_CHARS = 5 * 1024 * 1024;
+
+export function isGeminiConfigured() {
+  return Boolean(GEMINI_API_KEY);
+}
+
+function truncate(s, n) {
+  if (typeof s !== "string") return "";
+  if (s.length <= n) return s;
+  return s.slice(0, n) + "\n…";
+}
+
+async function generateWithContent(systemInstruction, userTextBlock, images) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    GEMINI_MODEL
+  )}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+  const parts = [{ text: userTextBlock }];
+  const list = Array.isArray(images) ? images : [];
+  for (const img of list) {
+    if (!img || typeof img !== "object") continue;
+    const mimeType =
+      typeof img.mimeType === "string" && img.mimeType.startsWith("image/")
+        ? img.mimeType
+        : "image/jpeg";
+    const data =
+      typeof img.dataBase64 === "string" ? img.dataBase64.trim() : "";
+    if (!data || data.length > MAX_IMAGE_B64_CHARS) continue;
+    const label = typeof img.label === "string" ? img.label.trim() : "";
+    if (label) parts.push({ text: `\n${label}\n` });
+    parts.push({
+      inlineData: { mimeType, data },
+    });
+  }
+
+  const body = {
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      temperature: 0.65,
+      maxOutputTokens: 4096,
+    },
+  };
+
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const rawErr = await r.text();
+  if (!r.ok) {
+    const err = new Error(
+      `Gemini 请求失败（${r.status}）：${rawErr.slice(0, 280)}`
+    );
+    err.code = "GEMINI_HTTP";
+    throw err;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(rawErr);
+  } catch {
+    const err = new Error("Gemini 返回非 JSON");
+    err.code = "GEMINI_BAD_RESPONSE";
+    throw err;
+  }
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
+
+  const block = data?.candidates?.[0]?.finishReason;
+  if (!text?.trim() && block === "SAFETY") {
+    const err = new Error("内容被安全策略拦截，请换一段笔记再试");
+    err.code = "GEMINI_SAFETY";
+    throw err;
+  }
+
+  return text;
+}
+
+function normalizeImagesPayload(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= 16) break;
+    if (!item || typeof item !== "object") continue;
+    const mimeType =
+      typeof item.mimeType === "string" ? item.mimeType : "image/jpeg";
+    const dataBase64 =
+      typeof item.dataBase64 === "string" ? item.dataBase64 : "";
+    if (!dataBase64.trim()) continue;
+    const label = typeof item.label === "string" ? item.label.slice(0, 240) : "";
+    out.push({
+      label,
+      mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
+      dataBase64: dataBase64.trim(),
+    });
+  }
+  return out;
+}
+
+function parseQuestionsJson(raw) {
+  let s = (raw || "").trim();
+  if (s.startsWith("```")) {
+    s = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+  }
+  const j = JSON.parse(s);
+  const arr = j?.questions;
+  if (!Array.isArray(arr)) throw new Error("no questions array");
+  const questions = arr
+    .filter((x) => typeof x === "string")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  if (questions.length < 5) {
+    while (questions.length < 5) questions.push("…");
+  }
+  return { questions };
+}
+
+function normalizeRelatedCards(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= 32) break;
+    if (!item || typeof item !== "object") continue;
+    const collectionName =
+      typeof item.collectionName === "string"
+        ? item.collectionName.slice(0, 160)
+        : "";
+    const text =
+      typeof item.text === "string"
+        ? truncate(item.text, MAX_RELATED_EACH)
+        : "";
+    if (!collectionName.trim() && !text.trim()) continue;
+    out.push({ collectionName, text });
+  }
+  return out;
+}
+
+/**
+ * 主笔记 + 相关笔记（权重说明在文案中）；相关总长度封顶。
+ */
+function buildContextBlock({
+  cardTitle,
+  cardText,
+  cardTags,
+  cardAttachments,
+  cardExtras,
+  relatedCards,
+}) {
+  let main = `【当前笔记·优先依据】\n首行摘要：${
+    cardTitle || "（无）"
+  }\n\n【正文全文】\n${cardText || "（空）"}`;
+  if (cardTags?.trim()) {
+    main += `\n\n【标签】\n${cardTags}`;
+  }
+  if (cardAttachments?.trim()) {
+    main += `\n\n【附件与媒体】\n${cardAttachments}`;
+  }
+  if (cardExtras?.trim()) {
+    main += `\n\n【日历 / 提醒 / 其它元信息】\n${cardExtras}`;
+  }
+
+  if (!relatedCards?.length) return main;
+
+  let rel =
+    `\n\n════════\n【相关笔记·仅供参考、权重明显低于当前笔记】\n` +
+    `下列卡片与当前笔记在应用中建立过「相关笔记」链接，仅作补充背景；与当前笔记冲突时以当前笔记为准；弱相关时勿强行混写。\n`;
+  let used = 0;
+  for (let i = 0; i < relatedCards.length; i++) {
+    const r = relatedCards[i];
+    const name = (r.collectionName || "未命名").trim() || "未命名";
+    const body = (r.text || "").trim() || "（空）";
+    const block = `\n--- 相关 ${i + 1} · 合集「${name}」---\n${body}\n`;
+    if (used + block.length > MAX_RELATED_TOTAL) break;
+    rel += block;
+    used += block.length;
+  }
+  return main + rel;
+}
+
+function fallbackQuestionsFromLines(raw) {
+  const lines = (raw || "")
+    .split(/\n+/)
+    .map((l) => l.replace(/^\d+[\.\)、]\s*/, "").replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+  const questions = [];
+  for (const line of lines) {
+    if (questions.length >= 5) break;
+    if (line.length > 8) questions.push(line);
+  }
+  while (questions.length < 5) questions.push("…");
+  return { questions: questions.slice(0, 5) };
+}
+
+/**
+ * @param {object} payload
+ * @param {'suggest_questions'|'quick_action'|'chat'} payload.task
+ * @param {string} [payload.cardTitle]
+ * @param {string} [payload.cardText]
+ * @param {'dive'|'explain'|'simplify'|'example'} [payload.quickAction]
+ * @param {string} [payload.message]
+ */
+export async function runNoteAssist(payload) {
+  if (!GEMINI_API_KEY) {
+    const err = new Error("GEMINI_NOT_CONFIGURED");
+    err.code = "GEMINI_NOT_CONFIGURED";
+    throw err;
+  }
+
+  const cardTitle = truncate(payload.cardTitle ?? "", MAX_TITLE);
+  const cardText = truncate(payload.cardText ?? "", MAX_CARD_TEXT);
+  const cardTags = truncate(payload.cardTags ?? "", MAX_TAGS);
+  const cardAttachments = truncate(payload.cardAttachments ?? "", MAX_ATTACHMENTS_LINE);
+  const cardExtras = truncate(payload.cardExtras ?? "", MAX_CARD_EXTRAS);
+  const relatedCards = normalizeRelatedCards(payload.relatedCards);
+  const images = normalizeImagesPayload(payload.images);
+  const task = payload.task;
+  const ctxBlock = buildContextBlock({
+    cardTitle,
+    cardText,
+    cardTags,
+    cardAttachments,
+    cardExtras,
+    relatedCards,
+  });
+
+  const weightHint =
+    "上下文含「当前笔记」全文（优先）与若干「相关笔记」摘录（次要）。请主要围绕当前笔记作答；相关笔记仅作辅助联想。";
+  const visionHint =
+    images.length > 0
+      ? " 若随附图片，请结合图片与文字理解；相关卡片所附图片权重低于当前笔记配图。"
+      : "";
+
+  if (task === "suggest_questions") {
+    const sys =
+      `${weightHint}${visionHint} 你是学习助手，根据用户笔记生成延伸问题。回复必须且仅为一个 JSON 对象，不要 Markdown 代码围栏，不要其它说明文字。键 questions 为长度恰好 5 的字符串数组。`;
+    const user = `${ctxBlock}\n\n请根据以上内容生成 5 个相关的、具体可答的思考题（中文）；优先紧扣「当前笔记」正文，相关笔记仅在有明确关联时再体现。严格输出 JSON：{"questions":["…","…","…","…","…"]}`;
+    const raw = await generateWithContent(sys, user, images);
+    try {
+      return parseQuestionsJson(raw);
+    } catch {
+      return fallbackQuestionsFromLines(raw);
+    }
+  }
+
+  if (task === "quick_action") {
+    const qa = payload.quickAction;
+    const map = {
+      dive:
+        "请「深入展开」：梳理关键概念、子话题、与更广知识域的联系；用清晰分段与条目，语言与笔记一致（笔记为中文则用中文）。",
+      explain:
+        "请「解释说明」：用初学者能理解的方式解释笔记核心内容，可类比、分步，避免空泛。语言与笔记一致。",
+      simplify:
+        "请「简化表述」：把要点压缩成更短、更直白的句子，保留关键信息，可用条目列出。语言与笔记一致。",
+      example:
+        "请「举例说明」：给出与笔记主题相关的具体例子、场景或小练习，帮助理解。语言与笔记一致。",
+    };
+    const instr = map[qa];
+    if (!instr) {
+      const err = new Error("无效的 quickAction");
+      err.code = "BAD_QUICK_ACTION";
+      throw err;
+    }
+    const sys =
+      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。可使用短标题行与「-」列表，不要使用 Markdown 标题符号 #。`;
+    const user = `${ctxBlock}\n\n${instr}`;
+    const text = await generateWithContent(sys, user, images);
+    return { text: text.trim() };
+  }
+
+  if (task === "chat") {
+    const message = truncate(payload.message ?? "", MAX_CHAT);
+    if (!message.trim()) {
+      const err = new Error("消息不能为空");
+      err.code = "EMPTY_MESSAGE";
+      throw err;
+    }
+    const sys =
+      `${weightHint}${visionHint} 你是笔记学习助手，结合用户提供的笔记内容回答问题。只输出回答正文，不要重复整篇笔记。语言与问题一致（中文问题用中文答）。`;
+    const user = `${ctxBlock}\n\n【用户问题】\n${message}`;
+    const text = await generateWithContent(sys, user, images);
+    return { text: text.trim() };
+  }
+
+  const err = new Error("无效任务");
+  err.code = "BAD_TASK";
+  throw err;
+}

@@ -54,6 +54,29 @@ export type AppChrome = {
   connectionsIntro: string;
   connectionsOpenTarget: string;
   connectionsBoardHint: string;
+  /** 笔记探索白板卡片左侧灰条：拖动拉线建立关联 */
+  connectionsLinkRailAria: string;
+  /** 笔记探索 · 问 AI 侧栏 */
+  cardAskAiTitle: string;
+  cardAskAiToolbar: string;
+  cardAskAiPlaceholder: string;
+  cardAskAiSend: string;
+  cardAskAiClose: string;
+  cardAskAiQuickAction: string;
+  cardAskAiDive: string;
+  cardAskAiExplain: string;
+  cardAskAiSimplify: string;
+  cardAskAiExample: string;
+  cardAskAiWonder: string;
+  cardAskAiLoading: string;
+  cardAskAiAnswer: string;
+  cardAskAiNeedLogin: string;
+  cardAskAiNeedRemote: string;
+  cardAskAiGeminiDisabled: string;
+  cardAskAiError: string;
+  cardAskAiSaveAsNote: string;
+  cardAskAiSaveSuccess: string;
+  cardAskAiSaveFail: string;
   remindersEntry: string;
   favoriteCols: string;
   unfavoriteAria: string;
@@ -264,12 +287,35 @@ const zh: AppChrome = {
   allNotesEntry: "全部笔记",
   titleAllNotes: "全部笔记",
   looseNotesCollectionName: "未归类笔记",
-  connectionsEntry: "笔记连接",
-  titleConnections: "笔记连接",
-  connectionsEmpty: "还没有笔记之间的连接～在卡片「⋯」里点「相关笔记」可建立连接。",
-  connectionsIntro: "笔记之间的成对关联（A↔B 双向只计 1 条）。",
+  connectionsEntry: "笔记探索",
+  titleConnections: "笔记探索",
+  connectionsEmpty:
+    "还没有可探索的笔记关联～在卡片「⋯」里点「相关笔记」即可建立。",
+  connectionsIntro: "关联成对展示（A↔B 双向只计 1 条）。",
   connectionsOpenTarget: "打开目标笔记",
-  connectionsBoardHint: "空白处拖曳平移画布，滚轮缩放。",
+  connectionsBoardHint:
+    "空白处拖曳平移画布，滚轮缩放。在卡片左侧灰条上按下并拖到另一张卡片可建立相关笔记。",
+  connectionsLinkRailAria: "从此处拖动连线到另一张笔记",
+  cardAskAiTitle: "问 AI",
+  cardAskAiToolbar: "问 AI",
+  cardAskAiPlaceholder: "向 AI 提问…",
+  cardAskAiSend: "发送",
+  cardAskAiClose: "关闭",
+  cardAskAiQuickAction: "快捷操作",
+  cardAskAiDive: "深入",
+  cardAskAiExplain: "解释",
+  cardAskAiSimplify: "简化",
+  cardAskAiExample: "例子",
+  cardAskAiWonder: "我还想…",
+  cardAskAiLoading: "生成中…",
+  cardAskAiAnswer: "回答",
+  cardAskAiNeedLogin: "请先登录账号后再使用问 AI。",
+  cardAskAiNeedRemote: "问 AI 仅在云端数据模式下可用。",
+  cardAskAiGeminiDisabled: "服务器未配置 AI（GEMINI_API_KEY），请稍后再试或联系管理员。",
+  cardAskAiError: "请求失败，请检查网络后重试。",
+  cardAskAiSaveAsNote: "保存为笔记",
+  cardAskAiSaveSuccess: "已保存到当前合集，并与当前笔记建立了相关链接。",
+  cardAskAiSaveFail: "保存失败，请稍后重试。",
   remindersEntry: "我的待办入口",
   favoriteCols: "收藏的合集",
   unfavoriteAria: "取消收藏",
@@ -398,7 +444,7 @@ const zh: AppChrome = {
   importAppleNotesRunErr: "导入未完成，请稍后再试。",
   importAppleNotesBlockedNoEdit: "当前不可编辑，无法导入。",
   importAppleNotesBlockedTrash: "请先退出回收站视图再导入。",
-  importAppleNotesBlockedConnections: "请先退出「笔记连接」视图再导入。",
+  importAppleNotesBlockedConnections: "请先退出「笔记探索」视图再导入。",
   importAppleNotesBlockedReminders: "请先退出「我的待办」入口再导入。",
   importAppleNotesBlockedCalendar: "请先关闭日历单日视图再导入。",
   importAppleNotesBlockedSearch: "请先清空搜索再导入。",
@@ -484,13 +530,37 @@ const en: AppChrome = {
   allNotesEntry: "All notes",
   titleAllNotes: "All Notes",
   looseNotesCollectionName: "Inbox",
-  connectionsEntry: "Connections",
-  titleConnections: "Note connections",
+  connectionsEntry: "Explore",
+  titleConnections: "Explore notes",
   connectionsEmpty:
-    "No links yet — use “⋯” on a card and Related notes to connect.",
-  connectionsIntro: "Pairs of linked notes (A↔B counts as one link).",
+    "Nothing to explore yet — use “⋯” on a card, then Related notes to link.",
+  connectionsIntro: "Linked pairs (A↔B counts as one link).",
   connectionsOpenTarget: "Open target",
-  connectionsBoardHint: "Drag empty space to pan. Scroll wheel to zoom.",
+  connectionsBoardHint:
+    "Drag empty space to pan. Scroll wheel to zoom. Drag from the left rail on a card to another to link.",
+  connectionsLinkRailAria: "Drag a line from here to another note",
+  cardAskAiTitle: "Ask AI",
+  cardAskAiToolbar: "Ask AI",
+  cardAskAiPlaceholder: "Ask a question…",
+  cardAskAiSend: "Send",
+  cardAskAiClose: "Close",
+  cardAskAiQuickAction: "Quick action",
+  cardAskAiDive: "Dive in",
+  cardAskAiExplain: "Explain",
+  cardAskAiSimplify: "Simplify",
+  cardAskAiExample: "Example",
+  cardAskAiWonder: "I wonder…",
+  cardAskAiLoading: "Generating…",
+  cardAskAiAnswer: "Answer",
+  cardAskAiNeedLogin: "Sign in to use Ask AI.",
+  cardAskAiNeedRemote: "Ask AI is only available in cloud data mode.",
+  cardAskAiGeminiDisabled:
+    "AI isn’t configured on the server (GEMINI_API_KEY). Try again later or contact an admin.",
+  cardAskAiError: "Request failed. Check your network and try again.",
+  cardAskAiSaveAsNote: "Save as note",
+  cardAskAiSaveSuccess:
+    "Saved to the current collection and linked with this note.",
+  cardAskAiSaveFail: "Couldn’t save. Try again later.",
   remindersEntry: "All reminders",
   favoriteCols: "Starred collections",
   unfavoriteAria: "Remove from starred",
@@ -621,7 +691,7 @@ const en: AppChrome = {
   importAppleNotesRunErr: "Import did not finish. Please try again.",
   importAppleNotesBlockedNoEdit: "Editing is disabled; import is unavailable.",
   importAppleNotesBlockedTrash: "Leave the trash view before importing.",
-  importAppleNotesBlockedConnections: "Leave the connections view before importing.",
+  importAppleNotesBlockedConnections: "Leave Explore before importing.",
   importAppleNotesBlockedReminders: "Leave the reminders entry before importing.",
   importAppleNotesBlockedCalendar: "Close the calendar day view before importing.",
   importAppleNotesBlockedSearch: "Clear search before importing.",

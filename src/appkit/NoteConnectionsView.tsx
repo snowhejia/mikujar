@@ -16,8 +16,15 @@ import {
   formatCardReminderBesideTime,
   formatCardTimeLabel,
 } from "../cardTimeLabel";
+import { plainTextFromNoteHtml } from "../notePlainText";
 import type { ConnectionEdge } from "./connectionEdges";
 import type { Collection, NoteCard } from "../types";
+import {
+  CardAskAiPanel,
+  type CardAskAiContext,
+  type CardAskAiGate,
+  type CardAskAiRelatedEntry,
+} from "./CardAskAiPanel";
 
 const WORLD = 8000;
 /** 减轻 transform 亚像素合成分辨率导致的文字、描边发糊 */
@@ -35,6 +42,8 @@ const BOARD_LINK_WIDTH_PX = 2;
 /** 白板底上的实色灰（等价于 rgba(55,53,47,.2) 叠白），无 alpha，叠线不会加深 */
 const BOARD_LINK_GRAY = "#d8d7d5";
 const BOARD_LINK_PULSE = "rgba(250, 204, 21, 0.52)";
+/** 从左侧灰条拖出关联线预览 */
+const BOARD_LINK_DRAFT = "rgba(59, 130, 246, 0.92)";
 /** 与 .connections-board__node-wrap 典型宽度一致；高度随内容变化，由 DOM 实测 */
 const DEFAULT_HALF_W = 210;
 const DEFAULT_HALF_H = 92;
@@ -50,6 +59,32 @@ const ORTHO_STRAIGHT_EPS = 32;
 /** 从边中点沿法线外伸，使折角落在卡片外侧间隙，避免折角压在卡片底下/内部 */
 const ORTHO_STUB_MIN = 14;
 const ORTHO_STUB_MAX = 38;
+
+/** 从连接边收集与当前卡相连的其它卡（全文纯文本 + 合集名），供问 AI */
+function relatedCardsPayloadForAskAi(
+  edges: ConnectionEdge[],
+  colId: string,
+  cardId: string
+): CardAskAiRelatedEntry[] {
+  const seen = new Set<string>();
+  const out: CardAskAiRelatedEntry[] = [];
+  for (const e of edges) {
+    const fromMatch = e.fromCol.id === colId && e.fromCard.id === cardId;
+    const toMatch = e.toCol.id === colId && e.toCard.id === cardId;
+    if (!fromMatch && !toMatch) continue;
+    const oCol = fromMatch ? e.toCol : e.fromCol;
+    const oCard = fromMatch ? e.toCard : e.fromCard;
+    const key = `${oCol.id}\0${oCard.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      collectionName: oCol.name || "",
+      text: plainTextFromNoteHtml(oCard.text || ""),
+      media: oCard.media,
+    });
+  }
+  return out;
+}
 /** 力导向结束后将中心吸附到网格，线条更易与「主干」对齐，观感更接近地铁图 */
 const LAYOUT_GRID = 24;
 
@@ -548,10 +583,15 @@ function ConnectionsBoardCard({
   colId,
   card,
   onOpenDetail,
+  onLinkRailPointerDown,
+  onOpenAskAi,
 }: {
   colId: string;
   card: NoteCard;
   onOpenDetail: () => void;
+  /** 仅在左侧灰条上按下拖动可拉出线；未传则保持只读灰条 */
+  onLinkRailPointerDown?: (e: React.PointerEvent) => void;
+  onOpenAskAi?: () => void;
 }) {
   const c = useAppChrome();
   const { lang } = useAppUiLang();
@@ -569,7 +609,26 @@ function ConnectionsBoardCard({
           "card__inner" + (hasGallery ? " card__inner--split" : "")
         }
       >
-        <div className="card__move-rail card__move-rail--readonly" aria-hidden />
+        <div
+          className={
+            "card__move-rail card__move-rail--readonly" +
+            (onLinkRailPointerDown
+              ? " card__move-rail--connections-link"
+              : "")
+          }
+          aria-hidden={onLinkRailPointerDown ? false : true}
+          aria-label={
+            onLinkRailPointerDown ? c.connectionsLinkRailAria : undefined
+          }
+          onPointerDown={
+            onLinkRailPointerDown
+              ? (e) => {
+                  e.stopPropagation();
+                  onLinkRailPointerDown(e);
+                }
+              : undefined
+          }
+        />
         <div
           className={
             "card__paper card__paper--with-move-rail" +
@@ -590,6 +649,34 @@ function ConnectionsBoardCard({
               ) : null}
             </span>
             <div className="card__toolbar-actions">
+              {onOpenAskAi ? (
+                <button
+                  type="button"
+                  className="card__icon-btn card__ask-ai-btn"
+                  title={c.cardAskAiToolbar}
+                  aria-label={c.cardAskAiToolbar}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAskAi();
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.35"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="8" cy="8" r="6.25" />
+                    <path d="M6.35 6.1a1.75 1.75 0 012.95 1.2c0 1.1-1.1 1.35-1.45 2.05V10" />
+                    <circle cx="8" cy="12.35" r="0.55" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="card__icon-btn card__detail-btn"
@@ -632,15 +719,48 @@ function ConnectionsBoardCard({
   );
 }
 
+type LinkRubberState = {
+  fromKey: string;
+  fromColId: string;
+  fromCardId: string;
+  pointerId: number;
+  curX: number;
+  curY: number;
+  /** 指针下可作为落点的另一张卡片（不含起点） */
+  hoverTargetKey: string | null;
+};
+
 export function NoteConnectionsView({
   edges,
   onOpenTarget,
+  canEdit = false,
+  onLinkCards,
+  askAiGate = "ok",
+  onSaveAiAnswer,
 }: {
-  /** 由父组件在首次进入「笔记连接」后扫描得到，避免未点开时全库遍历 */
+  /** 由父组件在首次进入「笔记探索」后扫描得到，避免未点开时全库遍历 */
   edges: ConnectionEdge[];
   onOpenTarget: (colId: string, cardId: string) => void;
+  /** 为 true 且提供 onLinkCards 时，从卡片左侧灰条拖动连线到另一张卡片建立双向相关 */
+  canEdit?: boolean;
+  onLinkCards?: (
+    fromColId: string,
+    fromCardId: string,
+    toColId: string,
+    toCardId: string
+  ) => void;
+  /** 问 AI：需登录且云端数据模式，否则侧栏提示原因 */
+  askAiGate?: CardAskAiGate;
+  /** 将问 AI 回答保存为新笔记并和当前卡互相关联 */
+  onSaveAiAnswer?: (
+    plainText: string,
+    sourceColId: string,
+    sourceCardId: string
+  ) => Promise<boolean>;
 }) {
   const c = useAppChrome();
+  const linkGestureEnabled = Boolean(canEdit && onLinkCards);
+  const [askAi, setAskAi] = useState<CardAskAiContext | null>(null);
 
   const { nodes, graphEdges, layoutKey } = useMemo(() => {
     const nodeMap = new Map<
@@ -692,6 +812,11 @@ export function NoteConnectionsView({
     }
     return layoutPositions;
   }, [basePositions, layoutPositions]);
+
+  const positionsRef = useRef(positions);
+  positionsRef.current = positions;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
 
   const layoutSpine = useMemo(
     () => layoutMedianSpine(positions),
@@ -760,22 +885,12 @@ export function NoteConnectionsView({
     clearPulseSchedule();
   }, [layoutKey, clearPulseSchedule]);
 
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        pulseRunRef.current += 1;
-        setPulse(null);
-        clearPulseSchedule();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [clearPulseSchedule]);
-
   /** 各节点包裹层实测半边距，用于连线贴边 */
   const [boxHalfById, setBoxHalfById] = useState<Map<string, BoxHalf>>(
     () => new Map()
   );
+  const boxHalfByIdRef = useRef(boxHalfById);
+  boxHalfByIdRef.current = boxHalfById;
   const nodeWrapElRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const nodeWrapRefCbRef = useRef<
     Map<string, (el: HTMLDivElement | null) => void>
@@ -794,6 +909,143 @@ export function NoteConnectionsView({
     panX: number;
     panY: number;
   } | null>(null);
+
+  const [linkRubber, setLinkRubber] = useState<LinkRubberState | null>(null);
+  /** 拖线成功建立关联后的 click 用于取消脉冲高亮，避免误触 */
+  const suppressNextCardClickRef = useRef(false);
+  const onLinkCardsRef = useRef(onLinkCards);
+  onLinkCardsRef.current = onLinkCards;
+
+  const clientToWorld = useCallback((clientX: number, clientY: number) => {
+    const vp = viewportRef.current;
+    if (!vp) {
+      return { x: 0, y: 0 };
+    }
+    const r = vp.getBoundingClientRect();
+    const lx = clientX - r.left;
+    const ly = clientY - r.top;
+    const z = zoomRef.current;
+    const p = panRef.current;
+    return { x: (lx - p.x) / z, y: (ly - p.y) / z };
+  }, []);
+
+  const startLinkDragFromRail = useCallback(
+    (
+      e: React.PointerEvent,
+      nodeKey: string,
+      colId: string,
+      cardId: string
+    ) => {
+      if (!linkGestureEnabled) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const w = clientToWorld(e.clientX, e.clientY);
+      setLinkRubber({
+        fromKey: nodeKey,
+        fromColId: colId,
+        fromCardId: cardId,
+        pointerId: e.pointerId,
+        curX: w.x,
+        curY: w.y,
+        hoverTargetKey: null,
+      });
+    },
+    [linkGestureEnabled, clientToWorld]
+  );
+
+  useEffect(() => {
+    if (linkRubber === null) return;
+    const pid = linkRubber.pointerId;
+    const fromKey = linkRubber.fromKey;
+    const fromColId = linkRubber.fromColId;
+    const fromCardId = linkRubber.fromCardId;
+
+    const findTargetKey = (wx: number, wy: number): string | null => {
+      for (const [nid, pos] of positionsRef.current.entries()) {
+        if (nid === fromKey) continue;
+        const bh = boxHalfByIdRef.current.get(nid) ?? {
+          hw: DEFAULT_HALF_W,
+          hh: DEFAULT_HALF_H,
+        };
+        if (
+          Math.abs(wx - pos.x) <= bh.hw &&
+          Math.abs(wy - pos.y) <= bh.hh
+        ) {
+          return nid;
+        }
+      }
+      return null;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      const w = clientToWorld(ev.clientX, ev.clientY);
+      const hoverKey = findTargetKey(w.x, w.y);
+      setLinkRubber((prev) =>
+        prev && prev.pointerId === pid
+          ? {
+              ...prev,
+              curX: w.x,
+              curY: w.y,
+              hoverTargetKey: hoverKey,
+            }
+          : prev
+      );
+    };
+
+    /* 起始帧即根据指针位置更新落点高亮，避免需移动后才出现 */
+    setLinkRubber((prev) =>
+      prev && prev.pointerId === pid
+        ? {
+            ...prev,
+            hoverTargetKey: findTargetKey(prev.curX, prev.curY),
+          }
+        : prev
+    );
+
+    const onEnd = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      const w = clientToWorld(ev.clientX, ev.clientY);
+      const tgtKey = findTargetKey(w.x, w.y);
+      const tgtNode = tgtKey ? nodesRef.current.get(tgtKey) : undefined;
+      const fn = onLinkCardsRef.current;
+      if (tgtKey && tgtNode && fn) {
+        fn(fromColId, fromCardId, tgtNode.col.id, tgtNode.card.id);
+        suppressNextCardClickRef.current = true;
+      }
+      setLinkRubber(null);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onEnd);
+    document.addEventListener("pointercancel", onEnd);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onEnd);
+      document.removeEventListener("pointercancel", onEnd);
+    };
+  }, [linkRubber?.pointerId, clientToWorld]);
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        pulseRunRef.current += 1;
+        setPulse(null);
+        clearPulseSchedule();
+        setLinkRubber(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clearPulseSchedule]);
+
+  useEffect(() => {
+    setLinkRubber(null);
+  }, [layoutKey]);
+
+  useEffect(() => {
+    setAskAi(null);
+  }, [layoutKey]);
 
   const getNodeWrapRef = useCallback((id: string) => {
     let cb = nodeWrapRefCbRef.current.get(id);
@@ -1045,7 +1297,10 @@ export function NoteConnectionsView({
       <p className="connections-board__hint">{c.connectionsBoardHint}</p>
       <div
         ref={viewportRef}
-        className="connections-board__viewport"
+        className={
+          "connections-board__viewport" +
+          (linkRubber ? " connections-board__viewport--link-draft" : "")
+        }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1122,6 +1377,19 @@ export function NoteConnectionsView({
                     );
                   })
               : null}
+            {linkRubber && positions.get(linkRubber.fromKey) ? (
+              <path
+                d={`M ${positions.get(linkRubber.fromKey)!.x} ${
+                  positions.get(linkRubber.fromKey)!.y
+                } L ${linkRubber.curX} ${linkRubber.curY}`}
+                fill="none"
+                stroke={BOARD_LINK_DRAFT}
+                strokeWidth={(BOARD_LINK_WIDTH_PX * 1.35) / zoom}
+                strokeLinecap="round"
+                strokeDasharray="6 5"
+                pointerEvents="none"
+              />
+            ) : null}
           </svg>
           {[...nodes.entries()].map(([id, { col, card }]) => {
             const p = positions.get(id);
@@ -1140,6 +1408,12 @@ export function NoteConnectionsView({
                     if (L <= 1) return "connections-board__node-wrap--highlight";
                     return "connections-board__node-wrap--highlight-neighbor";
                   })(),
+                  linkRubber?.hoverTargetKey === id
+                    ? "connections-board__node-wrap--link-drop-target"
+                    : "",
+                  askAi?.nodeKey === id
+                    ? "connections-board__node-wrap--ask-ai"
+                    : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -1150,6 +1424,12 @@ export function NoteConnectionsView({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
+                  if (suppressNextCardClickRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    suppressNextCardClickRef.current = false;
+                    return;
+                  }
                   if ((e.target as HTMLElement).closest("button")) return;
                   e.stopPropagation();
                   if (pulse?.rootId === id) {
@@ -1165,12 +1445,38 @@ export function NoteConnectionsView({
                   colId={col.id}
                   card={card}
                   onOpenDetail={() => onOpenTarget(col.id, card.id)}
+                  onOpenAskAi={() =>
+                    setAskAi({
+                      nodeKey: id,
+                      colId: col.id,
+                      card,
+                      relatedCards: relatedCardsPayloadForAskAi(
+                        edges,
+                        col.id,
+                        card.id
+                      ),
+                    })
+                  }
+                  onLinkRailPointerDown={
+                    linkGestureEnabled
+                      ? (ev) =>
+                          startLinkDragFromRail(ev, id, col.id, card.id)
+                      : undefined
+                  }
                 />
               </div>
             );
           })}
         </div>
       </div>
+      <CardAskAiPanel
+        open={askAi !== null}
+        context={askAi}
+        gate={askAiGate}
+        canEdit={canEdit}
+        onSaveAnswerAsCard={onSaveAiAnswer}
+        onClose={() => setAskAi(null)}
+      />
     </div>
   );
 }

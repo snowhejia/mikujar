@@ -616,7 +616,7 @@
   user-select: none;
 }
 
-/* —— 笔记连接（无限白板） —— */
+/* —— 笔记探索（无限白板） —— */
 .connections-page {
   width: 100%;
   max-width: 40rem;
@@ -636,7 +636,7 @@
   box-sizing: border-box;
 }
 
-/* 笔记连接：主栏铺满侧栏右侧，无顶栏/内边距；白板贴边 */
+/* 笔记探索：主栏铺满侧栏右侧，无顶栏/内边距；白板贴边 */
 .main.main--connections-board {
   padding: 0;
 }
@@ -707,6 +707,14 @@
   cursor: grabbing;
 }
 
+.connections-board__viewport--link-draft {
+  cursor: crosshair;
+}
+
+.connections-board__viewport--link-draft:active {
+  cursor: crosshair;
+}
+
 .connections-board__world {
   position: relative;
   /* 避免 will-change 长期占位导致整块被栅格成低分辩纹理，放大后发糊 */
@@ -747,6 +755,329 @@
     0 0 32px 10px rgba(250, 204, 21, 0.45);
 }
 
+/* 从灰条拖线时，指针下的目标卡片选中框（与焦点蓝一致，小面积描边） */
+.connections-board__node-wrap--link-drop-target {
+  z-index: 4;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px rgba(37, 99, 235, 0.88),
+    0 0 0 1px rgba(255, 255, 255, 0.55) inset,
+    0 0 20px 6px rgba(37, 99, 235, 0.2);
+}
+
+/* 问 AI 侧栏打开时，对应卡片外框 */
+.connections-board__node-wrap--ask-ai {
+  z-index: 5;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px rgba(var(--mikujar-logo-jar-rgb), 0.42),
+    0 0 18px 5px rgba(var(--mikujar-logo-jar-rgb), 0.12);
+}
+
+/* 问 AI：默认灰色，打开侧栏选中该卡时再为主题蓝 */
+.connections-board__node-card .card__ask-ai-btn {
+  color: var(--vp-c-text-3, #a0a0a8);
+}
+
+.connections-board__node-card .card__ask-ai-btn:hover {
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.connections-board__node-wrap--ask-ai .card__ask-ai-btn {
+  color: var(--mikujar-logo-jar);
+}
+
+.connections-board__node-wrap--ask-ai .card__ask-ai-btn:hover {
+  color: var(--mikujar-logo-jar-deep);
+}
+
+/* 笔记探索 · 问 AI 侧栏（白底、细边框、轻阴影） */
+/* 不铺半透明底，避免选中卡片与白板被压暗；仍全屏可点关闭 */
+.card-ask-ai__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.card-ask-ai {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 201;
+  width: min(22.5rem, calc(100vw - 1rem));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 1.25rem;
+  background: var(--vp-c-bg, #fff);
+  border-left: 1px solid rgba(55, 53, 47, 0.1);
+  box-shadow: var(--vp-shadow-2, -6px 0 28px rgba(0, 0, 0, 0.08));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card-ask-ai__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.card-ask-ai__head-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vp-c-text-1, #37352f);
+}
+
+.card-ask-ai__icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.55);
+  cursor: pointer;
+}
+
+.card-ask-ai__icon-btn:hover {
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.85);
+}
+
+.card-ask-ai__card-title {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.55);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-ask-ai__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.card-ask-ai__hint--warn {
+  color: rgba(185, 80, 60, 0.95);
+}
+
+.card-ask-ai__chat {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  background: rgba(55, 53, 47, 0.03);
+}
+
+.card-ask-ai__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 0.85rem;
+  color: var(--vp-c-text-1, #37352f);
+  outline: none;
+}
+
+.card-ask-ai__input::placeholder {
+  color: rgba(55, 53, 47, 0.38);
+}
+
+.card-ask-ai__send {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: rgba(37, 99, 235, 0.95);
+  cursor: pointer;
+}
+
+.card-ask-ai__send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.card-ask-ai__send:not(:disabled):hover {
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.card-ask-ai__section-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(55, 53, 47, 0.42);
+}
+
+.card-ask-ai__section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+.card-ask-ai__quick {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.card-ask-ai__quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 0.84rem;
+  text-align: left;
+  color: var(--vp-c-text-1, #37352f);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.card-ask-ai__quick-btn:hover:not(:disabled) {
+  border-color: rgba(var(--mikujar-logo-jar-rgb), 0.35);
+  background: rgba(var(--mikujar-logo-jar-rgb), 0.04);
+}
+
+.card-ask-ai__quick-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.card-ask-ai__wonder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.card-ask-ai__wonder-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.45rem 0.4rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: left;
+  color: rgba(55, 53, 47, 0.88);
+  cursor: pointer;
+}
+
+.card-ask-ai__wonder-btn:hover:not(:disabled) {
+  background: rgba(var(--mikujar-logo-jar-rgb), 0.07);
+}
+
+.card-ask-ai__wonder-q {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.1rem;
+  border-radius: 999px;
+  background: rgba(var(--mikujar-logo-jar-rgb), 0.18);
+  color: var(--mikujar-logo-jar-deep);
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-ask-ai__answer-block {
+  margin-top: 0.35rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.card-ask-ai__answer {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgba(55, 53, 47, 0.92);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.card-ask-ai__save-row {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.card-ask-ai__save-note-btn {
+  padding: 0.38rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  background: #fff;
+  font-size: 0.8rem;
+  color: var(--vp-c-text-1, #37352f);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.card-ask-ai__save-note-btn:hover:not(:disabled) {
+  border-color: rgba(var(--mikujar-logo-jar-rgb), 0.35);
+  background: rgba(var(--mikujar-logo-jar-rgb), 0.06);
+}
+
+.card-ask-ai__save-note-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.card-ask-ai__save-hint {
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.card-ask-ai__save-hint--ok {
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.card-ask-ai__save-hint--fail {
+  color: rgba(185, 80, 60, 0.95);
+}
+
 .connections-board__node-card.card {
   width: 100%;
   margin: 0;
@@ -755,7 +1086,7 @@
   text-rendering: geometricPrecision;
 }
 
-/* 笔记连接：过长正文折叠在区域内滚动（短内容高度随正文，不强行留白） */
+/* 笔记探索：过长正文折叠在区域内滚动（短内容高度随正文，不强行留白） */
 .connections-board__node-card .card__text-editor {
   max-height: min(42vh, calc(12 * var(--note-line-height)));
   overflow: auto;
@@ -770,7 +1101,7 @@
   background: transparent;
 }
 
-/* 笔记连接：与时间线不同，右侧附件列与正文均分宽度（去掉全局 38% + max-width:240px） */
+/* 笔记探索：与时间线不同，右侧附件列与正文均分宽度（去掉全局 38% + max-width:240px） */
 .connections-board__node-card
   .card__inner--split:not(.card__inner--mobile-gallery-stack)
   > .card__paper--with-gallery {
@@ -797,10 +1128,14 @@
   width: 100%;
 }
 
-.sidebar__connections {
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
-  margin-bottom: 2px;
+/* 笔记探索：仅在左侧灰条按下拖动拉线；悬停为手型提示可拖 */
+.connections-board__node-card .card__move-rail--connections-link {
+  cursor: grab;
+  touch-action: none;
+}
+
+.connections-board__node-card .card__move-rail--connections-link:active {
+  cursor: grabbing;
 }
 
 /* —— 侧边栏（Notion 式：浅底、分区小标题、圆角选中、彩色圆点） —— */
@@ -1007,17 +1342,24 @@
   display: none;
 }
 
-/* 侧栏主导航（全部笔记 / 待办 / 连接）；含手机抽屉
+/* 侧栏主导航（全部笔记 / 待办 / 笔记探索）；含手机抽屉
    与 .sidebar__nav 同宽：不再左右内缩，选中条与合集树行同宽、同圆角 */
 .sidebar__all-notes {
   display: block;
   padding: 0 0 2px;
 }
 
+/* 与 .sidebar__trash 对称：margin 4px + padding 6px + 1px 线（此处为下边框） */
+.sidebar__all-notes.sidebar__connections {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
+  margin-bottom: 4px;
+}
+
 .sidebar__all-notes-hit {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   box-sizing: border-box;
   width: 100%;
   min-height: 30px;
@@ -1026,20 +1368,18 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: rgba(55, 53, 47, 0.78);
+  color: rgba(55, 53, 47, 0.72);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
+  transition: background 0.1s ease, color 0.1s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar__all-notes-hit:hover {
   background: rgba(55, 53, 47, 0.06);
-  color: rgba(55, 53, 47, 0.95);
+  color: #37352f;
 }
 
 /* 选中：与 .sidebar__tree-row.is-active / .sidebar__favorites-row.is-active 一致 */
@@ -1047,10 +1387,6 @@
   background: rgba(55, 53, 47, 0.08);
   color: #37352f;
   box-shadow: none;
-}
-
-.sidebar__all-notes-hit.is-active .sidebar__all-notes-label {
-  font-weight: 500;
 }
 
 .sidebar__all-notes-hit:focus-visible {
@@ -1091,7 +1427,7 @@
 .sidebar__all-reminders-hit {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   box-sizing: border-box;
   width: 100%;
   min-height: 30px;
@@ -1100,30 +1436,24 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: rgba(55, 53, 47, 0.78);
+  color: rgba(55, 53, 47, 0.72);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
+  transition: background 0.1s ease, color 0.1s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar__all-reminders-hit:hover {
   background: rgba(55, 53, 47, 0.06);
-  color: rgba(55, 53, 47, 0.95);
+  color: #37352f;
 }
 
 .sidebar__all-reminders-hit.is-active {
   background: rgba(55, 53, 47, 0.08);
   color: #37352f;
   box-shadow: none;
-}
-
-.sidebar__all-reminders-hit.is-active .sidebar__all-reminders-label {
-  font-weight: 500;
 }
 
 .sidebar__all-reminders-hit:focus-visible {
@@ -1516,14 +1846,19 @@
   color: #37352f;
 }
 
-.sidebar__trash-icon {
+.sidebar__trash-icon,
+.sidebar__nav-pillar-icon {
   flex-shrink: 0;
   display: block;
   color: rgba(55, 53, 47, 0.45);
 }
 
 .sidebar__trash-hit:hover .sidebar__trash-icon,
-.sidebar__trash-hit.is-active .sidebar__trash-icon {
+.sidebar__trash-hit.is-active .sidebar__trash-icon,
+.sidebar__all-notes-hit:hover .sidebar__nav-pillar-icon,
+.sidebar__all-notes-hit.is-active .sidebar__nav-pillar-icon,
+.sidebar__all-reminders-hit:hover .sidebar__nav-pillar-icon,
+.sidebar__all-reminders-hit.is-active .sidebar__nav-pillar-icon {
   color: rgba(55, 53, 47, 0.62);
 }
 
@@ -5814,7 +6149,7 @@ div.card__text--readonly:not(.card__text--preview) {
     padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
   }
 
-  /* 笔记连接全屏白板：仅保留返回打开侧栏，其余顶栏隐藏 */
+  /* 笔记探索全屏白板：仅保留返回打开侧栏，其余顶栏隐藏 */
   .main.main--connections-board {
     padding: 0;
     padding-top: env(safe-area-inset-top, 0px);

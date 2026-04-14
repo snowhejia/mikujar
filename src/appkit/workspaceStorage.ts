@@ -9,7 +9,7 @@ export const PERSISTED_WORKSPACE_ALL_NOTES = "__mikujar_workspace_all_notes__";
 /** 主区为「我的待办」 */
 export const PERSISTED_WORKSPACE_REMINDERS = "__mikujar_workspace_reminders__";
 
-/** 主区为「笔记连接」 */
+/** 主区为「笔记探索」 */
 export const PERSISTED_WORKSPACE_CONNECTIONS = "__mikujar_workspace_connections__";
 
 export function activeCollectionStorageKey(

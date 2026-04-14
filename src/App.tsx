@@ -21,6 +21,7 @@ import {
   deleteCardApi,
   fetchCollectionsFromApi,
 } from "./api/collections";
+import { noteBodyToHtml } from "./noteEditor/plainHtml";
 import {
   clearMeTrash,
   deleteMeTrashEntry,
@@ -171,6 +172,9 @@ import {
   MobileDockJarIcon,
   IconTimelineMasonry1Col,
   IconTimelineMasonry2Col,
+  SidebarNavAllNotesIcon,
+  SidebarNavExploreIcon,
+  SidebarNavRemindersIcon,
   NoteTimelineCard,
   persistMergeCollectionsRemote,
   persistCollectionTreeLayoutRemoteWithRetry,
@@ -485,7 +489,7 @@ export default function App() {
     }
     return false;
   });
-  /** 首次点开「笔记连接」后才扫描 relatedRefs，避免常驻全库遍历 */
+  /** 首次点开「笔记探索」后才扫描 relatedRefs，避免常驻全库遍历 */
   const [connectionsPrimed, setConnectionsPrimed] = useState(() => {
     try {
       if (getAppDataMode() === "local") {
@@ -1277,7 +1281,7 @@ export default function App() {
     }
   }, [collections, activeId]);
 
-  /** 在 passive effect 写入 localStorage 之前同步恢复「全部笔记 / 待办 / 笔记连接」，避免 persist 用旧状态覆盖 sentinel */
+  /** 在 passive effect 写入 localStorage 之前同步恢复「全部笔记 / 待办 / 笔记探索」，避免 persist 用旧状态覆盖 sentinel */
   useLayoutEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
@@ -1308,7 +1312,7 @@ export default function App() {
     }
   }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
 
-  /** 刷新后持久化主区：全部笔记 / 待办 / 笔记连接（sentinel）或选中合集 id */
+  /** 刷新后持久化主区：全部笔记 / 待办 / 笔记探索（sentinel）或选中合集 id */
   useEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
@@ -2216,6 +2220,81 @@ export default function App() {
       });
     },
     [dataMode]
+  );
+
+  /** 问 AI：将回答存为新卡片，写入来源卡片所在合集，并与来源建立双向「相关」 */
+  const saveAiAnswerToRelatedNote = useCallback(
+    async (
+      plainAnswer: string,
+      sourceColId: string,
+      sourceCardId: string
+    ): Promise<boolean> => {
+      const trimmed = plainAnswer.trim();
+      if (!canEdit || !trimmed) return false;
+
+      const htmlBody = noteBodyToHtml(trimmed);
+      const now = new Date();
+      const minutesOfDay = now.getHours() * 60 + now.getMinutes();
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const provisionalId = `n-${uid}`;
+      const day = localDateString(now);
+      const newCard: NoteCard = {
+        id: provisionalId,
+        text: htmlBody,
+        minutesOfDay,
+        addedOn: day,
+      };
+
+      flushSync(() => {
+        setCollections((prev) =>
+          mapCollectionById(prev, sourceColId, (col) => ({
+            ...col,
+            cards:
+              newNotePlacement === "top"
+                ? [newCard, ...col.cards]
+                : [...col.cards, newCard],
+          }))
+        );
+      });
+
+      if (dataMode === "local") {
+        addRelatedPair(sourceColId, sourceCardId, sourceColId, provisionalId);
+        return true;
+      }
+
+      const created = await createCardApi(sourceColId, newCard, {
+        insertAtStart: newNotePlacement === "top",
+      });
+      if (!created) {
+        flushSync(() => {
+          setCollections((prev) =>
+            mapCollectionById(prev, sourceColId, (col) => ({
+              ...col,
+              cards: col.cards.filter((c) => c.id !== provisionalId),
+            }))
+          );
+        });
+        return false;
+      }
+
+      const newId = created.id;
+      if (newId !== provisionalId) {
+        flushSync(() => {
+          setCollections((prev) =>
+            mapCollectionById(prev, sourceColId, (col) => ({
+              ...col,
+              cards: col.cards.map((c) =>
+                c.id === provisionalId ? { ...c, id: newId } : c
+              ),
+            }))
+          );
+        });
+      }
+
+      addRelatedPair(sourceColId, sourceCardId, sourceColId, newId);
+      return true;
+    },
+    [canEdit, dataMode, newNotePlacement, addRelatedPair]
   );
 
   const setCardTags = useCallback(
@@ -3913,6 +3992,7 @@ export default function App() {
               setMobileNavOpen(false);
             }}
           >
+            <SidebarNavAllNotesIcon className="sidebar__nav-pillar-icon" />
             <span className="sidebar__all-notes-label">{c.allNotesEntry}</span>
             <span className="sidebar__all-notes-count">
               {allNotesSorted.length}
@@ -3942,6 +4022,7 @@ export default function App() {
                 setMobileNavOpen(false);
               }}
             >
+              <SidebarNavRemindersIcon className="sidebar__nav-pillar-icon" />
               <span className="sidebar__all-reminders-label">
                 {c.remindersTitle}
               </span>
@@ -3969,6 +4050,7 @@ export default function App() {
               setMobileNavOpen(false);
             }}
           >
+            <SidebarNavExploreIcon className="sidebar__nav-pillar-icon" />
             <span className="sidebar__all-notes-label">{c.connectionsEntry}</span>
             <span className="sidebar__all-notes-count">
               {connectionsPrimed ? connectionEdges.length : "–"}
@@ -4956,6 +5038,16 @@ export default function App() {
             >
               <NoteConnectionsView
                 edges={connectionEdges}
+                canEdit={canEdit}
+                onLinkCards={addRelatedPair}
+                onSaveAiAnswer={saveAiAnswerToRelatedNote}
+                askAiGate={
+                  !currentUser
+                    ? "login"
+                    : dataMode !== "remote"
+                      ? "remote"
+                      : "ok"
+                }
                 onOpenTarget={(colId, cardId) => {
                   const hit = findCardInTree(collections, colId, cardId);
                   if (hit) {

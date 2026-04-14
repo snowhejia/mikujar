@@ -82,6 +82,10 @@ import {
   consumeProfileEmailChangeCode,
   sendProfileEmailChangeCode,
 } from "./profileEmail.js";
+import {
+  isGeminiConfigured,
+  runNoteAssist,
+} from "./geminiAssist.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
@@ -593,6 +597,62 @@ app.get("/api/auth/me", async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.json({ ok: false, admin: false, user: null });
+  }
+});
+
+/** 登录用户：笔记「问 AI」（Gemini，服务端代理） */
+app.post("/api/ai/note-assist", attachJwtSession, requireLoggedInUser, async (req, res) => {
+  try {
+    if (!isGeminiConfigured()) {
+      return res.status(503).json({
+        error: "服务器未配置 Gemini（GEMINI_API_KEY）",
+        code: "GEMINI_NOT_CONFIGURED",
+      });
+    }
+    const body = req.body ?? {};
+    const task = body.task;
+    const cardTitle = typeof body.cardTitle === "string" ? body.cardTitle : "";
+    const cardText = typeof body.cardText === "string" ? body.cardText : "";
+    const cardTags = typeof body.cardTags === "string" ? body.cardTags : "";
+    const cardAttachments =
+      typeof body.cardAttachments === "string" ? body.cardAttachments : "";
+    const cardExtras = typeof body.cardExtras === "string" ? body.cardExtras : "";
+    const relatedCards = body.relatedCards;
+    const images = body.images;
+    if (task !== "suggest_questions" && task !== "quick_action" && task !== "chat") {
+      return res.status(400).json({ error: "无效任务", code: "BAD_TASK" });
+    }
+    const quickAction = body.quickAction;
+    const message = typeof body.message === "string" ? body.message : "";
+    const out = await runNoteAssist({
+      task,
+      cardTitle,
+      cardText,
+      cardTags,
+      cardAttachments,
+      cardExtras,
+      relatedCards,
+      images,
+      quickAction,
+      message,
+    });
+    res.json(out);
+  } catch (e) {
+    const code = e?.code;
+    if (code === "GEMINI_NOT_CONFIGURED") {
+      return res.status(503).json({
+        error: "服务器未配置 Gemini（GEMINI_API_KEY）",
+        code: "GEMINI_NOT_CONFIGURED",
+      });
+    }
+    if (code === "BAD_TASK" || code === "BAD_QUICK_ACTION" || code === "EMPTY_MESSAGE") {
+      return res.status(400).json({ error: e.message || "请求无效", code });
+    }
+    console.error(e);
+    res.status(500).json({
+      error: e?.message || "AI 请求失败",
+      code: code || "AI_ERROR",
+    });
   }
 });
 

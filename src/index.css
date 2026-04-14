@@ -20,6 +20,7 @@
   --vp-c-brand-mute: rgba(66, 185, 131, 0.08);
   /* 与 public/favicon.svg 未来罐一致 */
   --mikujar-logo-jar: #5e9fe8;
+  --mikujar-logo-jar-rgb: 94, 159, 232;
   --mikujar-logo-jar-deep: #4a8fd8;
   --mikujar-logo-lid: #37352f;
   --mikujar-logo-tile: #ecece8;

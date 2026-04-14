@@ -1900,9 +1900,14 @@ export default function App() {
           return;
         }
         setUploadCardProgress(0);
-        for (const file of files) {
+        const n = files.length;
+        for (let i = 0; i < n; i++) {
+          const file = files[i]!;
           const r = await uploadCardMedia(file, {
-            onProgress: (p) => setUploadCardProgress(p),
+            onProgress: (p) =>
+              setUploadCardProgress(
+                Math.round(((i + p / 100) / n) * 100)
+              ),
           });
           addMediaItemToCard(
             colId,
@@ -1934,12 +1939,12 @@ export default function App() {
   const onCardMediaFileSelected = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const input = e.target;
-      const file = input.files?.[0];
+      const files = Array.from(input.files ?? []);
       input.value = "";
       const t = cardMediaUploadTargetRef.current;
       cardMediaUploadTargetRef.current = null;
-      if (!file || !t) return;
-      void uploadFilesToCard(t.colId, t.cardId, [file]);
+      if (files.length === 0 || !t) return;
+      void uploadFilesToCard(t.colId, t.cardId, files);
     },
     [uploadFilesToCard]
   );
@@ -4431,6 +4436,7 @@ export default function App() {
       <input
         ref={cardMediaFileInputRef}
         type="file"
+        multiple
         className="app__hidden-file-input"
         aria-hidden
         tabIndex={-1}

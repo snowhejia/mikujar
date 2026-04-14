@@ -347,6 +347,9 @@ export default function App() {
   /** 首次点开「笔记连接」后才扫描 relatedRefs，避免常驻全库遍历 */
   const [connectionsPrimed, setConnectionsPrimed] = useState(false);
   const [remindersViewActive, setRemindersViewActive] = useState(false);
+  /** 持久化主区时读取，避免 persist 的 useEffect 先于 layout 恢复「全部笔记」而用旧闭包把 sentinel 盖成合集 id */
+  const allNotesViewForPersistRef = useRef(allNotesViewActive);
+  const activeIdForPersistRef = useRef(activeId);
   const [draggingCollectionId, setDraggingCollectionId] = useState<
     string | null
   >(null);
@@ -1028,24 +1031,43 @@ export default function App() {
     return collections[0];
   }, [collections, activeId]);
 
+  allNotesViewForPersistRef.current = allNotesViewActive;
+  activeIdForPersistRef.current = activeId;
+
   useEffect(() => {
     if (activeId && !findCollectionById(collections, activeId)) {
       setActiveId(collections[0]?.id ?? "");
     }
   }, [collections, activeId]);
 
-  /** 刷新后回到上次主区：全部笔记（sentinel）或选中合集 id */
+  /** 在 passive effect 写入 localStorage 之前同步恢复「全部笔记」，避免 persist 用旧状态覆盖 sentinel */
+  useLayoutEffect(() => {
+    if (!authReady) return;
+    if (dataMode === "remote" && !remoteLoaded) return;
+    try {
+      const raw = readPersistedActiveCollectionId(activeCollectionKey);
+      if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
+        flushSync(() => setAllNotesViewActive(true));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
+
+  /** 刷新后持久化主区：全部笔记（sentinel）或选中合集 id */
   useEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
     try {
-      if (allNotesViewActive) {
+      const allNotes = allNotesViewForPersistRef.current;
+      const aid = activeIdForPersistRef.current;
+      if (allNotes) {
         localStorage.setItem(
           activeCollectionKey,
           PERSISTED_WORKSPACE_ALL_NOTES
         );
-      } else if (activeId) {
-        localStorage.setItem(activeCollectionKey, activeId);
+      } else if (aid) {
+        localStorage.setItem(activeCollectionKey, aid);
       }
     } catch {
       /* ignore */
@@ -1058,16 +1080,6 @@ export default function App() {
     dataMode,
     remoteLoaded,
   ]);
-
-  /** 云端/本地在可读 storage 后恢复「全部笔记」 */
-  useEffect(() => {
-    if (!authReady) return;
-    if (dataMode === "remote" && !remoteLoaded) return;
-    const raw = readPersistedActiveCollectionId(activeCollectionKey);
-    if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
-      setAllNotesViewActive(true);
-    }
-  }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
 
   /** 侧栏子合集折叠状态（与当前合集同样按模式与用户区分） */
   useEffect(() => {

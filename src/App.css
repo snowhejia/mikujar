@@ -2159,6 +2159,11 @@
   outline-offset: 1px;
 }
 
+/* 与「笔记设置」隐藏合集圆点一致：无圆点时收紧左内边距 */
+.sidebar__favorites-hit.sidebar__favorites-hit--no-dot {
+  padding-left: 10px;
+}
+
 .sidebar__chevron,
 .sidebar__chevron-spacer {
   flex-shrink: 0;

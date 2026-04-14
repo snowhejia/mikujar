@@ -62,6 +62,10 @@ export type ExtraModalChrome = {
   noteSettingsLocal: string;
   noteSettingsCloud: string;
   noteSettingsPlacementAria: string;
+  noteSettingsSidebarDotsLabel: string;
+  noteSettingsSidebarDotsShow: string;
+  noteSettingsSidebarDotsHide: string;
+  noteSettingsSidebarDotsAria: string;
   noteSettingsStorageAria: string;
   dataStatsTitle: string;
   dataStatsHint: string;
@@ -159,7 +163,8 @@ const zh: ExtraModalChrome = {
   profileErrDeleteFail: "删除失败，请稍后再试。",
   profileDeleteBack: "返回",
   noteSettingsTitle: "笔记设置",
-  noteSettingsHint: "调整新建笔记出现的位置，以及笔记数据保存在本机还是云端。",
+  noteSettingsHint:
+    "调整新建笔记出现的位置、侧栏合集彩色圆点是否显示，以及笔记数据保存在本机还是云端。",
   noteSettingsPlacementLabel: "新建笔记位置",
   noteSettingsTop: "时间线顶部",
   noteSettingsBottom: "时间线底部",
@@ -167,6 +172,10 @@ const zh: ExtraModalChrome = {
   noteSettingsLocal: "本地（此设备）",
   noteSettingsCloud: "云端",
   noteSettingsPlacementAria: "新建笔记位置",
+  noteSettingsSidebarDotsLabel: "合集前的圆点",
+  noteSettingsSidebarDotsShow: "显示",
+  noteSettingsSidebarDotsHide: "隐藏",
+  noteSettingsSidebarDotsAria: "侧栏合集名称前的彩色圆点",
   noteSettingsStorageAria: "数据存储位置",
   dataStatsTitle: "数据统计",
   dataStatsHint:
@@ -273,7 +282,7 @@ const en: ExtraModalChrome = {
   profileDeleteBack: "Back",
   noteSettingsTitle: "Note settings",
   noteSettingsHint:
-    "Choose where new notes appear and whether data stays on this device or syncs to the cloud.",
+    "Choose where new notes appear, whether to show color dots before collection names in the sidebar, and whether data stays on this device or syncs to the cloud.",
   noteSettingsPlacementLabel: "New note placement",
   noteSettingsTop: "Top of timeline",
   noteSettingsBottom: "Bottom of timeline",
@@ -281,6 +290,10 @@ const en: ExtraModalChrome = {
   noteSettingsLocal: "On this device",
   noteSettingsCloud: "Cloud",
   noteSettingsPlacementAria: "New note placement",
+  noteSettingsSidebarDotsLabel: "Dots before collections",
+  noteSettingsSidebarDotsShow: "Show",
+  noteSettingsSidebarDotsHide: "Hide",
+  noteSettingsSidebarDotsAria: "Color dots before collection names in the sidebar",
   noteSettingsStorageAria: "Data storage",
   dataStatsTitle: "Usage stats",
   dataStatsHint:

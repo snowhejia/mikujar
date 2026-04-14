@@ -51,6 +51,10 @@ import {
   type NewNotePlacement,
 } from "./newNotePlacementStorage";
 import {
+  readHideSidebarCollectionDots,
+  saveHideSidebarCollectionDots,
+} from "./hideSidebarCollectionDotsStorage";
+import {
   readSidebarSectionsCollapsed,
   sidebarSectionsCollapseStorageKey,
   writeSidebarSectionsCollapsed,
@@ -507,6 +511,12 @@ export default function App() {
   const setNewNotePlacement = useCallback((p: NewNotePlacement) => {
     setNewNotePlacementState(p);
     saveNewNotePlacement(p);
+  }, []);
+  const [hideSidebarCollectionDots, setHideSidebarCollectionDotsState] =
+    useState(readHideSidebarCollectionDots);
+  const setHideSidebarCollectionDots = useCallback((hide: boolean) => {
+    setHideSidebarCollectionDotsState(hide);
+    saveHideSidebarCollectionDots(hide);
   }, []);
   const userAccountMenuRef = useRef<HTMLDivElement>(null);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
@@ -3634,7 +3644,12 @@ export default function App() {
                       >
                         <button
                           type="button"
-                          className="sidebar__favorites-hit"
+                          className={
+                            "sidebar__favorites-hit" +
+                            (hideSidebarCollectionDots
+                              ? " sidebar__favorites-hit--no-dot"
+                              : "")
+                          }
                           onClick={() => {
                             setTrashViewActive(false);
                             setAllNotesViewActive(false);
@@ -3648,11 +3663,13 @@ export default function App() {
                             setMobileNavOpen(false);
                           }}
                         >
-                          <span
-                            className="sidebar__dot"
-                            style={{ backgroundColor: col.dotColor }}
-                            aria-hidden
-                          />
+                          {!hideSidebarCollectionDots ? (
+                            <span
+                              className="sidebar__dot"
+                              style={{ backgroundColor: col.dotColor }}
+                              aria-hidden
+                            />
+                          ) : null}
                           <span className="sidebar__name" title={path}>
                             {col.name}
                           </span>
@@ -3736,6 +3753,7 @@ export default function App() {
                   canEdit={canEdit}
                   editingCollectionId={editingCollectionId}
                   mobileCollectionDragByHandle={mobileCollectionDragByHandle}
+                  hideCollectionDots={hideSidebarCollectionDots}
                   hideAddsInMobileBrowse={hideAddsInMobileBrowse}
                   draftCollectionName={draftCollectionName}
                   collectionNameInputRef={collectionNameInputRef}
@@ -5024,6 +5042,8 @@ export default function App() {
             onClose={() => setUserNoteSettingsOpen(false)}
             newNotePlacement={newNotePlacement}
             setNewNotePlacement={setNewNotePlacement}
+            hideSidebarCollectionDots={hideSidebarCollectionDots}
+            setHideSidebarCollectionDots={setHideSidebarCollectionDots}
             dataMode={dataMode}
             setDataMode={setDataMode}
             onOpenAppleNotesImport={openAppleNotesImportModal}

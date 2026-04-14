@@ -9,6 +9,8 @@ type NoteSettingsModalProps = {
   onClose: () => void;
   newNotePlacement: NewNotePlacement;
   setNewNotePlacement: (p: NewNotePlacement) => void;
+  hideSidebarCollectionDots: boolean;
+  setHideSidebarCollectionDots: (hide: boolean) => void;
   dataMode: AppDataMode;
   setDataMode: (mode: AppDataMode) => void;
   onOpenAppleNotesImport?: () => void;
@@ -19,6 +21,8 @@ export function NoteSettingsModal({
   onClose,
   newNotePlacement,
   setNewNotePlacement,
+  hideSidebarCollectionDots,
+  setHideSidebarCollectionDots,
   dataMode,
   setDataMode,
   onOpenAppleNotesImport,
@@ -88,6 +92,42 @@ export function NoteSettingsModal({
             onClick={() => setNewNotePlacement("bottom")}
           >
             {c.noteSettingsBottom}
+          </button>
+        </div>
+
+        <p className="note-settings-modal__label">
+          {c.noteSettingsSidebarDotsLabel}
+        </p>
+        <div
+          className="note-settings-modal__choice-row"
+          role="group"
+          aria-label={c.noteSettingsSidebarDotsAria}
+        >
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (!hideSidebarCollectionDots
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={!hideSidebarCollectionDots}
+            onClick={() => setHideSidebarCollectionDots(false)}
+          >
+            {c.noteSettingsSidebarDotsShow}
+          </button>
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (hideSidebarCollectionDots
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={hideSidebarCollectionDots}
+            onClick={() => setHideSidebarCollectionDots(true)}
+          >
+            {c.noteSettingsSidebarDotsHide}
           </button>
         </div>
 

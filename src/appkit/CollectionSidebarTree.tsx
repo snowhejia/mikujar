@@ -34,6 +34,8 @@ export type CollectionSidebarTreeProps = {
   canEdit: boolean;
   editingCollectionId: string | null;
   mobileCollectionDragByHandle: boolean;
+  /** 为 true 时不显示合集名称前的彩色圆点 */
+  hideCollectionDots?: boolean;
   hideAddsInMobileBrowse: boolean;
   draftCollectionName: string;
   collectionNameInputRef: MutableRefObject<HTMLInputElement | null>;
@@ -86,6 +88,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
     canEdit,
     editingCollectionId,
     mobileCollectionDragByHandle,
+    hideCollectionDots = false,
     hideAddsInMobileBrowse,
     draftCollectionName,
     collectionNameInputRef,
@@ -237,11 +240,13 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
               }
             }}
           >
-            <span
-              className="sidebar__dot"
-              style={{ backgroundColor: c.dotColor }}
-              aria-hidden
-            />
+            {!hideCollectionDots ? (
+              <span
+                className="sidebar__dot"
+                style={{ backgroundColor: c.dotColor }}
+                aria-hidden
+              />
+            ) : null}
             {editingCollectionId === c.id ? (
               <input
                 ref={collectionNameInputRef}

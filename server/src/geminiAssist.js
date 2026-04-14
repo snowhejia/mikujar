@@ -3,8 +3,30 @@
  */
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
-const GEMINI_MODEL =
-  process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+
+/**
+ * REST 路径已是 …/v1beta/models/{MODEL_ID}:generateContent，这里只填模型 ID。
+ * 常见误填：带 `models/` 前缀（会变成 …/models/models/…）、Vertex 全路径、中文或空格。
+ */
+function normalizeGeminiModelId(raw) {
+  let s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return "gemini-2.0-flash";
+  // publishers/google/models/gemini-xxx 或 …/models/gemini-xxx
+  const tail = s.match(/\/models\/([^/]+)\s*$/);
+  if (tail) s = tail[1];
+  s = s.replace(/^models\//i, "").replace(/\s+/g, "");
+  if (!/^gemini-[a-z0-9._-]+$/i.test(s)) {
+    console.warn(
+      `[geminiAssist] GEMINI_MODEL 无法解析为合法模型 ID，已退回 gemini-2.0-flash。收到：${JSON.stringify(
+        raw
+      )}`
+    );
+    return "gemini-2.0-flash";
+  }
+  return s;
+}
+
+const GEMINI_MODEL = normalizeGeminiModelId(process.env.GEMINI_MODEL);
 
 const MAX_CARD_TEXT = 32000;
 const MAX_TITLE = 500;
@@ -252,8 +274,8 @@ export async function runNoteAssist(payload) {
 
   if (task === "suggest_questions") {
     const sys =
-      `${weightHint}${visionHint} 你是学习助手，根据用户笔记生成延伸问题。回复必须且仅为一个 JSON 对象，不要 Markdown 代码围栏，不要其它说明文字。键 questions 为长度恰好 5 的字符串数组。`;
-    const user = `${ctxBlock}\n\n请根据以上内容生成 5 个相关的、具体可答的思考题（中文）；优先紧扣「当前笔记」正文，相关笔记仅在有明确关联时再体现。严格输出 JSON：{"questions":["…","…","…","…","…"]}`;
+      `${weightHint}${visionHint} 你是学习助手，根据用户笔记生成延伸问题。回复必须且仅为一个 JSON 对象，不要 Markdown 代码围栏，不要其它说明文字。键 questions 为长度恰好 5 的字符串数组。每个问题用直接陈述式问句：就事论事、可客观作答；禁止「你觉得」「你认为」「你最喜欢」「对你来说」等把问题写成征求主观感受的措辞。`;
+    const user = `${ctxBlock}\n\n请根据以上内容生成 5 个相关的、具体可答的延伸问题（中文），句式宜简短直接，例如「剧中最好看或搞笑的情节或台词有哪些？」「该设定在剧情里如何体现？」；优先紧扣「当前笔记」正文，相关笔记仅在有明确关联时再体现。严格输出 JSON：{"questions":["…","…","…","…","…"]}`;
     const raw = await generateWithContent(sys, user, images);
     try {
       return parseQuestionsJson(raw);

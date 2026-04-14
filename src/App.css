@@ -791,19 +791,8 @@
   color: var(--mikujar-logo-jar-deep);
 }
 
-/* 笔记探索 · 问 AI 侧栏（白底、细边框、轻阴影） */
-/* 不铺半透明底，避免选中卡片与白板被压暗；仍全屏可点关闭 */
-.card-ask-ai__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  border: none;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  cursor: default;
-}
-
+/* 笔记探索 · 问 AI 侧栏（白底、细边框、轻阴影）
+   无全屏遮罩：白板拖移/滚轮缩放须命中下层 viewport；关闭用侧栏 × 或 Esc */
 .card-ask-ai {
   position: fixed;
   top: 0;

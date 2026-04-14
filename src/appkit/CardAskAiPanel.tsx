@@ -204,12 +204,7 @@ export function CardAskAiPanel({
 
   return (
     <>
-      <button
-        type="button"
-        className="card-ask-ai__backdrop"
-        aria-label={c.cardAskAiClose}
-        onClick={onClose}
-      />
+      {/* 不铺可点全屏层：否则盖在笔记探索白板上会抢走拖移/缩放，并在松手时误触关闭 */}
       <aside
         className="card-ask-ai"
         role="dialog"

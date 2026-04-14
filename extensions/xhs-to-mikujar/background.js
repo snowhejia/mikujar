@@ -64,6 +64,7 @@ async function getSettings() {
     "bearerToken",
     "userId",
     "collectionId",
+    "insertNewNotesAtTop",
   ]);
   const apiBase = String(s.apiBase || "")
     .trim()
@@ -71,7 +72,9 @@ async function getSettings() {
   const bearerToken = String(s.bearerToken || "").trim();
   const userId = String(s.userId || "").trim();
   const collectionId = String(s.collectionId || "").trim();
-  return { apiBase, bearerToken, userId, collectionId };
+  /** 与网页「笔记设置 → 新建笔记位置」一致；未设置时默认顶部（与主站 localStorage 默认相同） */
+  const insertNewNotesAtTop = s.insertNewNotesAtTop !== false;
+  return { apiBase, bearerToken, userId, collectionId, insertNewNotesAtTop };
 }
 
 async function ensureApiPermission(apiBase) {
@@ -586,6 +589,7 @@ async function runSave(tabId, emit) {
     addedOn: todayYMD(),
     tags: ["小红书"],
     media,
+    insertAtStart: settings.insertNewNotesAtTop,
   };
 
   try {

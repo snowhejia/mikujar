@@ -6,11 +6,13 @@ async function load() {
     "bearerToken",
     "userId",
     "collectionId",
+    "insertNewNotesAtTop",
   ]);
   $("apiBase").value = s.apiBase || "";
   $("bearerToken").value = s.bearerToken || "";
   $("userId").value = s.userId || "";
   $("collectionId").value = s.collectionId || "";
+  $("insertNewNotesAtTop").checked = s.insertNewNotesAtTop !== false;
 }
 
 function withUserId(url, userId) {
@@ -55,6 +57,7 @@ $("save").addEventListener("click", async () => {
     bearerToken,
     userId,
     collectionId,
+    insertNewNotesAtTop: $("insertNewNotesAtTop").checked,
   });
 
   const meUrl = withUserId(`${apiBase}/api/auth/me`, userId);

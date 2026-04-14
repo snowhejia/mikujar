@@ -49,6 +49,22 @@
         margin-top: 0.75rem;
         font-size: 0.875rem;
       }
+      .opt-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+      .opt-row input[type="checkbox"] {
+        width: auto;
+        margin-top: 0.2rem;
+      }
+      .opt-row label {
+        margin-top: 0;
+        font-weight: 600;
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -86,6 +102,16 @@
     <label for="collectionId">目标合集 ID</label>
     <input id="collectionId" type="text" placeholder="例如 c-xxxxx" autocomplete="off" />
     <p class="hint">在网页侧栏对应合集上可通过开发者工具查看 data 属性，或从 <code>GET /api/collections</code> JSON 里复制 <code>id</code>。</p>
+
+    <div class="opt-row">
+      <input type="checkbox" id="insertNewNotesAtTop" checked />
+      <label for="insertNewNotesAtTop"
+        >摘录的笔记插入到时间线顶部</label
+      >
+    </div>
+    <p class="hint">
+      与网页「笔记设置 → 新建笔记位置」保持一致：勾选表示插入到当前合集最前（与主站默认「顶部」相同）；若你在网页里选的是「底部」，请取消勾选。
+    </p>
 
     <button type="button" id="save">保存</button>
     <div id="status"></div>

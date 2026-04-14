@@ -974,7 +974,7 @@ app.delete("/api/collections/:id", collectionsWriterMw, async (req, res) => {
   }
 });
 
-/** POST /api/collections/:collectionId/cards — 在合集末尾创建卡片 */
+/** POST /api/collections/:collectionId/cards — 创建卡片（默认末尾；body.insertAtStart 为 true 时插在最前） */
 app.post("/api/collections/:collectionId/cards", collectionsWriterMw, async (req, res) => {
   try {
     const card = await createCard(getUserId(req), req.params.collectionId, req.body ?? {});

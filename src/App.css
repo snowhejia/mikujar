@@ -721,12 +721,12 @@
   pointer-events: none;
 }
 
-/* 白板上的节点：与时间线 .card 同结构，固定宽度避免重叠过大 */
+/* 白板上的节点：横版长条（宽大于常见高度），固定宽度避免重叠过大 */
 .connections-board__node-wrap {
   position: absolute;
   z-index: 1;
-  width: 260px;
-  max-width: min(280px, 36vw);
+  width: 420px;
+  max-width: min(480px, 94vw);
   pointer-events: auto;
   transition: box-shadow 0.18s ease, z-index 0s;
 }
@@ -755,9 +755,33 @@
   text-rendering: geometricPrecision;
 }
 
-.connections-board__node-card .card__text-editor {
-  max-height: 200px;
-  overflow: auto;
+/* 笔记连接：正文不截断，与时间线一致展示完整内容（白板整体可拖移/缩放查看） */
+
+/* 笔记连接：与时间线不同，右侧附件列与正文均分宽度（去掉全局 38% + max-width:240px） */
+.connections-board__node-card
+  .card__inner--split:not(.card__inner--mobile-gallery-stack)
+  > .card__paper--with-gallery {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.connections-board__node-card
+  .card__inner--split:not(.card__inner--mobile-gallery-stack)
+  > .card__gallery {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  align-self: stretch;
+  min-height: 0;
+}
+
+/* 轮播视口铺满附件列（缩略图本身已是 cover + 100% 尺寸） */
+.connections-board__node-card .card__gallery-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  width: 100%;
 }
 
 .sidebar__connections {

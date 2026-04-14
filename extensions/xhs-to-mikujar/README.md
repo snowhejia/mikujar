@@ -19,6 +19,7 @@
 | Bearer Token | 一般为 Local Storage 的 `mikujar_admin_jwt`；或服务端 `API_TOKEN` |
 | userId | 仅在使用 **API_TOKEN** 时必填（与后端要求一致） |
 | 目标合集 ID | 从 `GET /api/collections` 或网页数据里取对应合集 `id` |
+| 摘录插入位置 | 默认**插入时间线顶部**（`insertAtStart`），与网页「笔记设置 → 新建笔记位置」默认一致；若在网页选了「底部」，请在选项里取消「摘录的笔记插入到时间线顶部」。 |
 
 服务端需：**PostgreSQL + 已配置腾讯云 COS**（未配 COS 时预签名会失败）。
 

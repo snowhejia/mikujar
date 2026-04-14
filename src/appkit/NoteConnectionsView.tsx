@@ -9,6 +9,7 @@ import {
 import { useAppUiLang } from "../appUiLang";
 import { useAppChrome } from "../i18n/useAppChrome";
 import { noteBodyToHtml } from "../noteEditor/plainHtml";
+import { CardGallery } from "../CardGallery";
 import { CardTagsRow } from "../CardTagsRow";
 import { CardRowInner } from "../CardRowInner";
 import {
@@ -34,9 +35,9 @@ const BOARD_LINK_WIDTH_PX = 2;
 /** 白板底上的实色灰（等价于 rgba(55,53,47,.2) 叠白），无 alpha，叠线不会加深 */
 const BOARD_LINK_GRAY = "#d8d7d5";
 const BOARD_LINK_PULSE = "rgba(250, 204, 21, 0.52)";
-/** 与 .connections-board__node-wrap 宽度 260px 一致；高度随内容变化，由 DOM 实测 */
-const DEFAULT_HALF_W = 130;
-const DEFAULT_HALF_H = 120;
+/** 与 .connections-board__node-wrap 典型宽度一致；高度随内容变化，由 DOM 实测 */
+const DEFAULT_HALF_W = 210;
+const DEFAULT_HALF_H = 92;
 /** 卡片之间额外留白（在「刚好不重叠」的中心距上再加一圈） */
 const LAYOUT_EDGE_GAP = 110;
 /** 锚点坐标差小于此值时视为共线，避免 V–H–V / H–V–H 产生 1～2px 的锯齿段 */
@@ -546,16 +547,25 @@ function ConnectionsBoardCard({
   const { lang } = useAppUiLang();
   const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const bodyHtml = noteBodyToHtml(card.text);
+  const media = (card.media ?? []).filter((m) => m.url?.trim());
+  const hasGallery = media.length > 0;
 
   return (
     <div className="card connections-board__node-card">
       <CardRowInner
-        hasGallery={false}
+        hasGallery={hasGallery}
         timelineColumnCount={2}
-        className="card__inner"
+        className={
+          "card__inner" + (hasGallery ? " card__inner--split" : "")
+        }
       >
         <div className="card__move-rail card__move-rail--readonly" aria-hidden />
-        <div className="card__paper card__paper--with-move-rail">
+        <div
+          className={
+            "card__paper card__paper--with-move-rail" +
+            (hasGallery ? " card__paper--with-gallery" : "")
+          }
+        >
           <div className="card__toolbar">
             <span className="card__time">
               {formatCardTimeLabel(card, lang)}
@@ -604,6 +614,9 @@ function ConnectionsBoardCard({
             onCommit={() => {}}
           />
         </div>
+        {hasGallery ? (
+          <CardGallery items={media} uploadPending={false} uploadProgress={null} />
+        ) : null}
       </CardRowInner>
     </div>
   );

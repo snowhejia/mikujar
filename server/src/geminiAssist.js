@@ -53,6 +53,10 @@ const ASSIST_REPLY_TONE_ZH =
 const ASSIST_STORY_FIRST_ZH =
   "若笔记或用户消息涉及影视剧、综艺、小说、动漫等叙述类内容，优先直接交代剧情与具体桥段：发生了什么事、关键转折、名场面里谁在做什么、人物关系用情节带出；少写社会影响、轰动一时、仍被津津乐道、观感、戏剧张力、为什么经典等泛评套话，也不要用作品内容当由头写空泛读后感。若延伸线索是演员表、台词梗、花絮、同类型推荐等，就按该线索给条目化信息与可查方向，不要答成泛泛作品评论。细节不确定时简短说明可能记错、建议核对，切勿编造具体人名与情节。";
 
+/** 相关笔记：只参与「范围与缺口感」判断，不得把链接卡片内容写进回答 */
+const ASSIST_RELATED_SCOPE_ONLY_ZH =
+  "上下文中的「相关笔记」摘录只供你判断当前主题是否还缺哪些信息维度、范围是否过窄，不得在回答中引用、复述、列举相关笔记里的原文、名句、段落或私密内容，不要单列一节「来自相关笔记」「相关名句联想」或类似表述。输出只围绕「当前笔记」本身，用通识或可查方向补足。";
+
 export function isGeminiConfigured() {
   return Boolean(GEMINI_API_KEY);
 }
@@ -246,7 +250,7 @@ function normalizeRelatedCards(raw) {
 }
 
 /**
- * 主笔记 + 相关笔记（权重说明在文案中）；相关总长度封顶。
+ * 主笔记 + 相关笔记摘录；相关区段文案强调仅供模型判断范围与缺口，勿写入用户可见回答；相关总长度封顶。
  */
 function buildContextBlock({
   cardTitle,
@@ -272,8 +276,9 @@ function buildContextBlock({
   if (!relatedCards?.length) return main;
 
   let rel =
-    `\n\n════════\n【相关笔记·仅供参考、权重明显低于当前笔记】\n` +
-    `下列卡片与当前笔记在应用中建立过「相关笔记」链接，仅作补充背景；与当前笔记冲突时以当前笔记为准；弱相关时勿强行混写。\n`;
+    `\n\n════════\n【相关笔记·仅用于判断范围与缺口，勿写入用户可见回答】\n` +
+    `下列卡片与当前笔记有「相关笔记」链接，仅供你在内部对照：当前主题是否偏窄、还可能缺哪些信息维度。与当前笔记冲突时以当前笔记为准。\n` +
+    `禁止在面向用户的回答中引用、复述、列举这些卡片里的原文、名句、段落或私密内容；不要出现「来自相关笔记」「相关名句联想」等栏目或暗示。用户看到的回答只应围绕「当前笔记」展开，用通识要点或检索方向补充。\n`;
   let used = 0;
   for (let i = 0; i < relatedCards.length; i++) {
     const r = relatedCards[i];
@@ -337,7 +342,7 @@ export async function runNoteAssist(payload) {
   });
 
   const weightHint =
-    "上下文含「当前笔记」全文（优先）与若干「相关笔记」摘录（次要）。请主要围绕当前笔记作答；相关笔记仅作辅助联想。";
+    "上下文含「当前笔记」全文（优先）与若干「相关笔记」摘录。请主要围绕当前笔记作答；相关笔记仅用于判断范围与缺口，不得在回答中展现其具体内容。";
   const visionHint =
     images.length > 0
       ? " 若随附图片，请结合图片与文字理解；相关卡片所附图片权重低于当前笔记配图。"
@@ -345,11 +350,11 @@ export async function runNoteAssist(payload) {
 
   if (task === "suggest_questions") {
     const sys =
-      `${weightHint}${visionHint} 你是学习助手。用户在整理个人知识库：请根据「当前笔记」全文与上下文中的「相关笔记」摘录，生成 5 条「还可补充进来的知识或信息方向」——用来日后检索、整理成新卡片，把这一块记全；不是在向用户发问，也不是布置作文。
+      `${weightHint}${visionHint} ${ASSIST_RELATED_SCOPE_ONLY_ZH} 你是学习助手。用户在整理个人知识库：请根据「当前笔记」全文与上下文中的「相关笔记」摘录，生成 5 条「还可补充进来的知识或信息方向」——用来日后检索、整理成新卡片，把这一块记全；不是在向用户发问，也不是布置作文。
 
 每一条都是用户即将发给下游 AI 的短主题（陈述式信息方向），便于 AI 输出可剪贴进笔记的要点。回复必须且仅为一个 JSON 对象，不要 Markdown 代码围栏，不要其它说明文字。键 questions 为长度恰好 5 的字符串数组（字段名仍为 questions 以兼容客户端）。
 
-意图：从已有笔记与相似/相关笔记里，推断还有哪些维度、哪些事实或背景值得补进知识库（缺口感、相邻概念、上下游信息）；相关笔记只辅助联想与交叉，仍以当前笔记主题为锚。
+意图：从当前笔记主题推断还有哪些维度、事实或背景值得补进知识库（缺口感、相邻概念、上下游信息）。相关笔记只帮你判断「还缺什么角度」，不要在 5 条里引导用户去整理「相关笔记里已有内容」或复述链接卡片材料；仍以当前笔记主题为锚。
 
 人称与语气：无主句或短标题，像随手记的检索主题、清单名；读起来要像「人话」，不要像需求文档或论文目录。严禁出现：你觉得、你认为、你怎么看、你是否、对你来说、对你而言、请问你、你最喜欢 等面向读者的第二人称。条目标题不要用疑问句：避免以「吗」「呢」收尾，避免「如何理解 X？」「怎样看待 X？」这类发问句式——改成陈述式短句。
 
@@ -407,7 +412,7 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。${ASSIST_PURPOSE_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 300～700 字为宜，以短段与「-」列表为主；不要用 # 标题、不要用星号加粗或 Markdown。`;
+      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。${ASSIST_PURPOSE_ZH} ${ASSIST_RELATED_SCOPE_ONLY_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 300～700 字为宜，以短段与「-」列表为主；不要用 # 标题、不要用星号加粗或 Markdown。`;
     const user = `${ctxBlock}\n\n${instr}`;
     const text = await generateWithContent(sys, user, images, {
       maxOutputTokens: 900,
@@ -424,7 +429,7 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」。请补充与笔记相关的信息：要点、背景、对比、小知识、可进一步检索的方向；不要当成命题作文去扩写长文，不要重复整篇笔记，不要反问用户。${ASSIST_PURPOSE_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 350～800 字为宜，条目与短段优先。语言与笔记一致时优先用中文。不要使用 Markdown（不要用星号加粗、不要用 # 标题）。`;
+      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」。请补充与笔记相关的信息：要点、背景、对比、小知识、可进一步检索的方向；不要当成命题作文去扩写长文，不要重复整篇笔记，不要反问用户。${ASSIST_PURPOSE_ZH} ${ASSIST_RELATED_SCOPE_ONLY_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 350～800 字为宜，条目与短段优先。语言与笔记一致时优先用中文。不要使用 Markdown（不要用星号加粗、不要用 # 标题）。`;
     const user = `${ctxBlock}\n\n【用户消息】\n${message}`;
     const text = await generateWithContent(sys, user, images, {
       maxOutputTokens: 900,

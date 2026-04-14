@@ -197,8 +197,32 @@ import {
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import { mergeServerTreeWithLocalExtraCards } from "./appkit/collectionModel";
 
-/** 「全部笔记」每批挂载数量（滚动接近底部再追加） */
-const ALL_NOTES_BATCH = 40;
+/** 时间线虚拟列表：每批挂载卡片数（全部笔记 / 单合集 / 日历 / 搜索等共用） */
+const TIMELINE_VIRTUAL_BATCH = 40;
+
+function groupCalendarRestByCol(
+  items: { col: Collection; card: NoteCard }[]
+): { col: Collection; cards: NoteCard[] }[] {
+  const out: { col: Collection; cards: NoteCard[] }[] = [];
+  for (const { col, card } of items) {
+    const last = out[out.length - 1];
+    if (last && last.col.id === col.id) last.cards.push(card);
+    else out.push({ col, cards: [card] });
+  }
+  return out;
+}
+
+function groupSearchHitsFromFlat(
+  hits: { col: Collection; path: string; card: NoteCard }[]
+): { col: Collection; path: string; cards: NoteCard[] }[] {
+  const out: { col: Collection; path: string; cards: NoteCard[] }[] = [];
+  for (const h of hits) {
+    const last = out[out.length - 1];
+    if (last && last.col.id === h.col.id) last.cards.push(h.card);
+    else out.push({ col: h.col, path: h.path, cards: [h.card] });
+  }
+  return out;
+}
 
 const NoteConnectionsView = lazy(() =>
   import("./appkit/NoteConnectionsView").then((m) => ({
@@ -326,7 +350,13 @@ export default function App() {
   const mainHeaderRef = useRef<HTMLElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const allNotesLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const collectionRestSentinelRef = useRef<HTMLDivElement | null>(null);
+  const calendarRestSentinelRef = useRef<HTMLDivElement | null>(null);
+  const searchNotesSentinelRef = useRef<HTMLDivElement | null>(null);
   const allNotesViewSessionRef = useRef(false);
+  const collectionTimelineSessionRef = useRef<string | undefined>(undefined);
+  const calendarDayRestSessionRef = useRef<string | null>(null);
+  const searchTimelineSessionRef = useRef("");
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -413,8 +443,16 @@ export default function App() {
     }
     return false;
   });
-  const [allNotesVisibleCount, setAllNotesVisibleCount] =
-    useState(ALL_NOTES_BATCH);
+  const [allNotesVisibleCount, setAllNotesVisibleCount] = useState(
+    TIMELINE_VIRTUAL_BATCH
+  );
+  const [collectionRestVisibleCount, setCollectionRestVisibleCount] = useState(
+    TIMELINE_VIRTUAL_BATCH
+  );
+  const [calendarRestFlatVisibleCount, setCalendarRestFlatVisibleCount] =
+    useState(TIMELINE_VIRTUAL_BATCH);
+  const [searchGroupedCardsVisibleCount, setSearchGroupedCardsVisibleCount] =
+    useState(TIMELINE_VIRTUAL_BATCH);
   const [remindersViewActive, setRemindersViewActive] = useState(() => {
     try {
       if (getAppDataMode() === "local") {
@@ -1338,6 +1376,11 @@ export default function App() {
     [active?.cards]
   );
 
+  const restDisplayed = useMemo(
+    () => rest.slice(0, collectionRestVisibleCount),
+    [rest, collectionRestVisibleCount]
+  );
+
   const datesWithNotesOnCalendarSet = useMemo(
     () => datesWithNoteAddedOn(collections),
     [collections]
@@ -1387,8 +1430,8 @@ export default function App() {
     allNotesViewSessionRef.current = true;
     setAllNotesVisibleCount((prev) => {
       if (cap === 0) return 0;
-      if (justEntered) return Math.min(ALL_NOTES_BATCH, cap);
-      if (prev === 0) return Math.min(ALL_NOTES_BATCH, cap);
+      if (justEntered) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      if (prev === 0) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
       return Math.min(prev, cap);
     });
   }, [allNotesViewActive, allNotesSorted.length]);
@@ -1407,7 +1450,7 @@ export default function App() {
         setAllNotesVisibleCount((n) => {
           const total = allNotesSorted.length;
           if (n >= total) return n;
-          return Math.min(n + ALL_NOTES_BATCH, total);
+          return Math.min(n + TIMELINE_VIRTUAL_BATCH, total);
         });
       },
       { root, rootMargin: "520px 0px", threshold: 0 }
@@ -1490,6 +1533,145 @@ export default function App() {
     );
   const searchHasResults =
     searchCollectionMatches.length > 0 || searchGroupedCards.length > 0;
+
+  const searchCardsFlat = useMemo(() => {
+    const out: { col: Collection; path: string; card: NoteCard }[] = [];
+    for (const g of searchGroupedCards) {
+      for (const card of g.cards) {
+        out.push({ col: g.col, path: g.path, card });
+      }
+    }
+    return out;
+  }, [searchGroupedCards]);
+
+  const searchGroupedCardsDisplayed = useMemo(
+    () =>
+      groupSearchHitsFromFlat(
+        searchCardsFlat.slice(0, searchGroupedCardsVisibleCount)
+      ),
+    [searchCardsFlat, searchGroupedCardsVisibleCount]
+  );
+
+  /** 单合集时间线：切换合集或离开搜索/日历等特殊视图时重置可视条数 */
+  useEffect(() => {
+    if (
+      allNotesViewActive ||
+      calendarDay ||
+      searchActive ||
+      trashViewActive ||
+      remindersViewActive ||
+      connectionsViewActive ||
+      !active
+    ) {
+      collectionTimelineSessionRef.current = undefined;
+      return;
+    }
+    const id = active.id;
+    const justSwitched = collectionTimelineSessionRef.current !== id;
+    collectionTimelineSessionRef.current = id;
+    const cap = rest.length;
+    setCollectionRestVisibleCount((prev) => {
+      if (cap === 0) return 0;
+      if (justSwitched) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      if (prev === 0) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      return Math.min(prev, cap);
+    });
+  }, [
+    active?.id,
+    rest.length,
+    allNotesViewActive,
+    calendarDay,
+    searchActive,
+    trashViewActive,
+    remindersViewActive,
+    connectionsViewActive,
+  ]);
+
+  useEffect(() => {
+    if (
+      allNotesViewActive ||
+      calendarDay ||
+      searchActive ||
+      trashViewActive ||
+      remindersViewActive ||
+      connectionsViewActive ||
+      !active
+    )
+      return;
+    const root = timelineRef.current;
+    const target = collectionRestSentinelRef.current;
+    if (!root || !target) return;
+    if (collectionRestVisibleCount >= rest.length) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0];
+        if (!hit?.isIntersecting) return;
+        setCollectionRestVisibleCount((n) => {
+          const total = rest.length;
+          if (n >= total) return n;
+          return Math.min(n + TIMELINE_VIRTUAL_BATCH, total);
+        });
+      },
+      { root, rootMargin: "520px 0px", threshold: 0 }
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [
+    active?.id,
+    allNotesViewActive,
+    calendarDay,
+    searchActive,
+    trashViewActive,
+    remindersViewActive,
+    connectionsViewActive,
+    collectionRestVisibleCount,
+    rest.length,
+  ]);
+
+  /** 搜索结果笔记列表：换关键词或结果集变化时校准窗口 */
+  useEffect(() => {
+    if (!searchActive) {
+      searchTimelineSessionRef.current = "";
+      return;
+    }
+    const cap = searchCardsFlat.length;
+    const justNewQuery = searchTimelineSessionRef.current !== searchTrim;
+    searchTimelineSessionRef.current = searchTrim;
+    setSearchGroupedCardsVisibleCount((prev) => {
+      if (cap === 0) return 0;
+      if (justNewQuery) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      if (prev === 0) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      return Math.min(prev, cap);
+    });
+  }, [searchActive, searchTrim, searchCardsFlat.length]);
+
+  useEffect(() => {
+    if (!searchActive) return;
+    const root = timelineRef.current;
+    const target = searchNotesSentinelRef.current;
+    if (!root || !target) return;
+    if (searchGroupedCardsVisibleCount >= searchCardsFlat.length) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0];
+        if (!hit?.isIntersecting) return;
+        setSearchGroupedCardsVisibleCount((n) => {
+          const total = searchCardsFlat.length;
+          if (n >= total) return n;
+          return Math.min(n + TIMELINE_VIRTUAL_BATCH, total);
+        });
+      },
+      { root, rootMargin: "520px 0px", threshold: 0 }
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [
+    searchActive,
+    searchGroupedCardsVisibleCount,
+    searchCardsFlat.length,
+  ]);
 
   const calendarCells = useMemo(
     () => buildCalendarCells(calendarViewMonth),
@@ -1588,6 +1770,62 @@ export default function App() {
     }
     return [...m.values()];
   }, [dayRestCards, dayEntriesForList]);
+
+  const calendarRestFlat = useMemo(() => {
+    const out: { col: Collection; card: NoteCard }[] = [];
+    for (const g of calendarRestByCol) {
+      for (const card of g.cards) out.push({ col: g.col, card });
+    }
+    return out;
+  }, [calendarRestByCol]);
+
+  const calendarRestByColDisplayed = useMemo(
+    () =>
+      groupCalendarRestByCol(
+        calendarRestFlat.slice(0, calendarRestFlatVisibleCount)
+      ),
+    [calendarRestFlat, calendarRestFlatVisibleCount]
+  );
+
+  /** 日历某日：非置顶笔记按合集分组展示，触底再挂载更多 */
+  useEffect(() => {
+    if (!calendarDay) {
+      calendarDayRestSessionRef.current = null;
+      return;
+    }
+    const cap = calendarRestFlat.length;
+    const justEntered = calendarDayRestSessionRef.current !== calendarDay;
+    calendarDayRestSessionRef.current = calendarDay;
+    setCalendarRestFlatVisibleCount((prev) => {
+      if (cap === 0) return 0;
+      if (justEntered) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      if (prev === 0) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      return Math.min(prev, cap);
+    });
+  }, [calendarDay, calendarRestFlat.length]);
+
+  useEffect(() => {
+    if (!calendarDay) return;
+    const root = timelineRef.current;
+    const target = calendarRestSentinelRef.current;
+    if (!root || !target) return;
+    if (calendarRestFlatVisibleCount >= calendarRestFlat.length) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0];
+        if (!hit?.isIntersecting) return;
+        setCalendarRestFlatVisibleCount((n) => {
+          const total = calendarRestFlat.length;
+          if (n >= total) return n;
+          return Math.min(n + TIMELINE_VIRTUAL_BATCH, total);
+        });
+      },
+      { root, rootMargin: "520px 0px", threshold: 0 }
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [calendarDay, calendarRestFlatVisibleCount, calendarRestFlat.length]);
 
   const togglePin = useCallback(
     (colId: string, cardId: string) => {
@@ -4570,7 +4808,7 @@ export default function App() {
                     aria-label={c.matchNotesAria}
                   >
                     <h2 className="timeline__pin-heading">{c.headingNotes}</h2>
-                    {searchGroupedCards.map(({ col, path, cards }) => (
+                    {searchGroupedCardsDisplayed.map(({ col, path, cards }) => (
                       <div
                         key={col.id}
                         className="search-card-group"
@@ -4603,6 +4841,14 @@ export default function App() {
                         </MasonryShortestColumns>
                       </div>
                     ))}
+                    {searchGroupedCardsVisibleCount <
+                    searchCardsFlat.length ? (
+                      <div
+                        ref={searchNotesSentinelRef}
+                        className="timeline__all-notes-sentinel"
+                        aria-hidden
+                      />
+                    ) : null}
                   </section>
                 ) : null}
               </>
@@ -4760,7 +5006,7 @@ export default function App() {
                     aria-hidden
                   />
                 )}
-                {calendarRestByCol.map(({ col, cards: dayColCards }) => (
+                {calendarRestByColDisplayed.map(({ col, cards: dayColCards }) => (
                   <div
                     key={col.id}
                     className="timeline__cal-group"
@@ -4777,6 +5023,13 @@ export default function App() {
                     </MasonryShortestColumns>
                   </div>
                 ))}
+                {calendarRestFlatVisibleCount < calendarRestFlat.length ? (
+                  <div
+                    ref={calendarRestSentinelRef}
+                    className="timeline__all-notes-sentinel"
+                    aria-hidden
+                  />
+                ) : null}
               </>
             )
           ) : listEmpty ? (
@@ -4814,8 +5067,17 @@ export default function App() {
               <MasonryShortestColumns
                 columnCount={timelineColumnCount}
               >
-                {rest.map((card) => renderNoteTimelineCard(card, active!.id))}
+                {restDisplayed.map((card) =>
+                  renderNoteTimelineCard(card, active!.id)
+                )}
               </MasonryShortestColumns>
+              {collectionRestVisibleCount < rest.length ? (
+                <div
+                  ref={collectionRestSentinelRef}
+                  className="timeline__all-notes-sentinel"
+                  aria-hidden
+                />
+              ) : null}
             </>
           )}
           {canEdit &&

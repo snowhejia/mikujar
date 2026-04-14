@@ -49,6 +49,10 @@ const ASSIST_PURPOSE_ZH =
 const ASSIST_REPLY_TONE_ZH =
   "语气像随口说明：自然顺口即可。少用公文腔、少用「综上所述」「值得注意的是」；不必八股「首先其次最后」，除非分点真的更清晰。";
 
+/** 剧影视/小说等：用户要的是剧情与桥段信息，不是影评腔 */
+const ASSIST_STORY_FIRST_ZH =
+  "若笔记或用户消息涉及影视剧、综艺、小说、动漫等叙述类内容，优先直接交代剧情与具体桥段：发生了什么事、关键转折、名场面里谁在做什么、人物关系用情节带出；少写社会影响、轰动一时、仍被津津乐道、观感、戏剧张力、为什么经典等泛评套话，也不要用作品内容当由头写空泛读后感。若延伸线索是演员表、台词梗、花絮、同类型推荐等，就按该线索给条目化信息与可查方向，不要答成泛泛作品评论。细节不确定时简短说明可能记错、建议核对，切勿编造具体人名与情节。";
+
 export function isGeminiConfigured() {
   return Boolean(GEMINI_API_KEY);
 }
@@ -403,7 +407,7 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。${ASSIST_PURPOSE_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 300～700 字为宜，以短段与「-」列表为主；不要用 # 标题、不要用星号加粗或 Markdown。`;
+      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。${ASSIST_PURPOSE_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 300～700 字为宜，以短段与「-」列表为主；不要用 # 标题、不要用星号加粗或 Markdown。`;
     const user = `${ctxBlock}\n\n${instr}`;
     const text = await generateWithContent(sys, user, images, {
       maxOutputTokens: 900,
@@ -420,7 +424,7 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」。请补充与笔记相关的信息：要点、背景、对比、小知识、可进一步检索的方向；不要当成命题作文去扩写长文，不要重复整篇笔记，不要反问用户。${ASSIST_PURPOSE_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 350～800 字为宜，条目与短段优先。语言与笔记一致时优先用中文。不要使用 Markdown（不要用星号加粗、不要用 # 标题）。`;
+      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」。请补充与笔记相关的信息：要点、背景、对比、小知识、可进一步检索的方向；不要当成命题作文去扩写长文，不要重复整篇笔记，不要反问用户。${ASSIST_PURPOSE_ZH} ${ASSIST_STORY_FIRST_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 350～800 字为宜，条目与短段优先。语言与笔记一致时优先用中文。不要使用 Markdown（不要用星号加粗、不要用 # 标题）。`;
     const user = `${ctxBlock}\n\n【用户消息】\n${message}`;
     const text = await generateWithContent(sys, user, images, {
       maxOutputTokens: 900,

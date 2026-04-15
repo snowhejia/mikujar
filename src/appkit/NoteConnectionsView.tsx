@@ -59,6 +59,11 @@ const ORTHO_STRAIGHT_EPS = 32;
 /** 从边中点沿法线外伸，使折角落在卡片外侧间隙，避免折角压在卡片底下/内部 */
 const ORTHO_STUB_MIN = 14;
 const ORTHO_STUB_MAX = 38;
+/**
+ * edgeMidpointAnchors：仅当水平位移明显大于垂直位移时才用左右边中点，否则用上下边。
+ * 否则「略纵向」的两卡也会走左右口，V–V 正交路径的第一段水平干线会从卡片腰部横穿进白区，与圆角/灰条叠成多余线段。
+ */
+const LR_PORT_DOMINANCE = 1.22;
 
 /** 从连接边收集与当前卡相连的其它卡（全文纯文本 + 合集名），供问 AI */
 function relatedCardsPayloadForAskAi(
@@ -160,7 +165,9 @@ function edgeMidpointAnchors(
 } {
   const dx = bx - ax;
   const dy = by - ay;
-  if (Math.abs(dx) >= Math.abs(dy)) {
+  const useLeftRightPorts =
+    Math.abs(dx) >= Math.abs(dy) * LR_PORT_DOMINANCE;
+  if (useLeftRightPorts) {
     const x1 = dx >= 0 ? ax + a.hw : ax - a.hw;
     const x2 = dx >= 0 ? bx - b.hw : bx + b.hw;
     return {

@@ -1581,7 +1581,13 @@ export default function App() {
       if (dateB !== dateA) return dateB.localeCompare(dateA);
       return (b.card.minutesOfDay ?? 0) - (a.card.minutesOfDay ?? 0);
     });
-    return entries;
+    /** 同一张卡被「加入合集」后会存在多条 placement；全部笔记按 card.id 去重，仅保留一条 */
+    const seen = new Set<string>();
+    return entries.filter((ent) => {
+      if (seen.has(ent.card.id)) return false;
+      seen.add(ent.card.id);
+      return true;
+    });
   }, [collections]);
 
   const allNotesDisplayed = useMemo(

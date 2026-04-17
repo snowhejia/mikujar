@@ -117,22 +117,27 @@ export async function resolveCosMediaUrlIfNeeded(
 
   const base = apiBase();
   const q = new URLSearchParams({ url: resolvedUrl });
-  const r = await fetch(`${base}/api/upload/cos-read?${q}`, apiFetchInit({
-    headers: cosReadAuthHeaders(),
-  }));
-  if (!r.ok) return resolvedUrl;
-  const j = (await r.json().catch(() => ({}))) as {
-    url?: unknown;
-    expiresIn?: unknown;
-  };
-  if (typeof j.url !== "string" || !j.url) return resolvedUrl;
-  const ttlSec =
-    typeof j.expiresIn === "number" && Number.isFinite(j.expiresIn)
-      ? j.expiresIn
-      : 900;
-  const ttlMs = Math.min(3600, Math.max(60, ttlSec)) * 1000 * 0.85;
-  cosReadUrlCache.set(resolvedUrl, { url: j.url, expiresAt: now + ttlMs });
-  return j.url;
+  try {
+    const r = await fetch(`${base}/api/upload/cos-read?${q}`, apiFetchInit({
+      headers: cosReadAuthHeaders(),
+    }));
+    if (!r.ok) return resolvedUrl;
+    const j = (await r.json().catch(() => ({}))) as {
+      url?: unknown;
+      expiresIn?: unknown;
+    };
+    if (typeof j.url !== "string" || !j.url) return resolvedUrl;
+    const ttlSec =
+      typeof j.expiresIn === "number" && Number.isFinite(j.expiresIn)
+        ? j.expiresIn
+        : 900;
+    const ttlMs = Math.min(3600, Math.max(60, ttlSec)) * 1000 * 0.85;
+    cosReadUrlCache.set(resolvedUrl, { url: j.url, expiresAt: now + ttlMs });
+    return j.url;
+  } catch {
+    /* 移动端弱网 / WebView 偶发断连：勿抛错，否则 useMediaDisplaySrc 永不 setSrc → 无限转圈 */
+    return resolvedUrl;
+  }
 }
 
 export async function fetchAuthStatus(): Promise<{

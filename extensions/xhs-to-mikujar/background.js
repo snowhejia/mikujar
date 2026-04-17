@@ -539,6 +539,8 @@ async function runSave(tabId, emit) {
         url: up.url,
         kind: up.kind === "video" ? "video" : "image",
         name: up.name || filename,
+        /** 与主站一致，供「所有附件」等展示体积；缺省则 UI 为 – */
+        sizeBytes: Math.floor(blob.size),
       });
     } catch (e) {
       errors.push(`图${i + 1}：${e?.message || e}`);
@@ -573,6 +575,7 @@ async function runSave(tabId, emit) {
         url: up.url,
         kind: up.kind === "video" ? "video" : "image",
         name: up.name || filename,
+        sizeBytes: Math.floor(blob.size),
       });
     } catch (e) {
       errors.push(`视频${j + 1}：${e?.message || e}`);

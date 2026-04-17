@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   mightHaveApiSession,
   needsCosReadUrl,
+  resolveCosMediaUrlIfNeeded,
   resolveMediaUrl,
 } from "./api/auth";
 import {
@@ -38,9 +39,24 @@ export function useMediaDisplaySrc(url: string | undefined): string {
         return;
       }
       let c = false;
-      void resolveCosMediaDisplayWithPersistentCache(base).then((s) => {
-        if (!c) setSrc(s);
-      });
+      void resolveCosMediaDisplayWithPersistentCache(base)
+        .then((s) => {
+          if (!c) {
+            const v = typeof s === "string" ? s.trim() : "";
+            if (v) setSrc(v);
+            else if (!needsCosReadUrl(base)) setSrc(base);
+          }
+        })
+        .catch(() => {
+          if (!c) {
+            if (!needsCosReadUrl(base)) setSrc(base);
+            else {
+              void resolveCosMediaUrlIfNeeded(base).then((p) => {
+                if (!c) setSrc(typeof p === "string" && p.trim() ? p.trim() : "");
+              });
+            }
+          }
+        });
       return () => {
         c = true;
       };

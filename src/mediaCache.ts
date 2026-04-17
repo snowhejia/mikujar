@@ -3,6 +3,7 @@
  * 对「整文件体积可接受」的资源拉取一次后以稳定键写入 IndexedDB，下次直接 blob: 展示。
  * 视频等大文件仍用预签名直链流式加载，避免整文件进内存/IDB。
  */
+import { Capacitor } from "@capacitor/core";
 import { resolveCosMediaUrlIfNeeded } from "./api/auth";
 
 const DB_NAME = "mikujar-media-blobs";
@@ -67,53 +68,75 @@ async function idbPut(key: string, blob: Blob): Promise<void> {
 }
 
 async function resolveInner(stableResolvedUrl: string): Promise<string> {
-  const cached = await idbGet(stableResolvedUrl);
-  if (cached) {
-    const u = URL.createObjectURL(cached);
-    sessionBlobUrl.set(stableResolvedUrl, u);
-    return u;
+  /**
+   * Capacitor WKWebView 的 Origin 多为 https://localhost；用 fetch 整文件拉 COS 常因桶 CORS
+   * 未包含该 Origin 而失败，若再退回未签名桶 URL 会 403 裂图。<img src=预签名> 不依赖 COS CORS。
+   */
+  if (Capacitor.isNativePlatform()) {
+    return resolveCosMediaUrlIfNeeded(stableResolvedUrl);
   }
 
-  const presigned = await resolveCosMediaUrlIfNeeded(stableResolvedUrl);
-
-  if (isProbablyLargeVideo(stableResolvedUrl)) {
-    return presigned;
-  }
-
-  let useStreamOnly = false;
   try {
-    const head = await fetch(presigned, { method: "HEAD", mode: "cors" });
-    const ct = head.headers.get("Content-Type") || "";
-    const cl = head.headers.get("Content-Length");
-    const n = cl ? parseInt(cl, 10) : NaN;
-    if (ct.startsWith("video/")) {
-      useStreamOnly = !Number.isFinite(n) || n > MAX_CACHE_BYTES;
-    } else if (Number.isFinite(n) && n > MAX_CACHE_BYTES) {
-      useStreamOnly = true;
+    const cached = await idbGet(stableResolvedUrl);
+    if (cached) {
+      const u = URL.createObjectURL(cached);
+      sessionBlobUrl.set(stableResolvedUrl, u);
+      return u;
+    }
+
+    const presigned = await resolveCosMediaUrlIfNeeded(stableResolvedUrl);
+
+    if (isProbablyLargeVideo(stableResolvedUrl)) {
+      return presigned;
+    }
+
+    let useStreamOnly = false;
+    try {
+      const head = await fetch(presigned, { method: "HEAD", mode: "cors" });
+      const ct = head.headers.get("Content-Type") || "";
+      const cl = head.headers.get("Content-Length");
+      const n = cl ? parseInt(cl, 10) : NaN;
+      if (ct.startsWith("video/")) {
+        useStreamOnly = !Number.isFinite(n) || n > MAX_CACHE_BYTES;
+      } else if (Number.isFinite(n) && n > MAX_CACHE_BYTES) {
+        useStreamOnly = true;
+      }
+    } catch {
+      /* HEAD 不可用：宁可走直链，避免未知体积时整文件 GET */
+      useStreamOnly = isProbablyLargeVideo(stableResolvedUrl);
+    }
+
+    if (useStreamOnly) {
+      return presigned;
+    }
+
+    try {
+      const res = await fetch(presigned, { mode: "cors" });
+      if (!res.ok) {
+        return presigned;
+      }
+      const blob = await res.blob();
+      if (blob.size > MAX_CACHE_BYTES) {
+        const u = URL.createObjectURL(blob);
+        sessionBlobUrl.set(stableResolvedUrl, u);
+        return u;
+      }
+      await idbPut(stableResolvedUrl, blob);
+      const u = URL.createObjectURL(blob);
+      sessionBlobUrl.set(stableResolvedUrl, u);
+      return u;
+    } catch {
+      /* 整文件拉取失败（CORS/断网）：仍返回预签名直链，由 img/video 自己加载与 onError */
+      return presigned;
     }
   } catch {
-    /* HEAD 不可用：宁可走直链，避免未知体积时整文件 GET */
-    useStreamOnly = isProbablyLargeVideo(stableResolvedUrl);
+    /* 勿退回未签名桶 URL（私有桶必裂）；再试换签 */
+    try {
+      return await resolveCosMediaUrlIfNeeded(stableResolvedUrl);
+    } catch {
+      return stableResolvedUrl;
+    }
   }
-
-  if (useStreamOnly) {
-    return presigned;
-  }
-
-  const res = await fetch(presigned, { mode: "cors" });
-  if (!res.ok) {
-    return presigned;
-  }
-  const blob = await res.blob();
-  if (blob.size > MAX_CACHE_BYTES) {
-    const u = URL.createObjectURL(blob);
-    sessionBlobUrl.set(stableResolvedUrl, u);
-    return u;
-  }
-  await idbPut(stableResolvedUrl, blob);
-  const u = URL.createObjectURL(blob);
-  sessionBlobUrl.set(stableResolvedUrl, u);
-  return u;
 }
 
 /**

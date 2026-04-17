@@ -159,11 +159,12 @@ const NATIVE_WEBVIEW_CORS_ORIGINS = [
  * 对 tauri.localhost / ipc.localhost 自动补全另一协议。
  */
 function buildCorsAllowedOrigins(envVal) {
-  if (!envVal?.trim()) return null;
-  const list = envVal.split(",").map((s) => s.trim()).filter(Boolean);
-  const set = new Set(list);
-  for (const o of NATIVE_WEBVIEW_CORS_ORIGINS) {
-    set.add(o);
+  /** 壳内 WebView Origin 始终加入；未配 CORS_ORIGIN 时仅靠浏览器同源访问 API，App 仍须能换签拉图 */
+  const set = new Set(NATIVE_WEBVIEW_CORS_ORIGINS);
+  if (envVal?.trim()) {
+    for (const s of envVal.split(",").map((x) => x.trim()).filter(Boolean)) {
+      set.add(s);
+    }
   }
   const mirrorHosts = new Set(["tauri.localhost", "ipc.localhost"]);
   for (const o of [...set]) {

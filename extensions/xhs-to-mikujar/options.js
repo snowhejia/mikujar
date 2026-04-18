@@ -31,8 +31,8 @@ $("save").addEventListener("click", async () => {
   const status = $("status");
   status.textContent = "";
 
-  if (!apiBase || !bearerToken || !collectionId) {
-    status.textContent = "请填写 API 地址、Token 与合集 ID。";
+  if (!apiBase || !bearerToken) {
+    status.textContent = "请填写 API 地址与 Token。";
     return;
   }
 

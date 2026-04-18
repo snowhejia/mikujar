@@ -19,6 +19,7 @@ import {
   createCardApi,
   updateCardApi,
   fetchCollectionsFromApi,
+  removeCardFromCollectionApi,
 } from "./api/collections";
 import { noteBodyToHtml } from "./noteEditor/plainHtml";
 import {
@@ -235,7 +236,10 @@ import {
   walkCollectionsWithPath,
 } from "./appkit";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
-import { mergeServerTreeWithLocalExtraCards } from "./appkit/collectionModel";
+import {
+  mergeServerTreeWithLocalExtraCards,
+  removeCardPlacementFromTree,
+} from "./appkit/collectionModel";
 import {
   ATTACHMENT_FILTER_KEYS,
   type AttachmentFilterKey,
@@ -1094,21 +1098,23 @@ export default function App() {
     [authReady, showRemoteLoading, dataMode, remoteLoaded]
   );
 
-  const resyncRemoteCollectionsTree = useCallback(async () => {
-    if (dataMode !== "remote") return;
+  const resyncRemoteCollectionsTree = useCallback(async (): Promise<
+    Collection[] | null
+  > => {
+    if (dataMode !== "remote") return null;
     if (writeRequiresLogin && !currentUser && !getAdminToken()) {
-      return;
+      return null;
     }
     const data = await fetchCollectionsFromApi();
     if (data === null) {
       setLoadError((prev) => prev ?? c.syncLoadFail);
       setApiOnline(false);
-      return;
+      return null;
     }
     setLoadError(null);
     setApiOnline(true);
     const tree = migrateCollectionTree(data);
-    let merged = tree;
+    let merged: Collection[] = tree;
     flushSync(() => {
       setCollections((prev) => {
         merged = mergeServerTreeWithLocalExtraCards(tree, prev);
@@ -1121,6 +1127,7 @@ export default function App() {
     );
     if (sk) saveRemoteCollectionsSnapshot(sk, merged);
     await refreshRemotePreferences();
+    return merged;
   }, [
     dataMode,
     c.syncLoadFail,
@@ -2272,6 +2279,62 @@ export default function App() {
       setAddToCollectionTarget({ colId, cardId });
     },
     [canEdit]
+  );
+
+  /** 笔记详情页：从某一合集移除当前笔记（多合集之一）；本地写树，云端调 API 后重拉树 */
+  const removeCardFromCollectionPlacementAt = useCallback(
+    async (placementColId: string, cardId: string) => {
+      if (!canEdit) return;
+      if (
+        placementColId === LOOSE_NOTES_COLLECTION_ID &&
+        collectionIdsContainingCardId(collections, cardId).size <= 1
+      ) {
+        return;
+      }
+      if (dataMode === "local") {
+        setCollections((prev) => {
+          const next = removeCardPlacementFromTree(
+            prev,
+            placementColId,
+            cardId,
+            c.looseNotesCollectionName
+          );
+          queueMicrotask(() => {
+            setCardPageCard((cp) => {
+              if (!cp || cp.cardId !== cardId) return cp;
+              const ids = [...collectionIdsContainingCardId(next, cardId)];
+              if (ids.length === 0) return null;
+              if (ids.includes(cp.colId)) return cp;
+              return { colId: ids[0], cardId };
+            });
+          });
+          return next;
+        });
+        return;
+      }
+      const ok = await removeCardFromCollectionApi(cardId, placementColId);
+      if (!ok) {
+        window.alert(c.cardRemovePlacementFail);
+        return;
+      }
+      const merged = await resyncRemoteCollectionsTree();
+      if (!merged) return;
+      setCardPageCard((cp) => {
+        if (!cp || cp.cardId !== cardId) return cp;
+        const ids = [...collectionIdsContainingCardId(merged, cardId)];
+        if (ids.length === 0) return null;
+        if (ids.includes(cp.colId)) return cp;
+        return { colId: ids[0], cardId };
+      });
+    },
+    [
+      canEdit,
+      collections,
+      dataMode,
+      c.looseNotesCollectionName,
+      c.cardRemovePlacementFail,
+      resyncRemoteCollectionsTree,
+    ]
   );
 
   const restoreTrashedEntry = useCallback(
@@ -5440,6 +5503,12 @@ export default function App() {
               uploadFilesToCard={uploadFilesToCard}
               removeCardMediaItem={removeCardMediaItem}
               setCardMediaCoverItem={setCardMediaCoverItem}
+              onRemoveCardFromCollection={(placementColId) =>
+                void removeCardFromCollectionPlacementAt(
+                  placementColId,
+                  cardPageCardLive.card.id
+                )
+              }
             />
           </Suspense>
         ) : cardPageCard ? (

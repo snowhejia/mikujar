@@ -87,6 +87,8 @@ export type AppChrome = {
   cardAddToCollectionCancel: string;
   cardAddToCollectionRemoteBlocked: string;
   cardAddToCollectionAlreadyThere: string;
+  cardRemovePlacementFail: string;
+  cardRemoveFromCollectionChipAria: (path: string) => string;
   /** 笔记探索白板卡片左侧灰条：拖动拉线建立关联 */
   connectionsLinkRailAria: string;
   /** 笔记探索 · 问 AI 侧栏 */
@@ -368,6 +370,9 @@ const zh: AppChrome = {
   cardAddToCollectionRemoteBlocked:
     "云端数据模式下暂不支持将同一张笔记加入多个合集（需服务端结构升级）。请使用本地数据模式，或在「笔记详情」页的「相关笔记」中建立关联。",
   cardAddToCollectionAlreadyThere: "该合集里已经有这条笔记了。",
+  cardRemovePlacementFail: "未能从该合集移除笔记，请稍后重试。",
+  cardRemoveFromCollectionChipAria: (path: string) =>
+    `从合集「${path}」移除`,
   connectionsLinkRailAria: "从此处拖动连线到另一张笔记",
   cardAskAiTitle: "问 AI",
   cardAskAiToolbar: "问 AI",
@@ -651,6 +656,10 @@ const en: AppChrome = {
   cardAddToCollectionRemoteBlocked:
     "Adding the same note to multiple collections isn’t supported in cloud mode yet. Use local data mode, or open Note detail and link under Related notes.",
   cardAddToCollectionAlreadyThere: "This note is already in that collection.",
+  cardRemovePlacementFail:
+    "Couldn’t remove this note from that collection. Try again in a moment.",
+  cardRemoveFromCollectionChipAria: (path: string) =>
+    `Remove from collection “${path}”`,
   connectionsLinkRailAria: "Drag a line from here to another note",
   cardAskAiTitle: "Ask AI",
   cardAskAiToolbar: "Ask AI",

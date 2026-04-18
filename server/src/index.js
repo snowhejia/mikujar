@@ -66,6 +66,7 @@ import {
   createCard,
   updateCard,
   deleteCard,
+  removeCardFromCollectionPlacement,
   listFavoriteCollectionIds,
   replaceFavoriteCollectionIds,
   listTrashedNotes,
@@ -1104,6 +1105,27 @@ app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
     res.status(status).json({ error: e.message || "更新失败" });
   }
 });
+
+/** DELETE /api/cards/:cardId/collections/:collectionId — 从该合集移除笔记（多合集之一） */
+app.delete(
+  "/api/cards/:cardId/collections/:collectionId",
+  collectionsWriterMw,
+  async (req, res) => {
+    try {
+      await removeCardFromCollectionPlacement(
+        getUserId(req),
+        req.params.cardId,
+        req.params.collectionId
+      );
+      notifyCollectionsSync(req);
+      res.status(204).end();
+    } catch (e) {
+      console.error(e);
+      const status = e.message?.includes("不存在") ? 404 : 400;
+      res.status(status).json({ error: e.message || "移除失败" });
+    }
+  }
+);
 
 /** DELETE /api/cards/:id — 删除卡片 */
 app.delete("/api/cards/:id", collectionsWriterMw, async (req, res) => {

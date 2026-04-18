@@ -9937,6 +9937,18 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   border: 1px solid rgba(55, 53, 47, 0.1);
 }
 
+.card-page__prop-chip--col.card-page__prop-chip--removable {
+  gap: 1px;
+  padding-right: 2px;
+}
+
+.card-page__prop-chip-col-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
 /* 附件缩略图 */
 
 .card-page__attachment {

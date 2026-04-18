@@ -1,5 +1,7 @@
 const REFERER_XHS = "https://www.xiaohongshu.com/";
 const REFERER_BILI = "https://www.bilibili.com/";
+/** 与主站 `LOOSE_NOTES_COLLECTION_ID` 一致：选项未填合集时保存到「全部笔记」所用 inbox */
+const INBOX_ALL_NOTES_COLLECTION_ID = "__loose_notes";
 /** 超过则不上传视频，提示用户自行下载（与分片上传上限无关，避免极慢/失败） */
 const MAX_CLIP_VIDEO_BYTES = 150 * 1024 * 1024;
 
@@ -850,6 +852,34 @@ async function createCard(apiBase, token, userId, collectionId, card) {
 }
 
 /**
+ * 确保存在「未归类」合集行，与网页在「全部笔记」下新建笔记一致；幂等，可忽略非致命错误。
+ */
+async function ensureInboxCollectionForAllNotes(apiBase, token, userId) {
+  try {
+    const r = await fetch(
+      appendUserId(`${apiBase}/api/collections`, userId),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: INBOX_ALL_NOTES_COLLECTION_ID,
+          name: "未归类笔记",
+          dotColor: "#a8a29e",
+        }),
+      }
+    );
+    if (!r.ok && r.status !== 409) {
+      /* 已存在或其它错误时仍尝试建卡，由 createCard 返回明确错误 */
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * 在页面 MAIN world 读取 __playinfo__ / videoData（不能用内联 script：B 站 CSP 会拦截）。
  */
 async function collectBiliMainWorldPlaySnapshot(tabId) {
@@ -914,14 +944,17 @@ async function collectBiliMainWorldPlaySnapshot(tabId) {
 async function runSave(tabId, emit) {
   emit({ type: "progress", value: 5, text: "读取配置…" });
   const settings = await getSettings();
-  if (!settings.apiBase || !settings.bearerToken || !settings.collectionId) {
+  if (!settings.apiBase || !settings.bearerToken) {
     emit({
       type: "done",
       ok: false,
-      message: "请先在「扩展选项」填写 API、Token、合集 ID。",
+      message: "请先在「扩展选项」填写 API 与 Token。",
     });
     return;
   }
+  const targetCollectionId =
+    String(settings.collectionId || "").trim() ||
+    INBOX_ALL_NOTES_COLLECTION_ID;
 
   emit({ type: "progress", value: 10, text: "检查 API 访问权限…" });
   const okPerm = await ensureApiPermission(settings.apiBase);
@@ -1323,11 +1356,18 @@ async function runSave(tabId, emit) {
   };
 
   try {
+    if (targetCollectionId === INBOX_ALL_NOTES_COLLECTION_ID) {
+      await ensureInboxCollectionForAllNotes(
+        settings.apiBase,
+        settings.bearerToken,
+        settings.userId
+      );
+    }
     await createCard(
       settings.apiBase,
       settings.bearerToken,
       settings.userId,
-      settings.collectionId,
+      targetCollectionId,
       card
     );
     const nImg = media.filter((m) => m.kind === "image").length;

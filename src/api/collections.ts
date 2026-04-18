@@ -226,3 +226,20 @@ export async function deleteCardApi(cardId: string): Promise<boolean> {
     return false;
   }
 }
+
+/** 从指定合集移除该笔记的一条归属（多合集之一）；204 表示成功 */
+export async function removeCardFromCollectionApi(
+  cardId: string,
+  collectionId: string
+): Promise<boolean> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/cards/${encodeURIComponent(cardId)}/collections/${encodeURIComponent(collectionId)}`,
+      apiFetchInit({ method: "DELETE", headers: buildHeadersPut() })
+    );
+    return r.ok;
+  } catch {
+    return false;
+  }
+}

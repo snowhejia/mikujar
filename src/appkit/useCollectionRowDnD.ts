@@ -33,7 +33,7 @@ export function useCollectionRowDnD(p: {
   canEdit: boolean;
   dataMode: AppDataMode;
   /** 云端布局保存失败后拉回服务端合集树，避免侧栏与服务器长期不一致 */
-  resyncCollectionsFromRemote?: () => Promise<void>;
+  resyncCollectionsFromRemote?: () => Promise<unknown>;
   collectionLayoutSaveFailedMessage: string;
   noteMoveSaveFailedMessage: string;
   /** 与笔记设置「新笔记在时间线顶部」一致：拖到侧栏合集时插到该合集最前 */

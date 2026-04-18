@@ -792,6 +792,38 @@ export async function updateCard(userId, cardId, patch) {
 }
 
 /**
+ * 从指定合集移除一条 card 归属（多合集）；删后若无任何 placement，卡片在 GET 树中会以「未归类」孤儿形式出现。
+ * @param {string|null} userId
+ * @param {string} cardId
+ * @param {string} collectionId
+ */
+export async function removeCardFromCollectionPlacement(
+  userId,
+  cardId,
+  collectionId
+) {
+  const cid = String(cardId || "").trim();
+  const colId = String(collectionId || "").trim();
+  if (!cid || !colId) throw new Error("缺少卡片或合集");
+
+  const { sql: uidSql, params: uidParams } = userIdCondition(userId, 3);
+  const uidOnC = uidSql.replace(/\buser_id\b/g, "c.user_id");
+  const res = await query(
+    `DELETE FROM card_placements p
+     USING cards c
+     WHERE p.card_id = c.id
+       AND p.card_id = $1
+       AND p.collection_id = $2
+       AND c.trashed_at IS NULL
+       AND (${uidOnC})`,
+    [cid, colId, ...uidParams]
+  );
+  if (res.rowCount === 0) {
+    throw new Error("归属不存在或无权限");
+  }
+}
+
+/**
  * 删除整张笔记（所有合集中的出现一并删除）。
  * @param {string|null} userId
  * @param {string} cardId

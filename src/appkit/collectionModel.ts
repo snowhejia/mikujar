@@ -608,6 +608,37 @@ export function collectionIdsContainingCardId(
   return out;
 }
 
+/**
+ * 从某一合集中去掉该笔记的一条出现（多合集镜像）。
+ * 若去掉后不再出现在任何合集，则放入「未归类」合集（不存在则创建），与侧栏语义一致。
+ */
+export function removeCardPlacementFromTree(
+  cols: Collection[],
+  placementColId: string,
+  cardId: string,
+  looseDisplayName: string
+): Collection[] {
+  const before = collectionIdsContainingCardId(cols, cardId);
+  if (!before.has(placementColId)) return cols;
+  const sourceCol = findCollectionById(cols, placementColId);
+  const cardSnapshot = sourceCol?.cards.find((c) => c.id === cardId) ?? null;
+  let next = mapCollectionById(cols, placementColId, (col) => ({
+    ...col,
+    cards: col.cards.filter((c) => c.id !== cardId),
+  }));
+  const after = collectionIdsContainingCardId(next, cardId);
+  if (after.size > 0) return next;
+  if (!cardSnapshot) return next;
+  if (!findCollectionById(next, LOOSE_NOTES_COLLECTION_ID)) {
+    next = [...next, createLooseNotesCollection(looseDisplayName)];
+  }
+  return appendCardToCollection(
+    next,
+    LOOSE_NOTES_COLLECTION_ID,
+    structuredClone(cardSnapshot) as NoteCard
+  );
+}
+
 /** 将卡片深拷贝一份追加到目标合集（同 id；目标内已存在同 id 则不变） */
 export function appendCardCopyToCollection(
   cols: Collection[],

@@ -3,7 +3,7 @@
 在 **小红书笔记详情页** 或 **哔哩哔哩投稿页**（`bilibili.com/video/BV…`）点击工具栏图标打开弹出窗，自动抓取 **标题、正文、图片/封面与（若可）视频** 并显示进度，调用现有后端：
 
 - `POST /api/upload/presign` + COS 直传（与网页一致）
-- `POST /api/collections/:collectionId/cards` 创建笔记
+- `POST /api/collections/:collectionId/cards` 创建笔记（未填合集时走 `__loose_notes`，与网页「全部笔记」一致）
 
 B 站页会写入自定义属性：**链接**、**作者**；有简介时增加 **简介**（与正文同源）。
 
@@ -11,7 +11,7 @@ B 站页会写入自定义属性：**链接**、**作者**；有简介时增加 
 
 1. Chrome 打开 `chrome://extensions`，打开「开发者模式」。
 2. 「加载已解压的扩展程序」→ 选择本目录 `extensions/xhs-to-mikujar`。
-3. 右键扩展图标 → **选项**，填写 API、Token、合集 ID 并保存。
+3. 右键扩展图标 → **选项**，填写 API、Token 并保存（合集 ID 可选，见下表）。
 
 ## 配置说明
 
@@ -20,7 +20,7 @@ B 站页会写入自定义属性：**链接**、**作者**；有简介时增加 
 | API 根地址 | 与 `VITE_API_BASE` 相同，无末尾 `/` |
 | Bearer Token | 一般为 Local Storage 的 `mikujar_admin_jwt`；或服务端 `API_TOKEN` |
 | userId | 仅在使用 **API_TOKEN** 时必填（与后端要求一致） |
-| 目标合集 ID | 从 `GET /api/collections` 或网页数据里取对应合集 `id` |
+| 目标合集 ID（可选） | 留空则保存到「全部笔记」所用 inbox（`__loose_notes`，与主站一致）；填写则从 `GET /api/collections` 取指定合集 `id` |
 | 摘录插入位置 | 默认**插入时间线顶部**（`insertAtStart`），与网页「笔记设置 → 新建笔记位置」默认一致；若在网页选了「底部」，请在选项里取消「摘录的笔记插入到时间线顶部」。 |
 
 服务端需：**PostgreSQL + 已配置腾讯云 COS**（未配 COS 时预签名会失败）。

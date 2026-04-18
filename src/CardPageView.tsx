@@ -16,6 +16,7 @@ import {
   collectAllTagsFromCollections,
   collectionIdsContainingCardId,
   collectionPathLabel,
+  LOOSE_NOTES_COLLECTION_ID,
 } from "./appkit/collectionModel";
 import type {
   CardProperty,
@@ -246,6 +247,8 @@ export interface CardPageViewProps {
     cardId: string,
     item: NoteMediaItem
   ) => void;
+  /** 从某一合集移除当前笔记的一条归属（与标签上的 × 一致） */
+  onRemoveCardFromCollection?: (placementColId: string) => void;
   /** 将附件移到 media 首位作为轮播封面；与 CardGallery 右键「设为封面」一致 */
   setCardMediaCoverItem?: (
     colId: string,
@@ -506,6 +509,7 @@ export function CardPageView({
   setRelatedPanel,
   uploadFilesToCard,
   removeCardMediaItem,
+  onRemoveCardFromCollection,
   setCardMediaCoverItem,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
@@ -1135,11 +1139,41 @@ export function CardPageView({
           <div className="card-page__prop-row">
             <span className="card-page__prop-label">合集</span>
             <div className="card-page__prop-content card-page__prop-content--row">
-              {colIds.map((id) => (
-                <span key={id} className="card-page__prop-chip card-page__prop-chip--col">
-                  {collectionPathLabel(collections, id)}
-                </span>
-              ))}
+              {colIds.map((id) => {
+                const pathLabel = collectionPathLabel(collections, id);
+                const showRemove =
+                  Boolean(canEdit && onRemoveCardFromCollection) &&
+                  !(
+                    id === LOOSE_NOTES_COLLECTION_ID && colIds.length === 1
+                  );
+                return (
+                  <span
+                    key={id}
+                    className={`card-page__prop-chip card-page__prop-chip--col${
+                      showRemove ? " card-page__prop-chip--removable" : ""
+                    }`}
+                  >
+                    <span
+                      className="card-page__prop-chip-col-text"
+                      title={pathLabel}
+                    >
+                      {pathLabel}
+                    </span>
+                    {showRemove ? (
+                      <button
+                        type="button"
+                        className="card-page__tags-pill-remove"
+                        aria-label={ui.cardRemoveFromCollectionChipAria(
+                          pathLabel
+                        )}
+                        onClick={() => onRemoveCardFromCollection?.(id)}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </span>
+                );
+              })}
               {canEdit && (
                 <button
                   type="button"

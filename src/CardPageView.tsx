@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import type { ReminderPickerTarget } from "./ReminderPickerModal";
 import { useAppUiLang } from "./appUiLang";
+import { useMediaDisplaySrc } from "./mediaDisplay";
 
 const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
   text: "文字",
@@ -40,6 +41,35 @@ const PROP_TYPE_ICONS: Record<CardPropertyType, string> = {
 
 function genId() {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** 与 CardGallery 相同解析链（COS 预签名、本地 tauri: 等），避免直链 img 裂图 */
+function CardPageAttachmentImage({
+  item,
+  className,
+}: {
+  item: NoteMediaItem;
+  className: string;
+}) {
+  const raw = (item.thumbnailUrl ?? item.url).trim();
+  const src = useMediaDisplaySrc(raw);
+  if (!src) {
+    return (
+      <span
+        className={`${className} card-page__attachment-thumb--pending`}
+        aria-busy="true"
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={item.name ?? ""}
+      className={className}
+      loading="lazy"
+      decoding="async"
+    />
+  );
 }
 
 export interface CardPageViewProps {
@@ -514,9 +544,8 @@ export function CardPageView({
               {media.map((item) => (
                 <div key={item.url} className="card-page__attachment">
                   {item.kind === "image" ? (
-                    <img
-                      src={item.thumbnailUrl ?? item.url}
-                      alt={item.name ?? ""}
+                    <CardPageAttachmentImage
+                      item={item}
                       className="card-page__attachment-thumb"
                     />
                   ) : (

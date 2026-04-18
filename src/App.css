@@ -9151,6 +9151,12 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   display: block;
 }
 
+.card-page__attachment-thumb--pending {
+  flex-shrink: 0;
+  background: rgba(55, 53, 47, 0.08);
+  box-sizing: border-box;
+}
+
 .card-page__attachment-name {
   font-size: 0.75rem;
   color: rgba(55, 53, 47, 0.65);

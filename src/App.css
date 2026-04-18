@@ -5272,11 +5272,21 @@ div.card__text--readonly:not(.card__text--preview) {
   color: inherit;
 }
 
-/* 时间线卡片：正文内嵌媒体不展示（附件由 CardGallery 单独展示，避免重复） */
-.card__text-editor--timeline-body-headings .ProseMirror img,
-.card__text-editor--timeline-body-headings .ProseMirror video,
-.card__text-editor--timeline-body-headings .ProseMirror audio {
-  display: none;
+/*
+ * 合集列表 / 时间线 / 探索图等：正文内嵌媒体不展示（附件轮播单独展示）。
+ * 须隐藏 NodeView 外层（仅 display:none 子级 video 时父级仍可能占位）。
+ */
+.card__text-editor--hide-embedded-media .ProseMirror img,
+.card__text-editor--hide-embedded-media .ProseMirror video,
+.card__text-editor--hide-embedded-media .ProseMirror audio,
+.card__text-editor--hide-embedded-media .ProseMirror iframe,
+.card__text-editor--hide-embedded-media .ProseMirror embed,
+.card__text-editor--hide-embedded-media .ProseMirror object,
+.card__text-editor--hide-embedded-media .ProseMirror .note-inline-video-wrap,
+.card__text-editor--hide-embedded-media .ProseMirror .note-inline-audio-wrap,
+.card__text-editor--hide-embedded-media .ProseMirror .note-body-img-nodeview,
+.card__text-editor--hide-embedded-media .ProseMirror .note-inline-media-pending {
+  display: none !important;
 }
 
 /* 段间距会破坏 30px 横线周期，笔记里换行多为单格一行，段与段之间不加额外 margin */
@@ -5330,12 +5340,25 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .note-inline-img--pending {
-  display: inline-block;
-  min-width: 48px;
-  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(100%, 280px);
+  min-height: 28px;
+  padding: 5px 10px;
   vertical-align: middle;
-  background: rgba(55, 53, 47, 0.08);
-  border-radius: 4px;
+  box-sizing: border-box;
+  background: rgba(245, 247, 250, 0.98);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 6px;
+}
+
+.note-inline-img-pending__label {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-inline-video-wrap,
@@ -5345,13 +5368,45 @@ div.card__text--readonly:not(.card__text--preview) {
   margin: 0.35em 0;
 }
 
-.note-inline-video-pending,
-.note-inline-audio-pending {
+/* 正文内联音视频：解析地址前的占位（与 Notion 类 embed 条类似，含说明文案） */
+.note-inline-media-pending {
   position: relative;
-  min-height: 120px;
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
-  border-radius: 6px;
-  background: rgba(55, 53, 47, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(245, 247, 250, 0.98);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  box-sizing: border-box;
+}
+
+.note-inline-media-pending__visual {
+  position: relative;
+  min-height: 88px;
+}
+
+.note-inline-media-pending__meta {
+  padding: 8px 12px 11px;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  text-align: center;
+}
+
+.note-inline-media-pending__title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+
+.note-inline-media-pending__hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(55, 53, 47, 0.48);
 }
 
 .card__text.ProseMirror audio.note-inline-audio {

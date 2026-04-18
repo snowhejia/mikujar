@@ -86,6 +86,10 @@ export type NoteCardTiptapProps = {
    * 卡片详情 / 全页编辑不传此项，保留标题样式。
    */
   timelineBodyHeadings?: boolean;
+  /**
+   * 合集列表等：正文中不展示内嵌图/音视频（与 `timelineBodyHeadings` 叠加时共用样式；仅列表需要时可单独传）。
+   */
+  hideEmbeddedMedia?: boolean;
 };
 
 /* ——— 工具栏子组件 ——— */
@@ -381,6 +385,7 @@ export function NoteCardTiptapCore({
   onPasteFiles,
   showToolbar = false,
   timelineBodyHeadings = false,
+  hideEmbeddedMedia = false,
   insertUploadedImagesAtCursor = false,
 }: NoteCardTiptapProps) {
   const c = useAppChrome();
@@ -598,13 +603,16 @@ export function NoteCardTiptapCore({
     );
   }
 
+  const hideEmb = Boolean(timelineBodyHeadings || hideEmbeddedMedia);
+
   return (
     <div
       className={
         (canEdit
           ? "card__text-editor"
           : "card__text-editor card__text-editor--readonly") +
-        (timelineBodyHeadings ? " card__text-editor--timeline-body-headings" : "")
+        (timelineBodyHeadings ? " card__text-editor--timeline-body-headings" : "") +
+        (hideEmb ? " card__text-editor--hide-embedded-media" : "")
       }
     >
       {canEdit && showToolbar ? <NoteEditorToolbar editor={editor} /> : null}

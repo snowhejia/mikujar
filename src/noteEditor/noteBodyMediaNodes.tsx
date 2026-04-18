@@ -9,19 +9,51 @@ import {
   MediaThumbLoadingOverlay,
   useMediaDisplaySrc,
 } from "../mediaDisplay";
+import { useAppChrome } from "../i18n/useAppChrome";
+
+function NoteInlineMediaPendingBlock({
+  title,
+  hint,
+}: {
+  title?: string | null;
+  hint: string;
+}) {
+  const name = title?.trim();
+  return (
+    <div className="note-inline-media-pending" aria-busy="true">
+      <div className="note-inline-media-pending__visual">
+        <MediaThumbLoadingOverlay />
+      </div>
+      <div className="note-inline-media-pending__meta">
+        {name ? (
+          <div className="note-inline-media-pending__title" title={name}>
+            {name}
+          </div>
+        ) : null}
+        <div className="note-inline-media-pending__hint">{hint}</div>
+      </div>
+    </div>
+  );
+}
 
 function NoteBodyImageView(props: NodeViewProps) {
+  const ui = useAppChrome();
   const raw = String(props.node.attrs.src ?? "").trim();
   const displaySrc = useMediaDisplaySrc(raw || undefined);
   const alt = String(props.node.attrs.alt ?? "");
   const title = props.node.attrs.title as string | null | undefined;
+  const pendingLabel =
+    (title ?? alt).trim() || ui.uiNoteInlineMediaLoadingImage;
   return (
     <NodeViewWrapper as="span" className="note-body-img-nodeview">
       {!displaySrc ? (
         <span
           className="note-inline-img note-inline-img--pending"
           aria-busy="true"
-        />
+          title={pendingLabel}
+        >
+          <span className="note-inline-img-pending__label">{pendingLabel}</span>
+        </span>
       ) : (
         <img
           src={displaySrc}
@@ -54,15 +86,17 @@ export const NoteBodyImage = Image.extend({
 });
 
 function NoteBodyVideoView(props: NodeViewProps) {
+  const ui = useAppChrome();
   const raw = String(props.node.attrs.src ?? "").trim();
   const src = useMediaDisplaySrc(raw || undefined);
   const title = props.node.attrs.title as string | null | undefined;
   return (
     <NodeViewWrapper className="note-inline-video-wrap">
       {!src ? (
-        <div className="note-inline-video-pending" aria-busy="true">
-          <MediaThumbLoadingOverlay />
-        </div>
+        <NoteInlineMediaPendingBlock
+          title={title}
+          hint={ui.uiNoteInlineMediaLoadingVideo}
+        />
       ) : (
         <video
           src={src}
@@ -149,15 +183,17 @@ export const NoteBodyVideo = Node.create<NoteBodyVideoOptions>({
 });
 
 function NoteBodyAudioView(props: NodeViewProps) {
+  const ui = useAppChrome();
   const raw = String(props.node.attrs.src ?? "").trim();
   const src = useMediaDisplaySrc(raw || undefined);
   const title = props.node.attrs.title as string | null | undefined;
   return (
     <NodeViewWrapper className="note-inline-audio-wrap">
       {!src ? (
-        <div className="note-inline-audio-pending" aria-busy="true">
-          <MediaThumbLoadingOverlay />
-        </div>
+        <NoteInlineMediaPendingBlock
+          title={title}
+          hint={ui.uiNoteInlineMediaLoadingAudio}
+        />
       ) : (
         <audio
           src={src}

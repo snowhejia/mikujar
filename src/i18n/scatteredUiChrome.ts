@@ -5,6 +5,12 @@ export type ScatteredUiChrome = {
   uiClose: string;
   uiBack: string;
   uiNoteBodyAria: string;
+  /** 正文内联图片解析地址前 */
+  uiNoteInlineMediaLoadingImage: string;
+  /** 正文内联视频解析地址前 */
+  uiNoteInlineMediaLoadingVideo: string;
+  /** 正文内联音频解析地址前 */
+  uiNoteInlineMediaLoadingAudio: string;
   uiMoreActions: string;
   /** 时间线卡片角标：打开中等高度「卡片预览」覆盖层 */
   uiViewDetail: string;
@@ -144,6 +150,9 @@ const zh: ScatteredUiChrome = {
   uiClose: "关闭",
   uiBack: "返回",
   uiNoteBodyAria: "笔记正文",
+  uiNoteInlineMediaLoadingImage: "正在加载图片…",
+  uiNoteInlineMediaLoadingVideo: "正在加载视频…",
+  uiNoteInlineMediaLoadingAudio: "正在加载音频…",
   uiMoreActions: "更多操作",
   uiViewDetail: "卡片预览",
   uiCardNoteDetailFullPage: "笔记详情",
@@ -285,6 +294,9 @@ const en: ScatteredUiChrome = {
   uiClose: "Close",
   uiBack: "Back",
   uiNoteBodyAria: "Note body",
+  uiNoteInlineMediaLoadingImage: "Loading image…",
+  uiNoteInlineMediaLoadingVideo: "Loading video…",
+  uiNoteInlineMediaLoadingAudio: "Loading audio…",
   uiMoreActions: "More actions",
   uiViewDetail: "Card preview",
   uiCardNoteDetailFullPage: "Note detail",

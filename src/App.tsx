@@ -22,6 +22,10 @@ import {
 } from "./api/collections";
 import { noteBodyToHtml } from "./noteEditor/plainHtml";
 import {
+  collectMediaUrlsFromItems,
+  stripMediaRefsFromNoteHtml,
+} from "./noteEditor/stripMediaRefsFromNoteHtml";
+import {
   clearMeTrash,
   deleteMeTrashEntry,
   fetchMeAttachmentsCount,
@@ -2713,19 +2717,26 @@ export default function App() {
 
   const clearCardMedia = useCallback(
     (colId: string, cardId: string) => {
+      let remotePatch: { media: []; text?: string } = { media: [] };
       setCollections((prev) => {
         const hit = findCardInTree(prev, colId, cardId);
         for (const m of hit?.card?.media ?? []) {
           void deleteLocalMediaFile(m.url);
         }
         return patchNoteCardByIdInTree(prev, cardId, (cd) => {
+          const urls = collectMediaUrlsFromItems(cd.media ?? []);
+          const stripped = stripMediaRefsFromNoteHtml(cd.text, urls);
           const { media: _m, ...rest } = cd;
+          if (stripped !== (cd.text ?? "")) {
+            remotePatch = { media: [], text: stripped };
+            return { ...rest, text: stripped };
+          }
           return rest;
         });
       });
       setCardMenuId(null);
       if (dataMode !== "local") {
-        void updateCardApi(cardId, { media: [] }).then((ok) => {
+        void updateCardApi(cardId, remotePatch).then((ok) => {
           if (ok) notifyRemoteAttachmentsChanged();
         });
       }
@@ -2737,6 +2748,9 @@ export default function App() {
     (_colId: string, cardId: string, item: NoteMediaItem) => {
       void deleteLocalMediaFile(item.url);
       let nextMedia: NoteMediaItem[] | undefined;
+      let remotePatch:
+        | { media: NoteMediaItem[]; text?: string }
+        | undefined;
       flushSync(() => {
         setCollections((prev) =>
           patchNoteCardByIdInTree(prev, cardId, (card) => {
@@ -2753,17 +2767,27 @@ export default function App() {
             const next = [...raw];
             next.splice(idx, 1);
             nextMedia = next;
+            const stripUrls = collectMediaUrlsFromItems([item]);
+            const stripped = stripMediaRefsFromNoteHtml(card.text, stripUrls);
+            const textChanged = stripped !== (card.text ?? "");
+            if (textChanged) {
+              remotePatch = { media: next, text: stripped };
+            } else {
+              remotePatch = { media: next };
+            }
             if (next.length === 0) {
               const { media: _m, ...rest } = card;
-              return rest;
+              return textChanged ? { ...rest, text: stripped } : rest;
             }
-            return { ...card, media: next };
+            return textChanged
+              ? { ...card, media: next, text: stripped }
+              : { ...card, media: next };
           })
         );
       });
       // 未找到对应项时不要 PATCH media: []，否则会误清空整张卡附件
-      if (dataMode !== "local" && nextMedia !== undefined) {
-        void updateCardApi(cardId, { media: nextMedia }).then((ok) => {
+      if (dataMode !== "local" && nextMedia !== undefined && remotePatch) {
+        void updateCardApi(cardId, remotePatch).then((ok) => {
           if (ok) notifyRemoteAttachmentsChanged();
         });
       }

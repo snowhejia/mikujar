@@ -749,7 +749,7 @@ function ConnectionsBoardCard({
               </button>
             </div>
           </div>
-          <div className="card__text-editor card__text-editor--readonly">
+          <div className="card__text-editor card__text-editor--readonly card__text-editor--hide-embedded-media">
             <div
               id={`conn-card-text-${card.id}`}
               className="card__text card__text--readonly ProseMirror"

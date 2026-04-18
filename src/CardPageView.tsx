@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
 import { formatTagsForInput, parseTagsFromInput } from "./CardTagsRow";
 import { formatCardTimeLabel } from "./cardTimeLabel";
@@ -17,7 +25,24 @@ import type {
 } from "./types";
 import type { ReminderPickerTarget } from "./ReminderPickerModal";
 import { useAppUiLang } from "./appUiLang";
-import { useMediaDisplaySrc } from "./mediaDisplay";
+import { useAppChrome } from "./i18n/useAppChrome";
+import {
+  copyImageToClipboard,
+  downloadMediaItem,
+  fileLabelFromUrl,
+  noteMediaItemsEqual,
+} from "./attachmentMediaMenu";
+import {
+  MediaLightboxAudio,
+  MediaLightboxCover,
+  MediaLightboxImage,
+  MediaLightboxPdf,
+  MediaLightboxVideo,
+  MediaOpenLink,
+  useMediaDisplaySrc,
+} from "./mediaDisplay";
+import { isPdfAttachment } from "./noteMediaPdf";
+import { parseHeadingsFromStoredNote } from "./noteEditor/plainHtml";
 
 const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
   text: "文字",
@@ -72,6 +97,33 @@ function CardPageAttachmentImage({
   );
 }
 
+function editorHeadingElements(root: Element | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll("h1, h2, h3, h4, h5, h6")
+  ).filter((el) => (el as HTMLElement).innerText?.trim()) as HTMLElement[];
+}
+
+function FileDocIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.65"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="14" y2="17" />
+    </svg>
+  );
+}
+
 export interface CardPageViewProps {
   card: NoteCard;
   colId: string;
@@ -93,6 +145,12 @@ export interface CardPageViewProps {
     files: File[]
   ) => void | Promise<void>;
   removeCardMediaItem: (
+    colId: string,
+    cardId: string,
+    item: NoteMediaItem
+  ) => void;
+  /** 将附件移到 media 首位作为轮播封面；与 CardGallery 右键「设为封面」一致 */
+  setCardMediaCoverItem?: (
     colId: string,
     cardId: string,
     item: NoteMediaItem
@@ -307,11 +365,23 @@ export function CardPageView({
   setRelatedPanel,
   uploadFilesToCard,
   removeCardMediaItem,
+  setCardMediaCoverItem,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
+  const ui = useAppChrome();
+  const [lightbox, setLightbox] = useState<{ index: number } | null>(null);
+  const [attachMenu, setAttachMenu] = useState<{
+    x: number;
+    y: number;
+    item: NoteMediaItem;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorAreaRef = useRef<HTMLDivElement>(null);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const typePickerRef = useRef<HTMLDivElement>(null);
+  const [propsPanelOpen, setPropsPanelOpen] = useState(true);
+  const [tocPanelOpen, setTocPanelOpen] = useState(true);
+  const [tocActiveIndex, setTocActiveIndex] = useState(0);
 
   const PROPS_WIDTH_KEY = "mikujar-card-page-props-width";
   const [propsWidth, setPropsWidth] = useState(() => {
@@ -353,9 +423,170 @@ export function CardPageView({
   const relatedCount = (card.relatedRefs ?? []).length;
   const hasReminder = Boolean(card.reminderOn);
 
+  const tocHeadings = useMemo(
+    () => parseHeadingsFromStoredNote(card.text),
+    [card.text]
+  );
+
+  const tocActiveClamped =
+    tocHeadings.length === 0
+      ? 0
+      : Math.min(tocActiveIndex, tocHeadings.length - 1);
+
+  const scrollToHeading = useCallback((index: number) => {
+    const root = editorAreaRef.current?.querySelector(".ProseMirror");
+    if (!root) return;
+    const hs = editorHeadingElements(root);
+    if (index < 0 || index >= hs.length) return;
+    hs[index]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    setTocActiveIndex(
+      tocHeadings.length ? Math.min(index, tocHeadings.length - 1) : 0
+    );
+  }, [tocHeadings]);
+
+  useEffect(() => {
+    if (!tocPanelOpen || tocHeadings.length === 0) return;
+
+    let cancelled = false;
+    let pollRaf = 0;
+    let scrollRaf = 0;
+    let pmEl: HTMLElement | null = null;
+
+    const syncActive = () => {
+      const pm = editorAreaRef.current?.querySelector(
+        ".ProseMirror"
+      ) as HTMLElement | null;
+      if (!pm) return;
+      const hs = editorHeadingElements(pm);
+      if (hs.length === 0) return;
+      const rootRect = pm.getBoundingClientRect();
+      const probe =
+        rootRect.top + Math.min(96, Math.max(28, rootRect.height * 0.14));
+      let active = 0;
+      for (let i = 0; i < hs.length; i++) {
+        if (hs[i].getBoundingClientRect().top <= probe) active = i;
+        else break;
+      }
+      setTocActiveIndex((prev) => {
+        const max = tocHeadings.length - 1;
+        const next = Math.min(active, max);
+        return prev === next ? prev : next;
+      });
+    };
+
+    const onScroll = () => {
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        syncActive();
+      });
+    };
+
+    const poll = () => {
+      if (cancelled) return;
+      pmEl = editorAreaRef.current?.querySelector(
+        ".ProseMirror"
+      ) as HTMLElement | null;
+      if (!pmEl) {
+        pollRaf = requestAnimationFrame(poll);
+        return;
+      }
+      syncActive();
+      pmEl.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll);
+    };
+
+    pollRaf = requestAnimationFrame(poll);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(pollRaf);
+      cancelAnimationFrame(scrollRaf);
+      pmEl?.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [tocPanelOpen, tocHeadings, card.id]);
+
+  const n = media.length;
+  const mediaKey = media
+    .map((x) => `${x.kind}:${x.url}:${x.name ?? ""}`)
+    .join("|");
+
+  const goLightbox = useCallback(
+    (delta: number) => {
+      if (n <= 1) return;
+      setLightbox((lb) => {
+        if (!lb) return lb;
+        return { index: (lb.index + delta + n * 100) % n };
+      });
+    },
+    [n]
+  );
+
+  const closeLightbox = useCallback(() => {
+    setLightbox(null);
+  }, []);
+
+  const openAttachmentMenu = useCallback(
+    (e: ReactMouseEvent<HTMLElement>, item: NoteMediaItem) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setAttachMenu({ x: e.clientX, y: e.clientY, item });
+    },
+    []
+  );
+
+  useEffect(() => {
+    setLightbox((lb) => {
+      if (!lb) return lb;
+      if (n === 0) return null;
+      if (lb.index >= n) return { index: n - 1 };
+      if (lb.index < 0) return { index: 0 };
+      return lb;
+    });
+  }, [n, mediaKey]);
+
+  useEffect(() => {
+    if (!lightbox && !attachMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (attachMenu) {
+          e.preventDefault();
+          setAttachMenu(null);
+          return;
+        }
+        if (lightbox) {
+          e.preventDefault();
+          closeLightbox();
+        }
+        return;
+      }
+      if (lightbox && n > 1) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          goLightbox(-1);
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          goLightbox(1);
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightbox, attachMenu, n, closeLightbox, goLightbox]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [lightbox]);
+
   useEffect(() => {
     if (!showTypePicker) return;
-    function onDown(e: MouseEvent) {
+    function onDown(e: PointerEvent) {
       if (
         typePickerRef.current &&
         !typePickerRef.current.contains(e.target as Node)
@@ -366,6 +597,22 @@ export function CardPageView({
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
   }, [showTypePicker]);
+
+  useEffect(() => {
+    if (!attachMenu) return;
+    const onDown = (e: PointerEvent) => {
+      const el = document.querySelector("[data-attachment-ctx-menu]");
+      if (el?.contains(e.target as Node)) return;
+      setAttachMenu(null);
+    };
+    const t = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onDown, true);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [attachMenu]);
 
   function updateCustomProps(next: CardProperty[]) {
     setCardCustomProps(card.id, next);
@@ -381,6 +628,265 @@ export function CardPageView({
     updateCustomProps([...customProps, newProp]);
     setShowTypePicker(false);
   }
+
+  const lbIdx =
+    lightbox && n > 0 ? ((lightbox.index % n) + n) % n : 0;
+  const lbItem =
+    lightbox && n > 0 ? (media[lbIdx] ?? null) : null;
+
+  const labelFromUrl = (url: string) =>
+    fileLabelFromUrl(url, ui.uiFileFallback);
+
+  function previewTitle(kind: NoteMediaItem["kind"]): string {
+    const thumbCtx = Boolean(
+      canEdit || (Boolean(setCardMediaCoverItem) && n > 1)
+    );
+    if (thumbCtx) {
+      if (kind === "image") return ui.uiGalleryThumbTitleImageRich;
+      if (kind === "file") return ui.uiGalleryThumbTitleFileRich;
+      if (kind === "audio") return ui.uiGalleryThumbTitleAudioRich;
+      return ui.uiGalleryThumbTitleVideoRich;
+    }
+    if (kind === "image") return ui.uiGalleryThumbTitleImagePlain;
+    if (kind === "file") return ui.uiGalleryThumbTitleFilePlain;
+    if (kind === "audio") return ui.uiGalleryThumbTitleAudioPlain;
+    return ui.uiGalleryThumbTitleVideoPlain;
+  }
+
+  const lightboxPortal =
+    lightbox &&
+    lbItem &&
+    createPortal(
+      <div
+        className="image-lightbox"
+        role="dialog"
+        aria-modal="true"
+        aria-label={
+          n > 1 ? ui.uiLightboxAria(lbIdx + 1, n) : ui.uiLightboxPreview
+        }
+        onClick={closeLightbox}
+      >
+        <button
+          type="button"
+          className="image-lightbox__close"
+          aria-label={ui.uiClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeLightbox();
+          }}
+        >
+          ×
+        </button>
+        <div
+          className="image-lightbox__swipe-area"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {n > 1 ? (
+            <span className="image-lightbox__pager" aria-live="polite">
+              {lbIdx + 1} / {n}
+            </span>
+          ) : null}
+          {n > 1 ? (
+            <>
+              <button
+                type="button"
+                className="image-lightbox__arrow image-lightbox__arrow--prev"
+                aria-label={ui.uiPrevItem}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goLightbox(-1);
+                }}
+              />
+              <button
+                type="button"
+                className="image-lightbox__arrow image-lightbox__arrow--next"
+                aria-label={ui.uiNextItem}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goLightbox(1);
+                }}
+              />
+            </>
+          ) : null}
+          {lbItem.kind === "image" ? (
+            <div
+              className="image-lightbox__media-stack"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                if (lbItem) openAttachmentMenu(e, lbItem);
+              }}
+            >
+              <MediaLightboxImage
+                url={lbItem.url}
+                className="image-lightbox__img"
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+            </div>
+          ) : lbItem.kind === "video" ? (
+            <div
+              className="image-lightbox__media-stack"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                if (lbItem) openAttachmentMenu(e, lbItem);
+              }}
+            >
+              <MediaLightboxVideo
+                url={lbItem.url}
+                className="image-lightbox__img image-lightbox__video"
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+            </div>
+          ) : lbItem.kind === "audio" ? (
+            <div
+              className="image-lightbox__audio-wrap"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                if (lbItem) openAttachmentMenu(e, lbItem);
+              }}
+            >
+              {lbItem.coverUrl ? (
+                <MediaLightboxCover
+                  url={lbItem.coverUrl}
+                  className="image-lightbox__audio-cover"
+                />
+              ) : null}
+              <p className="image-lightbox__audio-title">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaLightboxAudio
+                url={lbItem.url}
+                className="image-lightbox__audio"
+              />
+            </div>
+          ) : lbItem.kind === "file" && isPdfAttachment(lbItem) ? (
+            <div
+              className="image-lightbox__media-stack image-lightbox__media-stack--pdf"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                if (lbItem) openAttachmentMenu(e, lbItem);
+              }}
+            >
+              <MediaLightboxPdf
+                url={lbItem.url}
+                className="image-lightbox__pdf"
+                title={lbItem.name ?? labelFromUrl(lbItem.url)}
+              />
+              <p className="image-lightbox__media-caption">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaOpenLink
+                url={lbItem.url}
+                className="image-lightbox__file-link image-lightbox__pdf-open-tab"
+              >
+                {ui.uiOpenInNewWindow}
+              </MediaOpenLink>
+            </div>
+          ) : (
+            <div
+              className="image-lightbox__file"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                if (lbItem) openAttachmentMenu(e, lbItem);
+              }}
+            >
+              <FileDocIcon className="image-lightbox__file-icon" />
+              <p className="image-lightbox__file-name">
+                {lbItem.name ?? labelFromUrl(lbItem.url)}
+              </p>
+              <MediaOpenLink
+                url={lbItem.url}
+                className="image-lightbox__file-link"
+              >
+                {ui.uiOpenInNewWindow}
+              </MediaOpenLink>
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    );
+
+  const attachMenuPortal =
+    attachMenu &&
+    createPortal(
+      <div
+        data-attachment-ctx-menu
+        className="attachment-ctx-menu"
+        style={{
+          position: "fixed",
+          left: Math.min(
+            attachMenu.x,
+            typeof window !== "undefined"
+              ? window.innerWidth - 180
+              : attachMenu.x
+          ),
+          top: attachMenu.y,
+          zIndex: 10001,
+        }}
+        role="menu"
+      >
+        {setCardMediaCoverItem &&
+        n > 1 &&
+        media.findIndex((m) => noteMediaItemsEqual(m, attachMenu.item)) >
+          0 ? (
+          <button
+            type="button"
+            className="attachment-ctx-menu__item"
+            role="menuitem"
+            onClick={() => {
+              setCardMediaCoverItem?.(colId, card.id, attachMenu.item);
+              setAttachMenu(null);
+              setLightbox(null);
+            }}
+          >
+            {ui.uiSetCover}
+          </button>
+        ) : null}
+        {attachMenu.item.kind === "image" ? (
+          <button
+            type="button"
+            className="attachment-ctx-menu__item"
+            role="menuitem"
+            onClick={() => {
+              void copyImageToClipboard(attachMenu.item);
+              setAttachMenu(null);
+            }}
+          >
+            {ui.uiCopyImage}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="attachment-ctx-menu__item"
+          role="menuitem"
+          onClick={() => {
+            void downloadMediaItem(attachMenu.item, ui.uiFileFallback);
+            setAttachMenu(null);
+          }}
+        >
+          {ui.uiDownloadAttachment}
+        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            className="attachment-ctx-menu__item attachment-ctx-menu__item--danger"
+            role="menuitem"
+            onClick={() => {
+              removeCardMediaItem(colId, card.id, attachMenu.item);
+              setAttachMenu(null);
+              setLightbox(null);
+            }}
+          >
+            {ui.uiDeleteAttachment}
+          </button>
+        ) : null}
+      </div>,
+      document.body
+    );
 
   return (
     <div className="card-page">
@@ -414,8 +920,26 @@ export function CardPageView({
 
       <div className="card-page__body">
         <div className="card-page__props" style={{ width: propsWidth, flexBasis: propsWidth }}>
-          <div className="card-page__props-heading">属性</div>
-
+          <div className="sidebar__section-row sidebar__section-row--collapsible card-page__props-sidebar-row">
+            <button
+              type="button"
+              className="sidebar__section-hit"
+              aria-expanded={propsPanelOpen}
+              onClick={() => setPropsPanelOpen((v) => !v)}
+            >
+              <span
+                className={
+                  "sidebar__chevron" + (propsPanelOpen ? " is-expanded" : "")
+                }
+                aria-hidden
+              >
+                <span className="sidebar__chevron-icon">›</span>
+              </span>
+              <span className="sidebar__section">属性</span>
+            </button>
+          </div>
+          {propsPanelOpen ? (
+            <div className="card-page__props-panel-inner">
           {/* 标签 */}
           <div className="card-page__prop-row">
             <span className="card-page__prop-label">标签</span>
@@ -541,18 +1065,27 @@ export function CardPageView({
           <div className="card-page__prop-row card-page__prop-row--attachments">
             <span className="card-page__prop-label">附件</span>
             <div className="card-page__prop-content card-page__prop-content--attachments">
-              {media.map((item) => (
+              {media.map((item, idx) => (
                 <div key={item.url} className="card-page__attachment">
-                  {item.kind === "image" ? (
-                    <CardPageAttachmentImage
-                      item={item}
-                      className="card-page__attachment-thumb"
-                    />
-                  ) : (
-                    <span className="card-page__attachment-name">
-                      {item.name ?? item.url.split("/").pop()}
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className="card-page__attachment-trigger"
+                    title={previewTitle(item.kind)}
+                    aria-label={previewTitle(item.kind)}
+                    onClick={() => setLightbox({ index: idx })}
+                    onContextMenu={(e) => openAttachmentMenu(e, item)}
+                  >
+                    {item.kind === "image" ? (
+                      <CardPageAttachmentImage
+                        item={item}
+                        className="card-page__attachment-thumb"
+                      />
+                    ) : (
+                      <span className="card-page__attachment-name">
+                        {item.name ?? item.url.split("/").pop()}
+                      </span>
+                    )}
+                  </button>
                   {canEdit && (
                     <button
                       type="button"
@@ -694,6 +1227,60 @@ export function CardPageView({
               )}
             </div>
           )}
+            </div>
+          ) : null}
+
+          <div className="sidebar__section-row sidebar__section-row--collapsible card-page__props-sidebar-row card-page__props-sidebar-row--toc">
+            <button
+              type="button"
+              className="sidebar__section-hit"
+              aria-expanded={tocPanelOpen}
+              onClick={() => setTocPanelOpen((v) => !v)}
+            >
+              <span
+                className={
+                  "sidebar__chevron" + (tocPanelOpen ? " is-expanded" : "")
+                }
+                aria-hidden
+              >
+                <span className="sidebar__chevron-icon">›</span>
+              </span>
+              <span className="sidebar__section">目录</span>
+            </button>
+          </div>
+          {tocPanelOpen ? (
+            <nav className="card-page__toc" aria-label="正文目录">
+              {tocHeadings.length === 0 ? (
+                <span className="card-page__toc-empty">无标题</span>
+              ) : (
+                tocHeadings.map((h, i) => (
+                  <button
+                    key={`toc-${i}`}
+                    type="button"
+                    className={
+                      "card-page__toc-item" +
+                      (i === tocActiveClamped
+                        ? " card-page__toc-item--active"
+                        : "")
+                    }
+                    aria-current={
+                      i === tocActiveClamped ? "location" : undefined
+                    }
+                    onClick={() => scrollToHeading(i)}
+                  >
+                    <span
+                      className="card-page__toc-item-text"
+                      style={{
+                        paddingLeft: `${Math.max(0, h.level - 1) * 12}px`,
+                      }}
+                    >
+                      {h.text}
+                    </span>
+                  </button>
+                ))
+              )}
+            </nav>
+          ) : null}
         </div>
 
         <div
@@ -703,7 +1290,7 @@ export function CardPageView({
           onPointerUp={onDividerPointerUp}
         />
 
-        <div className="card-page__editor-area">
+        <div className="card-page__editor-area" ref={editorAreaRef}>
           <NoteCardTiptap
             id={card.id}
             value={card.text}
@@ -713,6 +1300,8 @@ export function CardPageView({
           />
         </div>
       </div>
+      {lightboxPortal}
+      {attachMenuPortal}
     </div>
   );
 }

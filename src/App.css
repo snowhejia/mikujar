@@ -5151,6 +5151,44 @@ div.card__text--readonly:not(.card__text--preview) {
   width: 100%;
 }
 
+/* 有格式工具栏时：工具栏留在编辑区顶部，正文仅在 ProseMirror 内滚动 */
+.card__text-editor:has(> .note-toolbar-wrap) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card__text-editor:has(> .note-toolbar-wrap) > .note-toolbar-wrap {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+/* TipTap：工具栏与 ProseMirror 之间的包装层（非 .ProseMirror 的 div） */
+.card__text-editor:has(> .note-toolbar-wrap) > div:not(.note-toolbar-wrap):not(.ProseMirror) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card__text-editor:has(> .note-toolbar-wrap)
+  > div:not(.note-toolbar-wrap):not(.ProseMirror)
+  .ProseMirror {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 若 ProseMirror 根结点紧挨在工具栏下（无中间包装） */
+.card__text-editor:has(> .note-toolbar-wrap) > .ProseMirror {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .card__text.ProseMirror {
   white-space: normal;
   outline: none;
@@ -8837,6 +8875,14 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   margin-left: auto;
 }
 
+.card-page__loading-body {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
 .card-page__body {
   flex: 1 1 auto;
   display: flex;
@@ -8925,13 +8971,103 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   outline: none;
 }
 
-.card-page__props-heading {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgba(55, 53, 47, 0.4);
-  margin: 0 0 10px;
+/* 左栏折叠标题：与侧栏 .sidebar__section-row + .sidebar__section-hit + .sidebar__chevron 同构，仅收紧垂直留白 */
+.card-page .card-page__props-sidebar-row.sidebar__section-row {
+  padding: 2px 6px 4px 8px;
+}
+
+.card-page .card-page__props-sidebar-row.sidebar__section-row--collapsible {
+  padding-left: 8px;
+}
+
+.card-page .card-page__props-panel-inner + .card-page__props-sidebar-row--toc {
+  margin-top: 8px;
+}
+
+.card-page__props-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-page__toc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 4px;
+  min-height: 0;
+  padding: 4px 8px 10px 14px;
+}
+
+/* 左侧贯穿浅灰引导线（参考文档站侧栏） */
+.card-page__toc::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 6px;
+  width: 1px;
+  background: rgba(55, 53, 47, 0.12);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.card-page__toc-empty {
+  font-size: 0.8125rem;
+  color: rgba(55, 53, 47, 0.32);
+  padding: 4px 4px 10px 2px;
+}
+
+.card-page__toc-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 8px 5px 4px;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.62);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.card-page__toc-item-text {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.card-page__toc-item:hover {
+  background: rgba(55, 53, 47, 0.05);
+  color: var(--mikujar-logo-jar-deep);
+}
+
+/* 当前章节：左侧提示条叠在灰线上（Logo 主题蓝） */
+.card-page__toc-item--active {
+  color: rgba(25, 25, 25, 0.92);
+  font-weight: 500;
+}
+
+.card-page__toc-item--active::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  margin-left: 0;
+  background: var(--mikujar-logo-jar);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.card-page__toc-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mikujar-logo-jar) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .card-page__prop-row {
@@ -9135,7 +9271,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   position: relative;
   display: inline-flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 0;
   background: rgba(55, 53, 47, 0.04);
   border: 1px solid rgba(55, 53, 47, 0.1);
   border-radius: 8px;
@@ -9143,6 +9279,32 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.card-page__attachment-trigger {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  border-radius: 4px;
+}
+
+.card-page__attachment-trigger:hover {
+  opacity: 0.88;
+}
+
+.card-page__attachment-trigger:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
 }
 
 .card-page__attachment-thumb {

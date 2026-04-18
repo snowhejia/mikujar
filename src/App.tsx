@@ -256,6 +256,47 @@ function groupSearchHitsFromFlat(
   return out;
 }
 
+/** 卡片全页：写入 URL 后刷新仍停留在该笔记（与「返回」关闭时清除参数） */
+const CARD_PAGE_Q_COL = "cardCol";
+const CARD_PAGE_Q_NOTE = "cardNote";
+
+function readCardPageParamsFromLocation(): {
+  colId: string;
+  cardId: string;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const colId = p.get(CARD_PAGE_Q_COL)?.trim();
+    const cardId = p.get(CARD_PAGE_Q_NOTE)?.trim();
+    if (!colId || !cardId) return null;
+    return { colId, cardId };
+  } catch {
+    return null;
+  }
+}
+
+function syncCardPageParamsToUrl(
+  next: { colId: string; cardId: string } | null
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (next) {
+      url.searchParams.set(CARD_PAGE_Q_COL, next.colId);
+      url.searchParams.set(CARD_PAGE_Q_NOTE, next.cardId);
+    } else {
+      url.searchParams.delete(CARD_PAGE_Q_COL);
+      url.searchParams.delete(CARD_PAGE_Q_NOTE);
+    }
+    const q = url.searchParams.toString();
+    const path = `${url.pathname}${q ? `?${q}` : ""}${url.hash}`;
+    window.history.replaceState(window.history.state, "", path);
+  } catch {
+    /* ignore */
+  }
+}
+
 const NoteConnectionsView = lazy(() =>
   import("./appkit/NoteConnectionsView").then((m) => ({
     default: m.NoteConnectionsView,
@@ -420,7 +461,7 @@ export default function App() {
   const [cardPageCard, setCardPageCard] = useState<{
     cardId: string;
     colId: string;
-  } | null>(null);
+  } | null>(() => readCardPageParamsFromLocation());
   const [collectionCtxMenu, setCollectionCtxMenu] = useState<{
     x: number;
     y: number;
@@ -3840,8 +3881,22 @@ export default function App() {
   }, [cardPageCard, collections]);
 
   useEffect(() => {
-    if (cardPageCard && !cardPageCardLive) setCardPageCard(null);
-  }, [cardPageCard, cardPageCardLive]);
+    syncCardPageParamsToUrl(cardPageCard);
+  }, [cardPageCard]);
+
+  useEffect(() => {
+    if (!cardPageCard || cardPageCardLive) return;
+    if (!authReady) return;
+    /* 云端首包未到时 card 尚不在树里，勿误判为已删 */
+    if (dataMode === "remote" && !remoteLoaded) return;
+    setCardPageCard(null);
+  }, [
+    cardPageCard,
+    cardPageCardLive,
+    authReady,
+    dataMode,
+    remoteLoaded,
+  ]);
 
   const timelineEmpty = (active?.cards.length ?? 0) === 0;
   const listEmpty = pinned.length === 0 && rest.length === 0;
@@ -4772,14 +4827,14 @@ export default function App() {
           "main" +
           (connectionsViewActive ? " main--connections-board" : "") +
           (remindersViewActive ? " main--reminders" : "") +
-          (cardPageCardLive ? " main--card-page" : "")
+          (cardPageCard ? " main--card-page" : "")
         }
         onClick={onMobileMainSurfaceTapToTop}
         onTouchStart={onMobileMainTouchStart}
         onTouchEnd={onMobileMainTouchEnd}
         onTouchCancel={onMobileMainTouchCancel}
       >
-        <header ref={mainHeaderRef} className="main__header" id="app-main-header" hidden={!!cardPageCardLive}>
+        <header ref={mainHeaderRef} className="main__header" id="app-main-header" hidden={!!cardPageCard}>
           <div
             className={
               "main__header-row" +
@@ -5236,15 +5291,51 @@ export default function App() {
               setRelatedPanel={setRelatedPanel}
               uploadFilesToCard={uploadFilesToCard}
               removeCardMediaItem={removeCardMediaItem}
+              setCardMediaCoverItem={setCardMediaCoverItem}
             />
           </Suspense>
+        ) : cardPageCard ? (
+          <div
+            className="card-page card-page--loading"
+            role="status"
+            aria-busy="true"
+          >
+            <div className="card-page__header">
+              <button
+                type="button"
+                className="card-page__back"
+                onClick={() => setCardPageCard(null)}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M10 3L5 8l5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                返回
+              </button>
+              <span className="card-page__time" aria-hidden="true" />
+            </div>
+            <div className="card-page__loading-body">
+              <span className="app-boot-spinner" aria-hidden="true" />
+            </div>
+          </div>
         ) : null}
 
         <div
           ref={timelineRef}
           className="timeline"
           role="feed"
-          hidden={!!cardPageCardLive}
+          hidden={!!cardPageCard}
           aria-label={
             searchActive
               ? c.resultsTitle

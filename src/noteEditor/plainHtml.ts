@@ -13,6 +13,29 @@ export function noteBodyToHtml(stored: string | undefined): string {
 }
 
 /** 搜索、摘要、关联推荐等：从 HTML 或纯文本得到可匹配的纯文本 */
+/** 从存储的正文 HTML 中按文档顺序提取标题（供卡片全页目录等） */
+export function parseHeadingsFromStoredNote(
+  stored: string | undefined
+): { level: number; text: string }[] {
+  const html = noteBodyToHtml(stored);
+  if (typeof document === "undefined") return [];
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const out: { level: number; text: string }[] = [];
+    doc.body.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
+      const tag = el.tagName.toLowerCase();
+      const n = Number(tag.slice(1));
+      const level =
+        Number.isFinite(n) && n >= 1 && n <= 6 ? n : 1;
+      const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (text) out.push({ level, text });
+    });
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export function htmlToPlainText(html: string | undefined): string {
   const t = html ?? "";
   if (!t.includes("<")) return t;

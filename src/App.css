@@ -9134,13 +9134,15 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__attachment {
   position: relative;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   background: rgba(55, 53, 47, 0.04);
   border: 1px solid rgba(55, 53, 47, 0.1);
   border-radius: 8px;
-  padding: 4px 8px;
-  max-width: 120px;
+  padding: 4px 14px 4px 8px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .card-page__attachment-thumb {
@@ -9158,12 +9160,14 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 }
 
 .card-page__attachment-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.75rem;
   color: rgba(55, 53, 47, 0.65);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 80px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .card-page__attachment-remove {

@@ -564,7 +564,10 @@ export function CardPageView({
 
   const customProps = card.customProps ?? [];
   const media = (card.media ?? []).filter((m) => m.url?.trim());
-  const colIds = [...collectionIdsContainingCardId(collections, card.id)];
+  /** 侧栏不展示「未归类」；详情里也不出 chip，避免与真实用户合集并列造成困惑 */
+  const colIds = [
+    ...collectionIdsContainingCardId(collections, card.id),
+  ].filter((id) => id !== LOOSE_NOTES_COLLECTION_ID);
   const tagLibrary = useMemo(
     () => collectAllTagsFromCollections(collections),
     [collections]
@@ -1141,11 +1144,9 @@ export function CardPageView({
             <div className="card-page__prop-content card-page__prop-content--row">
               {colIds.map((id) => {
                 const pathLabel = collectionPathLabel(collections, id);
-                const showRemove =
-                  Boolean(canEdit && onRemoveCardFromCollection) &&
-                  !(
-                    id === LOOSE_NOTES_COLLECTION_ID && colIds.length === 1
-                  );
+                const showRemove = Boolean(
+                  canEdit && onRemoveCardFromCollection
+                );
                 return (
                   <span
                     key={id}

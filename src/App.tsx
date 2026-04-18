@@ -38,6 +38,7 @@ import {
   readAttachmentsPreviewLayout,
   writeAttachmentsPreviewLayout,
 } from "./allAttachmentsPreviewLayoutStorage";
+import { clearRemoteAttachmentsListCacheForUser } from "./attachmentsListSessionCache";
 import { useAuth } from "./auth/AuthContext";
 import { useAppUiLang } from "./appUiLang";
 import { useAppChrome } from "./i18n/useAppChrome";
@@ -1625,11 +1626,14 @@ export default function App() {
     useState(0);
   const notifyRemoteAttachmentsChanged = useCallback(() => {
     if (dataMode !== "remote" || !remoteLoaded) return;
+    clearRemoteAttachmentsListCacheForUser(
+      currentUser?.id?.trim() || "anon"
+    );
     void fetchMeAttachmentsCount("all").then((n) => {
       if (n != null) setRemoteAttachmentsTotal(n);
     });
     setAttachmentsRemoteListNonce((x) => x + 1);
-  }, [dataMode, remoteLoaded]);
+  }, [dataMode, remoteLoaded, currentUser?.id]);
 
   const connectionEdges = useMemo(
     () => (connectionsPrimed ? collectConnectionEdges(collections) : []),
@@ -5638,6 +5642,7 @@ export default function App() {
                 entries={allMediaAttachmentEntries}
                 filterKey={attachmentsFilterKey}
                 previewLayout={attachmentsPreviewLayout}
+                remoteListCacheUserKey={currentUser?.id?.trim() || "anon"}
                 remoteListRefreshNonce={attachmentsRemoteListNonce}
                 onOpenCard={(colId, cardId, mediaIndex) => {
                   const hit = findCardInTree(collections, colId, cardId);

@@ -13,6 +13,10 @@ import {
 } from "../noteMediaCategory";
 import { fetchMeAttachmentsPage } from "../api/mePreferences";
 import type { MeAttachmentListItem } from "../api/mePreferences";
+import {
+  readRemoteAttachmentsPageCache,
+  writeRemoteAttachmentsPageCache,
+} from "../attachmentsListSessionCache";
 import { formatByteSize } from "../noteStats";
 import type { NoteMediaItem } from "../types";
 import type { MediaAttachmentListEntry } from "./collectionModel";
@@ -241,6 +245,7 @@ export function AllAttachmentsView({
   entries,
   filterKey,
   previewLayout = "contain",
+  remoteListCacheUserKey = "anon",
   remoteListRefreshNonce = 0,
   onOpenCard,
 }: {
@@ -249,6 +254,8 @@ export function AllAttachmentsView({
   filterKey: AttachmentFilterKey;
   /** 缩略图：原比例完整显示 vs 正方形裁剪填满 */
   previewLayout?: "contain" | "square";
+  /** 云端列表 sessionStorage 缓存分用户键 */
+  remoteListCacheUserKey?: string;
   /** 远程模式下附件变更时递增，用于重新拉取当前页 */
   remoteListRefreshNonce?: number;
   onOpenCard: (colId: string, cardId: string, mediaIndex: number) => void;
@@ -291,27 +298,54 @@ export function AllAttachmentsView({
   useEffect(() => {
     if (dataMode !== "remote") return;
     let cancelled = false;
-    setRemoteLoading(true);
+    const offset = pageIndex * ATTACHMENTS_PAGE_SIZE;
+    const cached = readRemoteAttachmentsPageCache(
+      remoteListCacheUserKey,
+      filterKey,
+      offset
+    );
+    if (cached) {
+      setRemoteRows(cached.items);
+      setRemoteTotal(cached.total);
+      setRemoteLoading(false);
+    } else {
+      setRemoteRows([]);
+      setRemoteLoading(true);
+    }
     void fetchMeAttachmentsPage({
       limit: ATTACHMENTS_PAGE_SIZE,
-      offset: pageIndex * ATTACHMENTS_PAGE_SIZE,
+      offset,
       filterKey,
     }).then((res) => {
       if (cancelled) return;
       if (!res) {
-        setRemoteRows([]);
-        setRemoteTotal(0);
+        if (!cached) {
+          setRemoteRows([]);
+          setRemoteTotal(0);
+        }
         setRemoteLoading(false);
         return;
       }
       setRemoteRows(res.items);
       setRemoteTotal(res.total);
+      writeRemoteAttachmentsPageCache(
+        remoteListCacheUserKey,
+        filterKey,
+        offset,
+        res
+      );
       setRemoteLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [dataMode, filterKey, pageIndex, remoteListRefreshNonce]);
+  }, [
+    dataMode,
+    filterKey,
+    pageIndex,
+    remoteListRefreshNonce,
+    remoteListCacheUserKey,
+  ]);
 
   useEffect(() => {
     if (dataMode !== "remote") return;

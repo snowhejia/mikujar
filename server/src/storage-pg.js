@@ -2326,10 +2326,14 @@ export async function getNotePrefsForOwnerKey(ownerKey) {
   if (!p || typeof p !== "object") return empty;
   const disabled = Array.isArray(p.disabledAutoLinkRuleIds) ? p.disabledAutoLinkRuleIds : [];
   const extra = Array.isArray(p.extraAutoLinkRules) ? p.extraAutoLinkRules : [];
-  return {
+  const out = {
     disabledAutoLinkRuleIds: disabled.filter((x) => typeof x === "string"),
     extraAutoLinkRules: extra.filter((x) => x && typeof x === "object"),
   };
+  if (typeof p.timelineGalleryOnRight === "boolean") {
+    out.timelineGalleryOnRight = p.timelineGalleryOnRight;
+  }
+  return out;
 }
 
 const NOTE_PREFS_MAX_DISABLED = 80;
@@ -2361,7 +2365,11 @@ export function normalizeNotePrefsPayload(body) {
     extraAutoLinkRules.push({ ...r, ruleId });
     if (extraAutoLinkRules.length >= NOTE_PREFS_MAX_EXTRA_RULES) break;
   }
-  return { disabledAutoLinkRuleIds, extraAutoLinkRules };
+  const normalized = { disabledAutoLinkRuleIds, extraAutoLinkRules };
+  if (typeof o.timelineGalleryOnRight === "boolean") {
+    normalized.timelineGalleryOnRight = o.timelineGalleryOnRight;
+  }
+  return normalized;
 }
 
 /**

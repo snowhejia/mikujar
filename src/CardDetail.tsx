@@ -330,7 +330,7 @@ export function CardDetail({
                 (hasGallery ? " card__paper--with-gallery" : "")
               }
             >
-              <div className="card__toolbar">
+              <div className="card__toolbar card__toolbar--person-time-row">
                 <span className="card__time">
                   {formatCardTimeLabel(card, lang)}
                   {reminderBesideTime ? (

@@ -19,6 +19,8 @@ export type TrashNoteCardRowProps = {
   restoreTrashedEntry: (entry: TrashedNoteEntry) => void;
   purgeTrashedEntry: (trashId: string) => void;
   timelineColumnCount: number;
+  /** false 时附件栏在左侧（默认 true） */
+  timelineGalleryOnRight?: boolean;
   /** MasonryShortestColumns 注入，须落到根 li 供量高 */
   "data-masonry-slot"?: number;
 };
@@ -32,6 +34,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
     restoreTrashedEntry,
     purgeTrashedEntry,
     timelineColumnCount,
+    timelineGalleryOnRight = true,
     "data-masonry-slot": dataMasonrySlot,
   } = p;
 
@@ -60,7 +63,11 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
         hasGallery={hasGallery}
         timelineColumnCount={timelineColumnCount}
         className={
-          "card__inner" + (hasGallery ? " card__inner--split" : "")
+          "card__inner" +
+          (hasGallery ? " card__inner--split" : "") +
+          (hasGallery && !timelineGalleryOnRight
+            ? " card__inner--gallery-left"
+            : "")
         }
       >
         <div
@@ -69,7 +76,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
             (hasGallery ? " card__paper--with-gallery" : "")
           }
         >
-          <div className="card__toolbar">
+          <div className="card__toolbar card__toolbar--person-time-row">
             <span className="card__time">
               {formatCardTimeLabel(card, lang)}
               {trashReminderBeside ? (

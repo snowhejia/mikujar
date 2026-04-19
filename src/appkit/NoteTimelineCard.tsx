@@ -129,6 +129,8 @@ export type NoteTimelineCardProps = {
   timelineColumnCount: number;
   /** 笔记设置「折叠」：限制正文显示行数（仅时间线列表，如 3） */
   foldBodyMaxLines?: number;
+  /** false 时附件栏在时间线左侧（默认 true，与历史一致） */
+  timelineGalleryOnRight?: boolean;
   /** MasonryShortestColumns 注入，须落到根 li 供量高 */
   "data-masonry-slot"?: number;
 };
@@ -170,6 +172,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     openCardPage,
     timelineColumnCount,
     foldBodyMaxLines,
+    timelineGalleryOnRight = true,
     "data-masonry-slot": dataMasonrySlot,
   } = p;
 
@@ -210,7 +213,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     cardDropMarker.colId === colId &&
     cardDropMarker.cardId === card.id;
 
-  /** 人物名或剪藏标题（sf-clip-title），与时间线首行样式一致 */
+  /** 人物名或剪藏标题（sf-clip-title）；时间线在上方，本标题在第二行 */
   const entityTimelineTitle = useMemo(() => {
     const kind = card.objectKind ?? "note";
     if (kind !== "person" && !isClipPresetObjectKind(kind)) return "";
@@ -489,7 +492,11 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         hasGallery={hasGallery}
         timelineColumnCount={timelineColumnCount}
         className={
-          "card__inner" + (hasGallery ? " card__inner--split" : "")
+          "card__inner" +
+          (hasGallery ? " card__inner--split" : "") +
+          (hasGallery && !timelineGalleryOnRight
+            ? " card__inner--gallery-left"
+            : "")
         }
       >
         <div
@@ -555,12 +562,32 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             " card__paper--with-move-rail"
           }
         >
+          <div
+            className={
+              "card__toolbar" + " card__toolbar--person-time-row"
+            }
+          >
+            <span className="card__time">
+              {formatCardTimeLabel(card, lang)}
+              {reminderBesideTime ? (
+                <span className="card__time-reminder">
+                  {reminderBesideTime}
+                </span>
+              ) : null}
+              {card.reminderNote ? (
+                <span className="card__time-reminder">
+                  {" · "}
+                  {card.reminderNote}
+                </span>
+              ) : null}
+            </span>
+            {toolbarActionsEl}
+          </div>
           {entityTimelineTitle ? (
             <div className="card__person-timeline-head">
               <div className="card__person-timeline-name">
                 {entityTimelineTitle}
               </div>
-              {toolbarActionsEl}
             </div>
           ) : null}
           <div
@@ -585,28 +612,6 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                   : undefined
               }
             />
-          </div>
-          <div
-            className={
-              "card__toolbar" +
-              (entityTimelineTitle ? " card__toolbar--person-time-row" : "")
-            }
-          >
-            <span className="card__time">
-              {formatCardTimeLabel(card, lang)}
-              {reminderBesideTime ? (
-                <span className="card__time-reminder">
-                  {reminderBesideTime}
-                </span>
-              ) : null}
-              {card.reminderNote ? (
-                <span className="card__time-reminder">
-                  {" · "}
-                  {card.reminderNote}
-                </span>
-              ) : null}
-            </span>
-            {entityTimelineTitle ? null : toolbarActionsEl}
           </div>
         </div>
         {hasGallery ? (

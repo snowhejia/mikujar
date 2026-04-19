@@ -17,9 +17,11 @@ export function loadLocalNotePrefs(): UserNotePrefs {
       ? o.disabledAutoLinkRuleIds.filter((x): x is string => typeof x === "string")
       : [];
     const extra = Array.isArray(o.extraAutoLinkRules) ? o.extraAutoLinkRules : undefined;
+    const tgr = o.timelineGalleryOnRight;
     return {
       disabledAutoLinkRuleIds: dis,
       ...(Array.isArray(extra) ? { extraAutoLinkRules: extra as UserNotePrefs["extraAutoLinkRules"] } : {}),
+      ...(typeof tgr === "boolean" ? { timelineGalleryOnRight: tgr } : {}),
     };
   } catch {
     return emptyPrefs();

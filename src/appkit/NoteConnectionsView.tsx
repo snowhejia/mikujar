@@ -699,7 +699,7 @@ function ConnectionsBoardCard({
             (hasGallery ? " card__paper--with-gallery" : "")
           }
         >
-          <div className="card__toolbar">
+          <div className="card__toolbar card__toolbar--person-time-row">
             <span className="card__time">
               {card.objectKind && card.objectKind !== "note"
                 ? (() => {

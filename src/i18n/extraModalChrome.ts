@@ -64,6 +64,19 @@ export type ExtraModalChrome = {
   noteSettingsFoldOff: string;
   noteSettingsFoldOn: string;
   noteSettingsFoldAria: string;
+  /** 时间线分栏：附件轮播在左或右 */
+  noteSettingsGallerySideLabel: string;
+  noteSettingsGallerySideAria: string;
+  noteSettingsGalleryRight: string;
+  noteSettingsGalleryLeft: string;
+  /** 清除无正文、无附件、无标签互链提醒置顶且自定义属性全空的卡片 */
+  noteSettingsPurgeBlankTitle: string;
+  noteSettingsPurgeBlankHint: string;
+  noteSettingsPurgeBlankBtn: string;
+  noteSettingsPurgeBlankBusy: string;
+  noteSettingsPurgeBlankNone: string;
+  noteSettingsPurgeBlankConfirm: (n: number) => string;
+  noteSettingsPurgeBlankDone: (n: number) => string;
   noteSettingsStorageLabel: string;
   noteSettingsLocal: string;
   noteSettingsCloud: string;
@@ -276,6 +289,19 @@ const zh: ExtraModalChrome = {
   noteSettingsFoldOff: "关闭",
   noteSettingsFoldOn: "开启",
   noteSettingsFoldAria: "时间线笔记正文是否折叠预览",
+  noteSettingsGallerySideLabel: "时间线中的附件栏",
+  noteSettingsGallerySideAria: "有附件的笔记在时间线中附件显示在左侧或右侧",
+  noteSettingsGalleryRight: "右侧",
+  noteSettingsGalleryLeft: "左侧",
+  noteSettingsPurgeBlankTitle: "空白卡片",
+  noteSettingsPurgeBlankHint:
+    "将符合条件的卡片移入回收站：无有效正文、无附件、无标签与互链、无提醒与置顶，且自定义属性均无有效值。",
+  noteSettingsPurgeBlankBtn: "清除空白卡片",
+  noteSettingsPurgeBlankBusy: "正在清除…",
+  noteSettingsPurgeBlankNone: "当前没有符合条件的空白卡片。",
+  noteSettingsPurgeBlankConfirm: (n) =>
+    `确定将 ${n} 张空白卡片移入回收站吗？`,
+  noteSettingsPurgeBlankDone: (n) => `已移入回收站 ${n} 张空白卡片。`,
   noteSettingsStorageLabel: "数据存储位置",
   noteSettingsLocal: "本地（此设备）",
   noteSettingsCloud: "云端",
@@ -491,6 +517,20 @@ const en: ExtraModalChrome = {
   noteSettingsFoldOff: "Off",
   noteSettingsFoldOn: "On",
   noteSettingsFoldAria: "Collapse timeline note body in the list",
+  noteSettingsGallerySideLabel: "Attachments in timeline",
+  noteSettingsGallerySideAria: "Show the attachment carousel on the left or right in timeline cards",
+  noteSettingsGalleryRight: "Right",
+  noteSettingsGalleryLeft: "Left",
+  noteSettingsPurgeBlankTitle: "Blank cards",
+  noteSettingsPurgeBlankHint:
+    "Moves matching cards to trash: no body text, no attachments, no tags or links, no reminders or pin, and no meaningful custom properties.",
+  noteSettingsPurgeBlankBtn: "Remove blank cards",
+  noteSettingsPurgeBlankBusy: "Removing…",
+  noteSettingsPurgeBlankNone: "No blank cards match right now.",
+  noteSettingsPurgeBlankConfirm: (n) =>
+    `Move ${n} blank card${n === 1 ? "" : "s"} to trash?`,
+  noteSettingsPurgeBlankDone: (n) =>
+    `Moved ${n} blank card${n === 1 ? "" : "s"} to trash.`,
   noteSettingsStorageLabel: "Data storage",
   noteSettingsLocal: "On this device",
   noteSettingsCloud: "Cloud",

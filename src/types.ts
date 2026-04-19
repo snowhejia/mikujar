@@ -197,6 +197,10 @@ export type UserNotePrefs = {
   disabledAutoLinkRuleIds: string[];
   /** 高级：追加自定义 AutoLinkRule（与开发者文档中的结构一致） */
   extraAutoLinkRules?: AutoLinkRule[];
+  /**
+   * 时间线左右分栏时附件轮播是否在右侧；缺省或 true 为右侧（历史行为），false 为左侧。
+   */
+  timelineGalleryOnRight?: boolean;
 };
 
 // ─── Collection Card Schema ──────────────────────────────────────────────────

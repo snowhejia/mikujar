@@ -212,6 +212,10 @@ type NoteSettingsModalProps = {
   onCollectionsChange?: (
     ctx?: { enabledCollectionId?: string; presetTypeId?: string }
   ) => void | Promise<void>;
+  /** 一键清除空白卡片（确认与提示由父组件处理） */
+  onPurgeBlankCards?: () => void | Promise<void>;
+  /** 笔记偏好写入本地/云端后通知父组件（如同步时间线附件左右栏） */
+  onNotePrefsApplied?: (prefs: UserNotePrefs) => void;
 };
 
 function PresetTypeCard({
@@ -253,6 +257,8 @@ export function NoteSettingsModal({
   onOpenYuqueImport,
   collections,
   onCollectionsChange,
+  onPurgeBlankCards,
+  onNotePrefsApplied,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   const { lang } = useAppUiLang();
@@ -280,6 +286,7 @@ export function NoteSettingsModal({
   } | null>(null);
   const [clipTaggedMigrateLoading, setClipTaggedMigrateLoading] =
     useState(false);
+  const [purgeBlankBusy, setPurgeBlankBusy] = useState(false);
   const [notePrefs, setNotePrefs] = useState<UserNotePrefs>(() =>
     loadLocalNotePrefs()
   );
@@ -684,13 +691,18 @@ export function NoteSettingsModal({
     saveLocalNotePrefs(next);
     setNotePrefs(next);
     setNotePrefsSyncErr(false);
-    if (dataMode !== "remote") return;
+    if (dataMode !== "remote") {
+      onNotePrefsApplied?.(next);
+      return;
+    }
     const saved = await putMeNotePrefs(next);
     if (saved) {
       setNotePrefs(saved);
       saveLocalNotePrefs(saved);
+      onNotePrefsApplied?.(saved);
     } else {
       setNotePrefsSyncErr(true);
+      onNotePrefsApplied?.(next);
     }
   }
 
@@ -1195,6 +1207,79 @@ export function NoteSettingsModal({
             {c.noteSettingsFoldOn}
           </button>
         </div>
+
+        <p className="note-settings-modal__label">
+          {c.noteSettingsGallerySideLabel}
+        </p>
+        <div
+          className="note-settings-modal__choice-row"
+          role="group"
+          aria-label={c.noteSettingsGallerySideAria}
+        >
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (notePrefs.timelineGalleryOnRight !== false
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={notePrefs.timelineGalleryOnRight !== false}
+            onClick={() =>
+              void persistNotePrefs({
+                ...notePrefs,
+                timelineGalleryOnRight: true,
+              })
+            }
+          >
+            {c.noteSettingsGalleryRight}
+          </button>
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (notePrefs.timelineGalleryOnRight === false
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={notePrefs.timelineGalleryOnRight === false}
+            onClick={() =>
+              void persistNotePrefs({
+                ...notePrefs,
+                timelineGalleryOnRight: false,
+              })
+            }
+          >
+            {c.noteSettingsGalleryLeft}
+          </button>
+        </div>
+
+        {onPurgeBlankCards ? (
+          <>
+            <p className="note-settings-modal__label">
+              {c.noteSettingsPurgeBlankTitle}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {c.noteSettingsPurgeBlankHint}
+            </p>
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn note-settings-modal__purge-blank-btn"
+              disabled={purgeBlankBusy}
+              onClick={() => {
+                if (purgeBlankBusy) return;
+                setPurgeBlankBusy(true);
+                void Promise.resolve(onPurgeBlankCards()).finally(() =>
+                  setPurgeBlankBusy(false)
+                );
+              }}
+            >
+              {purgeBlankBusy
+                ? c.noteSettingsPurgeBlankBusy
+                : c.noteSettingsPurgeBlankBtn}
+            </button>
+          </>
+        ) : null}
 
         <p className="note-settings-modal__label">
           {c.noteSettingsStorageLabel}

@@ -22,6 +22,7 @@ import {
   fetchCollectionsFromApi,
   createFileCardForNoteMediaApi,
   removeCardFromCollectionApi,
+  fetchMeNotePrefs,
 } from "./api/collections";
 import { noteBodyToHtml } from "./noteEditor/plainHtml";
 import {
@@ -129,7 +130,10 @@ import type {
   NoteCard,
   NoteMediaItem,
   TrashedNoteEntry,
+  UserNotePrefs,
 } from "./types";
+import { collectBlankCardsInTree } from "./blankCardUtils";
+import { loadLocalNotePrefs, saveLocalNotePrefs } from "./notePrefsStorage";
 import { migrateCollectionTree } from "./migrateCollections";
 import type { ParsedExportNote } from "./import/parseAppleNotesExport";
 import {
@@ -914,6 +918,9 @@ export default function App() {
     setTimelineFoldBodyThreeLinesState(on);
     saveTimelineFoldBodyThreeLines(on);
   }, []);
+  const [userNotePrefs, setUserNotePrefs] = useState<UserNotePrefs>(() =>
+    loadLocalNotePrefs()
+  );
   const userAccountMenuRef = useRef<HTMLDivElement>(null);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -1494,6 +1501,33 @@ export default function App() {
     favoriteStorageKey,
     trashStorageKey,
   ]);
+
+  useEffect(() => {
+    if (!authReady || !remoteLoaded || dataMode !== "remote") return;
+    if (writeRequiresLogin && !currentUser?.id?.trim() && !getAdminToken()) {
+      return;
+    }
+    let cancelled = false;
+    void fetchMeNotePrefs().then((r) => {
+      if (cancelled || !r) return;
+      saveLocalNotePrefs(r);
+      setUserNotePrefs(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authReady,
+    remoteLoaded,
+    dataMode,
+    writeRequiresLogin,
+    currentUser?.id,
+  ]);
+
+  useEffect(() => {
+    if (userNoteSettingsOpen) return;
+    setUserNotePrefs(loadLocalNotePrefs());
+  }, [userNoteSettingsOpen]);
 
   useEffect(() => {
     if (calendarDay) {
@@ -2989,6 +3023,19 @@ export default function App() {
     },
     [canEdit, collections, trashStorageKey, dataMode, c.errTrashMove]
   );
+
+  const handlePurgeBlankCards = useCallback(async () => {
+    const list = collectBlankCardsInTree(collectionsRef.current);
+    if (list.length === 0) {
+      window.alert(c.noteSettingsPurgeBlankNone);
+      return;
+    }
+    if (!window.confirm(c.noteSettingsPurgeBlankConfirm(list.length))) return;
+    for (const { colId, cardId } of list) {
+      await deleteCard(colId, cardId);
+    }
+    window.alert(c.noteSettingsPurgeBlankDone(list.length));
+  }, [deleteCard, c]);
 
   /** 与笔记详情页标签式「合集」栏相同的入树逻辑 */
   const executeAddCardPlacement = useCallback(
@@ -5032,6 +5079,7 @@ export default function App() {
           setCardPageCard({ colId: cId, cardId });
         }}
         foldBodyMaxLines={timelineFoldBodyThreeLines ? 3 : undefined}
+        timelineGalleryOnRight={userNotePrefs.timelineGalleryOnRight !== false}
         onCreateFileCardFromAttachment={
           dataMode === "remote" &&
           (card.objectKind ?? "note") === "note"
@@ -6951,6 +6999,9 @@ export default function App() {
                     restoreTrashedEntry={restoreTrashedEntry}
                     purgeTrashedEntry={purgeTrashedEntry}
                     timelineColumnCount={timelineColumnCount}
+                    timelineGalleryOnRight={
+                      userNotePrefs.timelineGalleryOnRight !== false
+                    }
                   />
                 ))}
               </MasonryShortestColumns>
@@ -7706,6 +7757,8 @@ export default function App() {
             onOpenYuqueImport={openYuqueImportModal}
             collections={collections}
             onCollectionsChange={onNoteSettingsCollectionsChange}
+            onPurgeBlankCards={handlePurgeBlankCards}
+            onNotePrefsApplied={setUserNotePrefs}
           />
         </Suspense>
       ) : null}

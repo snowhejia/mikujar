@@ -4346,6 +4346,27 @@ textarea.main__hint-editor:focus {
   background: #ffffff;
 }
 
+/* 时间线：附件栏在左（DOM 仍为轨→正文→轮播，用 flex order；手机上下叠沿用 column 顺序） */
+.card__inner--split.card__inner--gallery-left:not(.card__inner--mobile-gallery-stack)
+  > .card__move-rail {
+  order: 0;
+}
+
+.card__inner--split.card__inner--gallery-left:not(.card__inner--mobile-gallery-stack)
+  > .card__gallery {
+  order: 1;
+  border-radius: 0;
+  margin-left: -1px;
+  margin-right: -1px;
+}
+
+.card__inner--split.card__inner--gallery-left:not(.card__inner--mobile-gallery-stack)
+  > .card__paper.card__paper--with-gallery {
+  order: 2;
+  border-radius: 0 12px 12px 0;
+  border-right: none;
+}
+
 /* 上下布局（含桌面长文、回收站无拖条等）：手机壳内 @media 另有同系规则，此处保证非 max-width:900 视口也生效 */
 .card__inner--split.card__inner--mobile-gallery-stack {
   flex-direction: column;
@@ -4423,7 +4444,7 @@ textarea.main__hint-editor:focus {
   border-radius: 0;
 }
 
-/* 时间线底栏（时间 / 操作）：固定一行格高，与背景横线周期严格对齐 */
+/* 时间线顶栏（时间 / 操作）：固定一行格高，与背景横线周期严格对齐 */
 .card__toolbar {
   display: flex;
   align-items: center;
@@ -4579,7 +4600,7 @@ textarea.main__hint-editor:focus {
 .card__paper {
   flex: 1;
   min-width: 0;
-  /* 正文与底栏时间共用横格：上内边距为 0，格线从顶部对齐（不设 overflow:hidden，避免裁切 ⋯ 菜单） */
+  /* 首行为时间与操作栏，正文在其下共用横格：上内边距为 0，格线从顶部对齐（不设 overflow:hidden，避免裁切 ⋯ 菜单） */
   border-radius: 12px;
   padding: 0 18px calc(var(--note-line-height) * 0.5);
   min-height: calc(3 * var(--note-line-height));
@@ -5751,18 +5772,14 @@ div.card__text--readonly:not(.card__text--preview) {
   padding: 0;
 }
 
-/* 人物卡第一行：左侧名称 + 右侧与笔记卡相同的操作按钮（始终贴第一行右端） */
+/* 人物 / 剪藏：第二行为实体名称（首行已为时间与操作栏） */
 .card__person-timeline-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.75rem;
   min-height: var(--note-line-height);
   box-sizing: border-box;
-  flex-shrink: 0;
-}
-
-.card__person-timeline-head .card__toolbar-actions {
   flex-shrink: 0;
 }
 
@@ -5781,7 +5798,7 @@ div.card__text--readonly:not(.card__text--preview) {
   white-space: nowrap;
 }
 
-/* 人物 / 剪藏卡末行：仅时间/提醒，占满一行 */
+/* 时间线首行：时间/提醒占满左侧，右侧为操作（所有卡片共用） */
 .card__toolbar--person-time-row .card__time {
   flex: 1 1 auto;
 }
@@ -8402,6 +8419,15 @@ div.card__text--readonly:not(.card__text--preview) {
 .note-settings-modal__migrate-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.note-settings-modal__purge-blank-btn {
+  border-color: rgba(185, 28, 28, 0.35);
+  color: #991b1b;
+}
+
+.note-settings-modal__purge-blank-btn:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.06);
 }
 
 @media (max-width: 640px) {

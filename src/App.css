@@ -5358,6 +5358,82 @@ div.card__text--readonly:not(.card__text--preview) {
   display: none !important;
 }
 
+/* 笔记设置：时间线正文折叠为约三行（-webkit-line-clamp） */
+.card__text-editor--fold-body-3 .ProseMirror {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  word-break: break-word;
+}
+
+/*
+ * 折叠模式：整条卡片（含图库列）固定等高 = 顶栏 + 约三行正文 + 下内边距；
+ * 与附件数量/类型无关（覆盖图库 min-height）。左右分栏与无图库同一高度。
+ * 手机上下叠放时另加固定图库带高度（否则无法同时容纳纸+图）。
+ */
+.card.card--timeline-fold-body {
+  overflow: hidden;
+}
+
+.card.card--timeline-fold-body > .card__inner:not(.card__inner--split),
+.card.card--timeline-fold-body
+  > .card__inner.card__inner--split:not(.card__inner--mobile-gallery-stack) {
+  height: calc(var(--note-line-height) * 4.5);
+  min-height: calc(var(--note-line-height) * 4.5);
+  max-height: calc(var(--note-line-height) * 4.5);
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.card.card--timeline-fold-body
+  > .card__inner.card__inner--split.card__inner--mobile-gallery-stack {
+  height: calc(var(--note-line-height) * 4.5 + 108px);
+  min-height: calc(var(--note-line-height) * 4.5 + 108px);
+  max-height: calc(var(--note-line-height) * 4.5 + 108px);
+  overflow: hidden;
+}
+
+.card.card--timeline-fold-body .card__paper {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.card.card--timeline-fold-body .card__gallery {
+  min-height: 0 !important;
+  align-self: stretch;
+  max-height: 100%;
+}
+
+.card.card--timeline-fold-body .card__gallery-viewport {
+  min-height: 0 !important;
+  height: 100%;
+  max-height: 100%;
+}
+
+.card.card--timeline-fold-body
+  .card__inner--split.card__inner--mobile-gallery-stack
+  .card__paper {
+  flex: 0 0 auto;
+}
+
+.card.card--timeline-fold-body
+  .card__inner--split.card__inner--mobile-gallery-stack
+  .card__gallery {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.card.card--timeline-fold-body .card__text-dbltap-host {
+  max-height: calc(3 * var(--note-line-height));
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
 /* 段间距会破坏 30px 横线周期，笔记里换行多为单格一行，段与段之间不加额外 margin */
 .card__text.ProseMirror p + p {
   margin-top: 0;
@@ -7288,6 +7364,13 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-bottom: 1.25rem;
 }
 
+.note-settings-modal__fold-hint {
+  margin: -0.2rem 0 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgba(55, 53, 47, 0.52);
+}
+
 .note-settings-modal__label {
   display: block;
   margin: 1.35rem 0 0.55rem;
@@ -9194,6 +9277,8 @@ body.app--card-page-open .app {
   min-height: 0;
   overflow: hidden;
   background: #fff;
+  /* 侧栏与抽屉内属性行共用 */
+  --card-page-prop-value-h: 40px;
 }
 
 /**
@@ -9892,7 +9977,9 @@ body.app--card-page-open .app {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
+  box-sizing: border-box;
+  /* 值区 40px + 上下各 4px，与 .card-page__prop-label min-height 对齐 */
+  min-height: calc(var(--card-page-prop-value-h, 40px) + 8px);
   padding: 4px 0;
   border-radius: 6px;
   transition: background 0.12s;
@@ -9940,8 +10027,9 @@ body.app--card-page-open .app {
 .card-page__tags-panel {
   width: 100%;
   box-sizing: border-box;
-  /* 横向留白交给 .card-page__tags-add-input，避免与输入框 padding 叠成双份偏右 */
-  padding: 6px 0 5px;
+  min-height: var(--card-page-prop-value-h, 40px);
+  /* 纵向与 single-hit 一致，避免「标签」行比提醒/文本属性高一截 */
+  padding: 0;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -9967,7 +10055,130 @@ body.app--card-page-open .app {
 }
 
 .card-page__tags-panel--readonly {
-  padding-bottom: 8px;
+  padding-bottom: 0;
+}
+
+/* 单行「点整块」：提醒 / 相关笔记 / 链接只读，与标签区外框一致、无药丸 */
+.card-page__tags-panel--single-hit {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 0;
+}
+
+.card-page__tags-hit-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 8px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  font-weight: 400;
+  color: rgba(55, 53, 47, 0.85);
+  text-align: left;
+  transition: color 0.12s ease;
+}
+
+.card-page__tags-hit-btn:hover {
+  background: transparent;
+  color: rgba(55, 53, 47, 0.95);
+}
+
+.card-page__tags-hit-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 1px;
+}
+
+.card-page__tags-hit-btn--placeholder {
+  color: rgba(55, 53, 47, 0.35);
+  font-weight: 400;
+}
+
+.card-page__tags-hit-btn--placeholder:hover {
+  color: rgba(55, 53, 47, 0.45);
+}
+
+.card-page__tags-hit-btn--readonly-text {
+  cursor: default;
+  word-break: break-all;
+  white-space: normal;
+  align-items: flex-start;
+}
+
+.card-page__prop-empty--in-tags-panel {
+  display: flex;
+  align-items: center;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.card-page__prop-val-link--tags-panel {
+  display: flex;
+  align-items: center;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 8px 10px;
+  box-sizing: border-box;
+  align-self: stretch;
+  width: 100%;
+}
+
+.card-page__prop-url-edit-row--tags-plain {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: var(--card-page-prop-value-h, 40px);
+}
+
+.card-page__prop-url-edit-row--tags-plain .card-page__tags-add-input--url-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.card-page__prop-url-edit-row--tags-plain .card-page__prop-url-external {
+  background: transparent;
+}
+
+.card-page__prop-url-edit-row--tags-plain .card-page__prop-url-external:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.card-page__prop-checkbox-cell {
+  display: flex;
+  align-items: center;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.card-page__tags-panel--single-hit > .card-page__tags-add-input--prop-field {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--card-page-prop-value-h, 40px);
+}
+
+.card-page__prop-url-edit-row--tags-plain .card-page__tags-add-input--url-field {
+  min-height: var(--card-page-prop-value-h, 40px);
+}
+
+.card-page__tags-add-input--prop-field[type="date"] {
+  min-height: var(--card-page-prop-value-h, 40px);
 }
 
 .card-page__tags-field {
@@ -9981,6 +10192,7 @@ body.app--card-page-open .app {
   align-items: center;
   gap: 4px;
   box-sizing: border-box;
+  min-height: var(--card-page-prop-value-h, 40px);
 }
 
 .card-page__tags-dropdown {
@@ -10039,6 +10251,10 @@ body.app--card-page-open .app {
   line-height: 1.35;
 }
 
+.card-page__tags-dropdown-pill--rect {
+  border-radius: 6px;
+}
+
 .card-page__tags-dropdown-item--create {
   font-size: 0.875rem;
   font-weight: 400;
@@ -10051,6 +10267,7 @@ body.app--card-page-open .app {
   gap: 4px;
   align-items: center;
   box-sizing: border-box;
+  min-height: var(--card-page-prop-value-h, 40px);
 }
 
 .card-page__tags-pill {
@@ -10062,6 +10279,10 @@ body.app--card-page-open .app {
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.35;
+}
+
+.card-page__tags-pill--rect {
+  border-radius: 6px;
 }
 
 .card-page__tags-pill--removable {
@@ -10115,6 +10336,12 @@ body.app--card-page-open .app {
   outline: none;
 }
 
+/* 仅「添加标签…」单行：与提醒 / 单行自定义属性同高 */
+.card-page__tags-inline > .card-page__tags-add-input:only-child {
+  min-height: var(--card-page-prop-value-h, 40px);
+  box-sizing: border-box;
+}
+
 /* 已有药丸时左侧由 gap 负责，勿再叠 10px 左内边距 */
 .card-page__tags-inline > .card-page__tags-add-input:not(:only-child) {
   padding: 6px 10px 6px 4px;
@@ -10131,7 +10358,7 @@ body.app--card-page-open .app {
   align-items: center;
   align-self: center;
   box-sizing: border-box;
-  min-height: 40px;
+  min-height: var(--card-page-prop-value-h, 40px);
   font-size: 0.8125rem;
   line-height: 1.35;
   color: rgba(55, 53, 47, 0.5);
@@ -10141,33 +10368,17 @@ body.app--card-page-open .app {
   text-overflow: ellipsis;
 }
 
-/* 自定义属性名称区域（图标 + 可编辑名称） */
+/* 自定义属性名称区域 */
 
 .card-page__prop-label-wrap {
   flex: 0 0 92px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding-top: 5px;
+  align-self: center;
+  gap: 0;
+  padding-top: 0;
+  min-height: var(--card-page-prop-value-h, 40px);
   min-width: 0;
-}
-
-.card-page__prop-type-icon {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  min-width: 24px;
-  flex: 0 0 24px;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: rgba(55, 53, 47, 0.58);
-  font-family: system-ui, -apple-system, "Segoe UI", ui-sans-serif, sans-serif;
-  text-align: center;
-  -webkit-font-smoothing: antialiased;
 }
 
 .card-page__prop-name-input {
@@ -10212,6 +10423,16 @@ body.app--card-page-open .app {
   color: rgba(55, 53, 47, 0.85);
 }
 
+.card-page__prop-val-text--tags-panel {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 8px 10px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .card-page__prop-empty {
   font-size: 0.875rem;
   color: rgba(55, 53, 47, 0.3);
@@ -10236,14 +10457,6 @@ body.app--card-page-open .app {
 
 .card-page__prop-input:hover:not(:focus) {
   background: rgba(55, 53, 47, 0.04);
-}
-
-.card-page__prop-select-wrap {
-  width: 100%;
-}
-
-.card-page__prop-select-wrap .card-page__prop-input {
-  width: 100%;
 }
 
 .card-page__prop-checkbox {

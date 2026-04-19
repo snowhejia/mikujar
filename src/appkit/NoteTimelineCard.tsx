@@ -1,6 +1,7 @@
 import {
   type Dispatch,
   type DragEvent,
+  type MouseEvent,
   type MutableRefObject,
   type SetStateAction,
   useCallback,
@@ -39,6 +40,16 @@ import {
 function subscribeMobileChromeMedia(cb: () => void) {
   if (typeof window === "undefined") return () => {};
   const mq = window.matchMedia(MOBILE_CHROME_MEDIA);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+/** 窄屏手机合集时间线：正文只读，须进全页编辑（与 App 侧栏断点一致） */
+const PHONE_NARROW_MEDIA = "(max-width: 900px)";
+
+function subscribePhoneNarrowMedia(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const mq = window.matchMedia(PHONE_NARROW_MEDIA);
   mq.addEventListener("change", cb);
   return () => mq.removeEventListener("change", cb);
 }
@@ -107,6 +118,8 @@ export type NoteTimelineCardProps = {
   openCardPage: (colId: string, cardId: string) => void;
   /** 时间线列数（用于大屏触控平板 1 列时附件与正文左右分栏） */
   timelineColumnCount: number;
+  /** 笔记设置「折叠」：限制正文显示行数（仅时间线列表，如 3） */
+  foldBodyMaxLines?: number;
   /** MasonryShortestColumns 注入，须落到根 li 供量高 */
   "data-masonry-slot"?: number;
 };
@@ -145,6 +158,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     openAddToCollectionPicker,
     openCardPage,
     timelineColumnCount,
+    foldBodyMaxLines,
     "data-masonry-slot": dataMasonrySlot,
   } = p;
 
@@ -165,8 +179,23 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     () => matchesMobileChromeMedia(),
     () => false
   );
+  const phoneNarrow = useSyncExternalStore(
+    subscribePhoneNarrowMedia,
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia(PHONE_NARROW_MEDIA).matches,
+    () => false
+  );
+  /** 笔记设置「折叠」开启时：时间线仅预览，须进弹窗或全页编辑 */
+  const foldTimelineReadOnly = foldBodyMaxLines === 3;
+  /** 时间线内是否允许改正文 / 拖笔记 / 改图库（窄屏手机或折叠模式改在详情/全页） */
+  const canEditInTimeline =
+    canEdit && !phoneNarrow && !foldTimelineReadOnly;
+  /** 折叠/只读正文时仍允许：拖入上传、图库右键设封面与删附件（与内联改字分开） */
+  const canDropFilesOnCard = Boolean(canEdit && canAttachMedia);
   const showNoteDetailFullPageInMenu = !mobileChromeUi;
-  const showCardOverflowMenu = showNoteDetailFullPageInMenu || canEdit;
+  const showCardOverflowMenu =
+    showNoteDetailFullPageInMenu || canEditInTimeline;
   const dropEdgeActive =
     cardDropMarker !== null &&
     cardDropMarker.colId === colId &&
@@ -198,6 +227,15 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     [mobileChromeUi, colId, card.id, openCardPage]
   );
 
+  const onFoldReadOnlyTextDoubleClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!foldTimelineReadOnly) return;
+      e.stopPropagation();
+      openCardPage(colId, card.id);
+    },
+    [foldTimelineReadOnly, colId, card.id, openCardPage]
+  );
+
   return (
     <li
       data-masonry-key={noteKey}
@@ -205,7 +243,8 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       className={
         "card" +
         (cardMenuId === card.id ? " is-menu-open" : "") +
-        (cardDragOverId === card.id && canEdit && canAttachMedia
+        (foldBodyMaxLines === 3 ? " card--timeline-fold-body" : "") +
+        (cardDragOverId === card.id && canDropFilesOnCard
           ? " card--file-drag-over"
           : "") +
         (dropEdgeActive
@@ -216,8 +255,8 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         (draggingNoteCardKey === noteKey ? " card--note-dragging" : "")
       }
       onDragOver={(e) => {
-        if (!canEdit) return;
         if (noteCardDragActiveRef.current) {
+          if (!canEditInTimeline) return;
           e.preventDefault();
           e.stopPropagation();
           e.dataTransfer.dropEffect = "move";
@@ -231,27 +270,27 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           });
           return;
         }
-        if (!canAttachMedia) return;
+        if (!canDropFilesOnCard) return;
         if (!dataTransferHasFiles(e.dataTransfer)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
       }}
       onDragEnter={(e) => {
-        if (!canEdit) return;
         if (noteCardDragActiveRef.current) {
+          if (!canEditInTimeline) return;
           e.preventDefault();
           return;
         }
-        if (!canAttachMedia) return;
+        if (!canDropFilesOnCard) return;
         if (!dataTransferHasFiles(e.dataTransfer)) return;
         e.preventDefault();
         setCardDragOverId(card.id);
       }}
       onDragLeave={(e) => {
-        if (!canEdit) return;
         const rel = e.relatedTarget as Node | null;
         if (rel && e.currentTarget.contains(rel)) return;
         if (noteCardDragActiveRef.current) {
+          if (!canEditInTimeline) return;
           setCardDropMarker((m) =>
             m && m.cardId === card.id && m.colId === colId
               ? null
@@ -259,13 +298,13 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           );
           return;
         }
-        if (!canAttachMedia) return;
+        if (!canDropFilesOnCard) return;
         setCardDragOverId((id) => (id === card.id ? null : id));
       }}
       onDrop={(e) => {
-        if (!canEdit) return;
         const from = readNoteCardDragPayload(e);
         if (from) {
+          if (!canEditInTimeline) return;
           e.preventDefault();
           e.stopPropagation();
           setCardDropMarker(null);
@@ -286,7 +325,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               } as const);
           setCollections((prev) => {
             const next = applyNoteCardDrop(prev, from, target);
-            if (dataMode === "remote" && canEdit) {
+            if (dataMode === "remote" && canEditInTimeline) {
               void persistNoteCardDropToRemote(from, next).then((ok) => {
                 if (!ok) {
                   window.alert(c.uiDropIncomplete);
@@ -298,7 +337,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           setDraggingNoteCardKey(null);
           return;
         }
-        if (!canAttachMedia) return;
+        if (!canDropFilesOnCard) return;
         e.preventDefault();
         setCardDragOverId(null);
         const files = filesFromDataTransfer(e.dataTransfer);
@@ -316,21 +355,21 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         <div
           className={
             "card__move-rail" +
-            (canEdit ? "" : " card__move-rail--readonly")
+            (canEditInTimeline ? "" : " card__move-rail--readonly")
           }
-          draggable={canEdit}
+          draggable={canEditInTimeline}
           aria-label={
-            canEdit ? c.uiDragHandleLoggedIn : c.uiDragHandleGuest
+            canEditInTimeline ? c.uiDragHandleLoggedIn : c.uiDragHandleGuest
           }
           title={
-            canEdit ? c.uiDragHintLoggedIn : c.uiDragHintGuest
+            canEditInTimeline ? c.uiDragHintLoggedIn : c.uiDragHintGuest
           }
           onDoubleClick={(e) => {
             e.stopPropagation();
             openCardPage(colId, card.id);
           }}
           onDragStart={
-            canEdit
+            canEditInTimeline
               ? (e: DragEvent<HTMLDivElement>) => {
                   e.stopPropagation();
                   const cardEl = e.currentTarget.closest(
@@ -359,7 +398,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               : undefined
           }
           onDragEnd={
-            canEdit
+            canEditInTimeline
               ? () => {
                   noteCardDragActiveRef.current = false;
                   setDraggingNoteCardKey(null);
@@ -454,7 +493,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                       {c.uiCardNoteDetailFullPage}
                     </button>
                     ) : null}
-                    {canEdit ? (
+                    {canEditInTimeline ? (
                       <button
                         type="button"
                         className="card__menu-item"
@@ -466,7 +505,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         {c.cardMenuAddToCollection}
                       </button>
                     ) : null}
-                    {canEdit && canAttachMedia ? (
+                    {canEditInTimeline && canAttachMedia ? (
                       <button
                         type="button"
                         className="card__menu-item"
@@ -481,7 +520,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                           : c.uiAddAttachment}
                       </button>
                     ) : null}
-                    {canEdit && hasGallery ? (
+                    {canEditInTimeline && hasGallery ? (
                       <button
                         type="button"
                         className="card__menu-item"
@@ -493,7 +532,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         {c.uiClearAttachments}
                       </button>
                     ) : null}
-                    {canEdit ? (
+                    {canEditInTimeline ? (
                       <button
                         type="button"
                         className="card__menu-item"
@@ -510,7 +549,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         {c.uiReminderEllipsis}
                       </button>
                     ) : null}
-                    {canEdit ? (
+                    {canEditInTimeline ? (
                       <button
                         type="button"
                         className="card__menu-item"
@@ -523,7 +562,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                         {card.pinned ? c.uiUnpin : c.uiPin}
                       </button>
                     ) : null}
-                    {canEdit ? (
+                    {canEditInTimeline ? (
                       <button
                         type="button"
                         className="card__menu-item card__menu-item--danger"
@@ -544,15 +583,19 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           <div
             className="card__text-dbltap-host"
             onTouchEnd={onCardTextTouchEnd}
+            onDoubleClick={
+              foldTimelineReadOnly ? onFoldReadOnlyTextDoubleClick : undefined
+            }
           >
             <NoteCardTiptap
               id={`card-text-${card.id}`}
               value={card.text}
-              canEdit={canEdit}
+              canEdit={canEditInTimeline}
               timelineBodyHeadings
+              foldBodyMaxLines={foldBodyMaxLines}
               onChange={(next) => setCardText(colId, card.id, next)}
               onPasteFiles={
-                canEdit && canAttachMedia
+                canEditInTimeline && canAttachMedia
                   ? (files) => {
                       void uploadFilesToCard(colId, card.id, files);
                     }
@@ -565,13 +608,13 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           <CardGallery
             items={media}
             onRemoveItem={
-              canEdit
+              canDropFilesOnCard
                 ? (item) =>
                     removeCardMediaItem(colId, card.id, item)
                 : undefined
             }
             onSetCoverItem={
-              canEdit
+              canDropFilesOnCard
                 ? (item) =>
                     setCardMediaCoverItem(colId, card.id, item)
                 : undefined

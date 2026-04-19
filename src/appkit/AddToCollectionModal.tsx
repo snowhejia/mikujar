@@ -2,13 +2,19 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAppChrome } from "../i18n/useAppChrome";
 import type { Collection } from "../types";
-import { walkCollectionsWithPath } from "./collectionModel";
+import {
+  LOOSE_NOTES_COLLECTION_ID,
+  walkCollectionsWithPath,
+} from "./collectionModel";
 
 export function AddToCollectionModal({
   open,
   collections,
   occupiedCollectionIds,
   hideCollectionDots = false,
+  title,
+  hint,
+  emptyMessage,
   onClose,
   onPick,
 }: {
@@ -18,13 +24,19 @@ export function AddToCollectionModal({
   occupiedCollectionIds: Set<string>;
   /** 与侧栏 / 笔记设置「隐藏合集圆点」一致 */
   hideCollectionDots?: boolean;
+  /** 覆盖默认标题（如自定义属性「关联合集」） */
+  title?: string;
+  hint?: string;
+  emptyMessage?: string;
   onClose: () => void;
   onPick: (targetCollectionId: string) => void;
 }) {
   const c = useAppChrome();
   const rows = open
     ? walkCollectionsWithPath(collections, []).filter(
-        ({ col }) => !occupiedCollectionIds.has(col.id)
+        ({ col }) =>
+          col.id !== LOOSE_NOTES_COLLECTION_ID &&
+          !occupiedCollectionIds.has(col.id)
       )
     : [];
 
@@ -54,13 +66,15 @@ export function AddToCollectionModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="add-to-col-modal-title" className="reminder-picker-modal__title">
-          {c.cardAddToCollectionTitle}
+          {title ?? c.cardAddToCollectionTitle}
         </h2>
         <p className="reminder-picker-modal__hint">
-          {c.cardAddToCollectionHint}
+          {hint ?? c.cardAddToCollectionHint}
         </p>
         {rows.length === 0 ? (
-          <p className="add-to-col-modal__empty">{c.cardAddToCollectionEmpty}</p>
+          <p className="add-to-col-modal__empty">
+            {emptyMessage ?? c.cardAddToCollectionEmpty}
+          </p>
         ) : (
           <ul className="add-to-col-modal__list" role="listbox">
             {rows.map(({ col, path }) => (

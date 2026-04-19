@@ -58,6 +58,12 @@ export type ExtraModalChrome = {
   noteSettingsPlacementLabel: string;
   noteSettingsTop: string;
   noteSettingsBottom: string;
+  /** 时间线列表正文是否折叠为约三行 */
+  noteSettingsFoldLabel: string;
+  noteSettingsFoldHint: string;
+  noteSettingsFoldOff: string;
+  noteSettingsFoldOn: string;
+  noteSettingsFoldAria: string;
   noteSettingsStorageLabel: string;
   noteSettingsLocal: string;
   noteSettingsCloud: string;
@@ -172,10 +178,16 @@ const zh: ExtraModalChrome = {
   profileDeleteBack: "返回",
   noteSettingsTitle: "笔记设置",
   noteSettingsHint:
-    "调整新建笔记出现的位置、侧栏合集彩色圆点是否显示，以及笔记数据保存在本机还是云端。",
+    "调整新建笔记出现的位置、侧栏合集彩色圆点、时间线正文是否折叠为三行，以及笔记数据保存在本机还是云端。",
   noteSettingsPlacementLabel: "新建笔记位置",
   noteSettingsTop: "时间线顶部",
   noteSettingsBottom: "时间线底部",
+  noteSettingsFoldLabel: "笔记折叠（时间线）",
+  noteSettingsFoldHint:
+    "开启后，时间线每条卡片固定等高（顶栏下约三行正文；左右分栏时图库列同高、与附件数量无关）。列表内不可直接编辑，请用预览弹窗或全页；手机上下叠放时略增高以容纳图库条。",
+  noteSettingsFoldOff: "关闭",
+  noteSettingsFoldOn: "开启（约三行）",
+  noteSettingsFoldAria: "时间线笔记正文是否折叠为约三行",
   noteSettingsStorageLabel: "数据存储位置",
   noteSettingsLocal: "本地（此设备）",
   noteSettingsCloud: "云端",
@@ -297,10 +309,16 @@ const en: ExtraModalChrome = {
   profileDeleteBack: "Back",
   noteSettingsTitle: "Note settings",
   noteSettingsHint:
-    "Choose where new notes appear, whether to show color dots before collection names in the sidebar, and whether data stays on this device or syncs to the cloud.",
+    "Choose where new notes appear, sidebar dots, whether to collapse timeline bodies to about three lines, and whether data stays on this device or syncs to the cloud.",
   noteSettingsPlacementLabel: "New note placement",
   noteSettingsTop: "Top of timeline",
   noteSettingsBottom: "Bottom of timeline",
+  noteSettingsFoldLabel: "Collapse note body (timeline)",
+  noteSettingsFoldHint:
+    "When on, timeline cards use a fixed height (toolbar + ~3 lines; side gallery matches, independent of attachment count). You can’t edit inline in the list — use the preview modal or full page. Stacked mobile adds a fixed gallery strip.",
+  noteSettingsFoldOff: "Off",
+  noteSettingsFoldOn: "On (~3 lines)",
+  noteSettingsFoldAria: "Collapse timeline note bodies to about three lines",
   noteSettingsStorageLabel: "Data storage",
   noteSettingsLocal: "On this device",
   noteSettingsCloud: "Cloud",

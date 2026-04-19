@@ -89,6 +89,17 @@ export type AppChrome = {
   cardAddToCollectionAlreadyThere: string;
   cardRemovePlacementFail: string;
   cardRemoveFromCollectionChipAria: (path: string) => string;
+  /** 自定义属性「关联合集」选择器 */
+  propCollectionLinkPickerTitle: string;
+  propCollectionLinkPickerHint: string;
+  propCollectionLinkPickerEmpty: string;
+  propCollectionLinkAdd: string;
+  propCollectionLinkRemoveAria: (path: string) => string;
+  propUnknownCollection: string;
+  /** 笔记详情：合集 / 关联合集 的标签式输入与下拉 */
+  cardCollectionTagInputPlaceholder: string;
+  cardCollectionTagDropdownEmpty: string;
+  cardCollectionTagDropdownAria: string;
   /** 笔记探索白板卡片左侧灰条：拖动拉线建立关联 */
   connectionsLinkRailAria: string;
   /** 笔记探索 · 问 AI 侧栏 */
@@ -373,6 +384,16 @@ const zh: AppChrome = {
   cardRemovePlacementFail: "未能从该合集移除笔记，请稍后重试。",
   cardRemoveFromCollectionChipAria: (path: string) =>
     `从合集「${path}」移除`,
+  propCollectionLinkPickerTitle: "关联合集",
+  propCollectionLinkPickerHint:
+    "仅保存在该属性中，不会把笔记加入所选合集。",
+  propCollectionLinkPickerEmpty: "没有更多可选合集。",
+  propCollectionLinkAdd: "+ 关联合集",
+  propCollectionLinkRemoveAria: (path: string) => `移除关联「${path}」`,
+  propUnknownCollection: "（无此合集）",
+  cardCollectionTagInputPlaceholder: "添加或搜索合集…",
+  cardCollectionTagDropdownEmpty: "暂无可添加的合集。",
+  cardCollectionTagDropdownAria: "选择合集",
   connectionsLinkRailAria: "从此处拖动连线到另一张笔记",
   cardAskAiTitle: "问 AI",
   cardAskAiToolbar: "问 AI",
@@ -660,6 +681,16 @@ const en: AppChrome = {
     "Couldn’t remove this note from that collection. Try again in a moment.",
   cardRemoveFromCollectionChipAria: (path: string) =>
     `Remove from collection “${path}”`,
+  propCollectionLinkPickerTitle: "Link collections",
+  propCollectionLinkPickerHint:
+    "Saved on this property only; the note is not added to the collections you pick.",
+  propCollectionLinkPickerEmpty: "No more collections available.",
+  propCollectionLinkAdd: "+ Link collection",
+  propCollectionLinkRemoveAria: (path: string) => `Remove link “${path}”`,
+  propUnknownCollection: "(Missing collection)",
+  cardCollectionTagInputPlaceholder: "Add or search collections…",
+  cardCollectionTagDropdownEmpty: "No collections available to add.",
+  cardCollectionTagDropdownAria: "Pick a collection",
   connectionsLinkRailAria: "Drag a line from here to another note",
   cardAskAiTitle: "Ask AI",
   cardAskAiToolbar: "Ask AI",

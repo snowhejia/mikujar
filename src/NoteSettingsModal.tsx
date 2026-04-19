@@ -11,6 +11,8 @@ type NoteSettingsModalProps = {
   setNewNotePlacement: (p: NewNotePlacement) => void;
   hideSidebarCollectionDots: boolean;
   setHideSidebarCollectionDots: (hide: boolean) => void;
+  timelineFoldBodyThreeLines: boolean;
+  setTimelineFoldBodyThreeLines: (on: boolean) => void;
   dataMode: AppDataMode;
   setDataMode: (mode: AppDataMode) => void;
   onOpenAppleNotesImport?: () => void;
@@ -26,6 +28,8 @@ export function NoteSettingsModal({
   setNewNotePlacement,
   hideSidebarCollectionDots,
   setHideSidebarCollectionDots,
+  timelineFoldBodyThreeLines,
+  setTimelineFoldBodyThreeLines,
   dataMode,
   setDataMode,
   onOpenAppleNotesImport,
@@ -142,6 +146,43 @@ export function NoteSettingsModal({
             onClick={() => setHideSidebarCollectionDots(true)}
           >
             {c.noteSettingsSidebarDotsHide}
+          </button>
+        </div>
+
+        <p className="note-settings-modal__label">
+          {c.noteSettingsFoldLabel}
+        </p>
+        <p className="note-settings-modal__fold-hint">{c.noteSettingsFoldHint}</p>
+        <div
+          className="note-settings-modal__choice-row"
+          role="group"
+          aria-label={c.noteSettingsFoldAria}
+        >
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (!timelineFoldBodyThreeLines
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={!timelineFoldBodyThreeLines}
+            onClick={() => setTimelineFoldBodyThreeLines(false)}
+          >
+            {c.noteSettingsFoldOff}
+          </button>
+          <button
+            type="button"
+            className={
+              "note-settings-modal__choice" +
+              (timelineFoldBodyThreeLines
+                ? " note-settings-modal__choice--active"
+                : "")
+            }
+            aria-pressed={timelineFoldBodyThreeLines}
+            onClick={() => setTimelineFoldBodyThreeLines(true)}
+          >
+            {c.noteSettingsFoldOn}
           </button>
         </div>
 

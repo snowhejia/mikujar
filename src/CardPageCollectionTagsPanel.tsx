@@ -8,45 +8,50 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { parseTagsFromInput } from "./CardTagsRow";
+import type { Collection } from "./types";
+import {
+  collectionPathLabel,
+  LOOSE_NOTES_COLLECTION_ID,
+  walkCollectionsWithPath,
+} from "./appkit/collectionModel";
 import { tagChipInlineStyle } from "./tagChipPalette";
 
-type DropdownEntry =
-  | { kind: "tag"; tag: string }
-  | { kind: "create"; raw: string };
+type ColRow = { col: Collection; path: string };
 
-export function CardPageTagsPanel({
-  cardId,
-  tags: tagsProp,
-  tagOptions = [],
+export function CardPageCollectionTagsPanel({
+  instanceId,
+  collections,
+  selectedCollectionIds: idsProp,
+  pickerExcludeIds,
   canEdit,
-  onCommit,
-  getPillStyle = tagChipInlineStyle,
-  addInputPlaceholder = "添加标签…",
-  dropdownEmptyText = "暂无可选标签；输入新名称后回车添加",
-  dropdownAriaLabel = "标签候选",
-  removePillAriaLabel = (t: string) => `移除标签 ${t}`,
-  createButtonLabel = (raw: string) => `创建「${raw}」`,
+  onAdd,
+  onRemove,
+  addInputPlaceholder,
+  dropdownEmptyText,
+  dropdownAriaLabel,
+  removePillAriaLabel,
+  hideCollectionDots = false,
+  unknownLabel,
   chipShape = "pill",
 }: {
-  cardId: string;
-  tags: string[] | undefined;
-  /** 全库已有标签（与侧栏标签云同源），用于下拉候选 */
-  tagOptions?: string[];
+  instanceId: string;
+  collections: Collection[];
+  selectedCollectionIds: string[];
+  /** 不可在下拉中再选的合集 id（如已归属、已关联、未归类） */
+  pickerExcludeIds: Set<string>;
   canEdit: boolean;
-  onCommit: (tags: string[]) => void;
-  /** 药丸背景色（默认按名称哈希；自定义属性多选可接 option.color） */
-  getPillStyle?: (tag: string) => CSSProperties;
+  onAdd: (collectionId: string) => void | Promise<void>;
+  onRemove: (collectionId: string) => void;
+  addInputPlaceholder: string;
+  dropdownEmptyText: string;
+  dropdownAriaLabel: string;
+  removePillAriaLabel: (pathLabel: string) => string;
+  hideCollectionDots?: boolean;
+  unknownLabel: string;
   chipShape?: "pill" | "rect";
-  addInputPlaceholder?: string;
-  dropdownEmptyText?: string;
-  dropdownAriaLabel?: string;
-  removePillAriaLabel?: (tag: string) => string;
-  createButtonLabel?: (raw: string) => string;
 }) {
-  const tags = tagsProp ?? [];
-  const tagsKey = tags.join("\u0001");
-  const [list, setList] = useState(tags);
+  const idsKey = idsProp.join("\u0001");
+  const [list, setList] = useState(idsProp);
   const [addDraft, setAddDraft] = useState("");
   const addDraftRef = useRef("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -59,34 +64,32 @@ export function CardPageTagsPanel({
     top: number;
     width: number;
   } | null>(null);
+
   const listboxDomId = useMemo(
-    () => `card-page-tags-lb-${cardId.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
-    [cardId]
+    () =>
+      `card-page-col-tags-lb-${instanceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+    [instanceId]
   );
 
   useEffect(() => {
-    setList(tags);
-  }, [cardId, tagsKey]);
+    setList(idsProp);
+  }, [instanceId, idsKey]);
 
-  const dropdownEntries = useMemo((): DropdownEntry[] => {
+  const pickableRows = useMemo((): ColRow[] => {
+    return walkCollectionsWithPath(collections, []).filter(
+      ({ col }) =>
+        col.id !== LOOSE_NOTES_COLLECTION_ID &&
+        !pickerExcludeIds.has(col.id)
+    );
+  }, [collections, pickerExcludeIds]);
+
+  const dropdownEntries = useMemo((): ColRow[] => {
     const raw = addDraft.trim();
     const q = raw.toLowerCase();
-    const already = new Set(list);
-    const candidates = tagOptions
-      .filter((t) => !already.has(t))
-      .filter((t) => !q || t.toLowerCase().includes(q));
-
-    const inLibraryExact =
-      raw.length > 0 && tagOptions.some((t) => t === raw);
-    const onCardExact = raw.length > 0 && list.includes(raw);
-    const showCreate =
-      raw.length > 0 && !onCardExact && !inLibraryExact;
-
-    return [
-      ...candidates.map((tag) => ({ kind: "tag" as const, tag })),
-      ...(showCreate ? [{ kind: "create" as const, raw }] : []),
-    ];
-  }, [addDraft, list, tagOptions]);
+    return pickableRows.filter(
+      ({ path }) => !q || path.toLowerCase().includes(q)
+    );
+  }, [addDraft, pickableRows]);
 
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -145,43 +148,42 @@ export function CardPageTagsPanel({
     setAddDraft(v);
   }, []);
 
-  const addOneTag = useCallback(
-    (rawTag: string) => {
-      const t = rawTag.trim();
-      if (!t) return;
-      setList((prev) => {
-        if (prev.includes(t)) return prev;
-        const next = [...prev, t];
-        onCommit(next);
-        return next;
-      });
+  const pillLabel = useCallback(
+    (colId: string) =>
+      collectionPathLabel(collections, colId).trim() || unknownLabel,
+    [collections, unknownLabel]
+  );
+
+  const pillStyle = useCallback(
+    (colId: string): CSSProperties => tagChipInlineStyle(pillLabel(colId)),
+    [pillLabel]
+  );
+
+  const pickRow = useCallback(
+    (row: ColRow) => {
+      if (list.includes(row.col.id)) return;
+      void onAdd(row.col.id);
     },
-    [onCommit]
+    [list, onAdd]
   );
 
   const flushAddInput = useCallback(() => {
-    const parsed = parseTagsFromInput(addDraftRef.current);
+    const raw = addDraftRef.current.trim();
     setAddDraftSynced("");
-    if (!parsed.length) return;
-    setList((prev) => {
-      const next = [...prev];
-      for (const x of parsed) {
-        if (!next.includes(x)) next.push(x);
-      }
-      onCommit(next);
-      return next;
-    });
-  }, [onCommit, setAddDraftSynced]);
+    if (!raw) return;
+    const exact = pickableRows.find(
+      ({ path }) => path.toLowerCase() === raw.toLowerCase()
+    );
+    if (exact) {
+      void pickRow(exact);
+    }
+  }, [pickRow, pickableRows, setAddDraftSynced]);
 
   const remove = useCallback(
-    (t: string) => {
-      setList((prev) => {
-        const next = prev.filter((x) => x !== t);
-        onCommit(next);
-        return next;
-      });
+    (colId: string) => {
+      onRemove(colId);
     },
-    [onCommit]
+    [onRemove]
   );
 
   const pillExtra = chipShape === "rect" ? " card-page__tags-pill--rect" : "";
@@ -189,7 +191,7 @@ export function CardPageTagsPanel({
     chipShape === "rect" ? " card-page__tags-dropdown-pill--rect" : "";
 
   if (!canEdit) {
-    if (!tags.length) {
+    if (!idsProp.length) {
       return (
         <div className="card-page__tags-panel card-page__tags-panel--single-hit">
           <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
@@ -201,15 +203,18 @@ export function CardPageTagsPanel({
     return (
       <div className="card-page__tags-panel card-page__tags-panel--readonly">
         <div className="card-page__tags-pills">
-          {tags.map((t) => (
-            <span
-              key={t}
-              className={"card-page__tags-pill" + pillExtra}
-              style={getPillStyle(t)}
-            >
-              {t}
-            </span>
-          ))}
+          {idsProp.map((id) => {
+            const label = pillLabel(id);
+            return (
+              <span
+                key={id}
+                className={"card-page__tags-pill" + pillExtra}
+                style={pillStyle(id)}
+              >
+                {label}
+              </span>
+            );
+          })}
         </div>
       </div>
     );
@@ -221,26 +226,31 @@ export function CardPageTagsPanel({
     <div className="card-page__tags-panel">
       <div className="card-page__tags-field" ref={fieldRef}>
         <div className="card-page__tags-inline">
-          {list.map((t) => (
-            <span
-              key={t}
-              className={
-                "card-page__tags-pill card-page__tags-pill--removable" +
-                pillExtra
-              }
-              style={getPillStyle(t)}
-            >
-              <span className="card-page__tags-pill-text">{t}</span>
-              <button
-                type="button"
-                className="card-page__tags-pill-remove"
-                aria-label={removePillAriaLabel(t)}
-                onClick={() => remove(t)}
+          {list.map((id) => {
+            const label = pillLabel(id);
+            return (
+              <span
+                key={id}
+                className={
+                  "card-page__tags-pill card-page__tags-pill--removable" +
+                  pillExtra
+                }
+                style={pillStyle(id)}
               >
-                ×
-              </button>
-            </span>
-          ))}
+                <span className="card-page__tags-pill-text" title={label}>
+                  {label}
+                </span>
+                <button
+                  type="button"
+                  className="card-page__tags-pill-remove"
+                  aria-label={removePillAriaLabel(label)}
+                  onClick={() => remove(id)}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
           <input
             type="text"
             className="card-page__tags-add-input"
@@ -285,14 +295,10 @@ export function CardPageTagsPanel({
                   highlightIndex >= 0 &&
                   highlightIndex < dropdownEntries.length
                 ) {
-                  const entry = dropdownEntries[highlightIndex];
-                  const raw = entry.kind === "tag" ? entry.tag : entry.raw;
-                  const t = raw.trim();
-                  if (t) {
-                    addOneTag(t);
-                    setAddDraftSynced("");
-                    return;
-                  }
+                  const row = dropdownEntries[highlightIndex]!;
+                  void pickRow(row);
+                  setAddDraftSynced("");
+                  return;
                 }
                 flushAddInput();
               }
@@ -323,42 +329,11 @@ export function CardPageTagsPanel({
                     {dropdownEmptyText}
                   </div>
                 ) : (
-                  dropdownEntries.map((entry, idx) => {
+                  dropdownEntries.map((row, idx) => {
                     const active = idx === highlightIndex;
-                    if (entry.kind === "tag") {
-                      return (
-                        <button
-                          key={`tag-${entry.tag}`}
-                          type="button"
-                          role="option"
-                          aria-selected={active}
-                          ref={(el) => {
-                            itemElsRef.current[idx] = el;
-                          }}
-                          className={
-                            "card-page__tags-dropdown-item" +
-                            (active ? " is-active" : "")
-                          }
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => {
-                            addOneTag(entry.tag);
-                            setAddDraftSynced("");
-                          }}
-                        >
-                          <span
-                            className={
-                              "card-page__tags-dropdown-pill" + dropdownPillExtra
-                            }
-                            style={getPillStyle(entry.tag)}
-                          >
-                            {entry.tag}
-                          </span>
-                        </button>
-                      );
-                    }
                     return (
                       <button
-                        key={`create-${entry.raw}`}
+                        key={row.col.id}
                         type="button"
                         role="option"
                         aria-selected={active}
@@ -366,16 +341,30 @@ export function CardPageTagsPanel({
                           itemElsRef.current[idx] = el;
                         }}
                         className={
-                          "card-page__tags-dropdown-item card-page__tags-dropdown-item--create" +
+                          "card-page__tags-dropdown-item" +
                           (active ? " is-active" : "")
                         }
                         onMouseDown={(ev) => ev.preventDefault()}
                         onClick={() => {
-                          addOneTag(entry.raw);
+                          void pickRow(row);
                           setAddDraftSynced("");
                         }}
                       >
-                        {createButtonLabel(entry.raw)}
+                        {!hideCollectionDots ? (
+                          <span
+                            className="add-to-col-modal__dot"
+                            style={{ backgroundColor: row.col.dotColor }}
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span
+                          className={
+                            "card-page__tags-dropdown-pill" + dropdownPillExtra
+                          }
+                          style={tagChipInlineStyle(row.path)}
+                        >
+                          {row.path}
+                        </span>
                       </button>
                     );
                   })

@@ -68,6 +68,10 @@ import {
   saveHideSidebarCollectionDots,
 } from "./hideSidebarCollectionDotsStorage";
 import {
+  readTimelineFoldBodyThreeLines,
+  saveTimelineFoldBodyThreeLines,
+} from "./timelineFoldBodyStorage";
+import {
   readSidebarSectionsCollapsed,
   sidebarSectionsCollapseStorageKey,
   writeSidebarSectionsCollapsed,
@@ -754,6 +758,12 @@ export default function App() {
   const setHideSidebarCollectionDots = useCallback((hide: boolean) => {
     setHideSidebarCollectionDotsState(hide);
     saveHideSidebarCollectionDots(hide);
+  }, []);
+  const [timelineFoldBodyThreeLines, setTimelineFoldBodyThreeLinesState] =
+    useState(readTimelineFoldBodyThreeLines);
+  const setTimelineFoldBodyThreeLines = useCallback((on: boolean) => {
+    setTimelineFoldBodyThreeLinesState(on);
+    saveTimelineFoldBodyThreeLines(on);
   }, []);
   const userAccountMenuRef = useRef<HTMLDivElement>(null);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
@@ -2290,6 +2300,64 @@ export default function App() {
     [canEdit]
   );
 
+  /** 与「添加至合集」弹层相同的入树逻辑；供笔记详情标签式合集栏与弹层共用 */
+  const executeAddCardPlacement = useCallback(
+    async (sourceColId: string, cardId: string, targetColId: string) => {
+      if (!canEdit) return;
+      const hit = findCardInTree(collections, sourceColId, cardId);
+      if (!hit?.card) return;
+      if (
+        collectionIdsContainingCardId(collections, cardId).has(targetColId)
+      ) {
+        window.alert(c.cardAddToCollectionAlreadyThere);
+        return;
+      }
+      if (dataMode === "local") {
+        setCollections((prev) =>
+          appendCardCopyToCollection(
+            prev,
+            targetColId,
+            hit.card,
+            newNotePlacement === "top"
+          )
+        );
+        return;
+      }
+      const placement = await addCardPlacementApi(cardId, targetColId, {
+        insertAtStart: newNotePlacement === "top",
+        pinned: hit.card.pinned === true,
+      });
+      if (!placement) {
+        window.alert(c.errMergeColSave);
+        return;
+      }
+      const mergedAdd = appendCardCopyToCollection(
+        collectionsRef.current,
+        targetColId,
+        { ...hit.card, pinned: placement.pinned },
+        newNotePlacement === "top"
+      );
+      setCollections(mergedAdd);
+      const skAdd = remoteSnapshotUserKey(
+        writeRequiresLogin,
+        currentUser?.id?.trim() || null
+      );
+      if (skAdd) saveRemoteCollectionsSnapshot(skAdd, mergedAdd);
+      void resyncRemoteCollectionsTree({ skipPreferenceRefresh: true });
+    },
+    [
+      canEdit,
+      collections,
+      dataMode,
+      newNotePlacement,
+      c.cardAddToCollectionAlreadyThere,
+      c.errMergeColSave,
+      writeRequiresLogin,
+      currentUser,
+      resyncRemoteCollectionsTree,
+    ]
+  );
+
   /** 笔记详情页：从某一合集移除当前笔记（多合集之一）；本地写树，云端调 API 后重拉树 */
   const removeCardFromCollectionPlacementAt = useCallback(
     async (placementColId: string, cardId: string) => {
@@ -2941,12 +3009,15 @@ export default function App() {
       if (remindersViewActive && !opts?.reminderOn) return null;
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
-      const targetColId =
+      let targetColId =
         targetColIdOverride?.trim() ||
         (allNotesViewActive || remindersViewActive
           ? LOOSE_NOTES_COLLECTION_ID
-          : active?.id ?? "");
-      if (!targetColId) return null;
+          : active?.id?.trim() ?? "");
+      /** 无选中用户合集时写入未归类（不在 UI 中展示该虚拟合集名） */
+      if (!targetColId) {
+        targetColId = LOOSE_NOTES_COLLECTION_ID;
+      }
       const now = new Date();
       const minutesOfDay =
         timeOverride?.minutesOfDay ??
@@ -3406,8 +3477,7 @@ export default function App() {
       const targetColId =
         allNotesViewActive || remindersViewActive
           ? LOOSE_NOTES_COLLECTION_ID
-          : active?.id ?? "";
-      if (!targetColId) return;
+          : active?.id?.trim() || LOOSE_NOTES_COLLECTION_ID;
       setMobileNavOpen(false);
       queueMicrotask(() => {
         setCardPageCard({ colId: targetColId, cardId });
@@ -4166,6 +4236,7 @@ export default function App() {
           setDetailCard(null);
           setCardPageCard({ colId: cId, cardId });
         }}
+        foldBodyMaxLines={timelineFoldBodyThreeLines ? 3 : undefined}
       />
     );
   }
@@ -5578,7 +5649,6 @@ export default function App() {
               setCardTags={setCardTags}
               setCardCustomProps={setCardCustomProps}
               setReminderPicker={setReminderPicker}
-              openAddToCollectionPicker={openAddToCollectionPicker}
               setRelatedPanel={setRelatedPanel}
               uploadFilesToCard={uploadFilesToCard}
               removeCardMediaItem={removeCardMediaItem}
@@ -5587,6 +5657,14 @@ export default function App() {
                 void removeCardFromCollectionPlacementAt(
                   placementColId,
                   cardPageCardLive.card.id
+                )
+              }
+              hideCollectionDots={hideSidebarCollectionDots}
+              onAddCardPlacement={(targetColId) =>
+                void executeAddCardPlacement(
+                  cardPageCardLive.colId,
+                  cardPageCardLive.card.id,
+                  targetColId
                 )
               }
             />
@@ -6520,6 +6598,8 @@ export default function App() {
             setNewNotePlacement={setNewNotePlacement}
             hideSidebarCollectionDots={hideSidebarCollectionDots}
             setHideSidebarCollectionDots={setHideSidebarCollectionDots}
+            timelineFoldBodyThreeLines={timelineFoldBodyThreeLines}
+            setTimelineFoldBodyThreeLines={setTimelineFoldBodyThreeLines}
             dataMode={dataMode}
             setDataMode={setDataMode}
             onOpenAppleNotesImport={openAppleNotesImportModal}
@@ -6715,53 +6795,8 @@ export default function App() {
           onClose={() => setAddToCollectionTarget(null)}
           onPick={async (targetColId) => {
             const { colId, cardId } = addToCollectionTarget;
-            const hit = findCardInTree(collections, colId, cardId);
-            if (!hit?.card) {
-              setAddToCollectionTarget(null);
-              return;
-            }
-            if (
-              collectionIdsContainingCardId(collections, cardId).has(
-                targetColId
-              )
-            ) {
-              window.alert(c.cardAddToCollectionAlreadyThere);
-              setAddToCollectionTarget(null);
-              return;
-            }
             setAddToCollectionTarget(null);
-            if (dataMode === "local") {
-              setCollections((prev) =>
-                appendCardCopyToCollection(
-                  prev,
-                  targetColId,
-                  hit.card,
-                  newNotePlacement === "top"
-                )
-              );
-              return;
-            }
-            const placement = await addCardPlacementApi(cardId, targetColId, {
-              insertAtStart: newNotePlacement === "top",
-              pinned: hit.card.pinned === true,
-            });
-            if (!placement) {
-              window.alert(c.errMergeColSave);
-              return;
-            }
-            const mergedAdd = appendCardCopyToCollection(
-              collectionsRef.current,
-              targetColId,
-              { ...hit.card, pinned: placement.pinned },
-              newNotePlacement === "top"
-            );
-            setCollections(mergedAdd);
-            const skAdd = remoteSnapshotUserKey(
-              writeRequiresLogin,
-              currentUser?.id?.trim() || null
-            );
-            if (skAdd) saveRemoteCollectionsSnapshot(skAdd, mergedAdd);
-            void resyncRemoteCollectionsTree({ skipPreferenceRefresh: true });
+            await executeAddCardPlacement(colId, cardId, targetColId);
           }}
         />
       ) : null}

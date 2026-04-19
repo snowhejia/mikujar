@@ -96,6 +96,10 @@ export type NoteCardTiptapProps = {
    * 合集列表等：正文中不展示内嵌图/音视频（与 `timelineBodyHeadings` 叠加时共用样式；仅列表需要时可单独传）。
    */
   hideEmbeddedMedia?: boolean;
+  /**
+   * 时间线列表：限制正文可见行数（如笔记设置「折叠」传 3）。全页/详情不传。
+   */
+  foldBodyMaxLines?: number;
 };
 
 /* ——— 工具栏子组件 ——— */
@@ -479,6 +483,7 @@ export const NoteCardTiptapCore = forwardRef<
     timelineBodyHeadings = false,
     hideEmbeddedMedia = false,
     insertUploadedImagesAtCursor = false,
+    foldBodyMaxLines,
   },
   ref
 ) {
@@ -657,6 +662,14 @@ export const NoteCardTiptapCore = forwardRef<
   }
 
   const hideEmb = Boolean(timelineBodyHeadings || hideEmbeddedMedia);
+  const foldLines =
+    typeof foldBodyMaxLines === "number" &&
+    Number.isFinite(foldBodyMaxLines) &&
+    foldBodyMaxLines > 0
+      ? Math.min(20, Math.floor(foldBodyMaxLines))
+      : 0;
+  const foldClass =
+    foldLines === 3 ? " card__text-editor--fold-body-3" : "";
 
   return (
     <div
@@ -665,7 +678,8 @@ export const NoteCardTiptapCore = forwardRef<
           ? "card__text-editor"
           : "card__text-editor card__text-editor--readonly") +
         (timelineBodyHeadings ? " card__text-editor--timeline-body-headings" : "") +
-        (hideEmb ? " card__text-editor--hide-embedded-media" : "")
+        (hideEmb ? " card__text-editor--hide-embedded-media" : "") +
+        foldClass
       }
     >
       {canEdit && showToolbar ? <NoteEditorToolbar editor={editor} /> : null}

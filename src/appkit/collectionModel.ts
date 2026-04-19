@@ -507,6 +507,7 @@ export function flattenAllCardsWithPath(
 }
 
 export function collectionPathLabel(cols: Collection[], colId: string): string {
+  if (colId === LOOSE_NOTES_COLLECTION_ID) return "";
   function walk(nodes: Collection[], prefix: string[]): string | null {
     for (const c of nodes) {
       const names = [...prefix, c.name];

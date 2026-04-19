@@ -24,8 +24,10 @@ export type NoteMediaItem = {
 export type CardPropertyType =
   | "text"
   | "number"
-  | "select"
-  | "multiSelect"
+  /** 原单选/多选合并：值为 string[] | null */
+  | "choice"
+  /** 关联合集路径：值为合集 id 的 string[] | null，不修改笔记实际归属 */
+  | "collectionLink"
   | "date"
   | "checkbox"
   | "url";

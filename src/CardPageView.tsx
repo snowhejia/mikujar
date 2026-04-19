@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
@@ -12,13 +13,15 @@ import type { Dispatch, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
 import { CardPageTagsPanel } from "./CardPageTagsPanel";
+import { tagChipInlineStyle } from "./tagChipPalette";
 import { formatCardTimeLabel } from "./cardTimeLabel";
+import { CardPageCollectionTagsPanel } from "./CardPageCollectionTagsPanel";
 import {
   collectAllTagsFromCollections,
   collectionIdsContainingCardId,
-  collectionPathLabel,
   LOOSE_NOTES_COLLECTION_ID,
 } from "./appkit/collectionModel";
+import { migrateCustomPropsList } from "./noteCardCustomProps";
 import type {
   CardProperty,
   CardPropertyOption,
@@ -92,25 +95,34 @@ function safeHttpHrefFromPropValue(raw: unknown): string | null {
 const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
   text: "文字",
   number: "数字",
-  select: "单选",
-  multiSelect: "多选",
+  choice: "选择",
+  collectionLink: "关联",
   date: "日期",
   checkbox: "勾选",
   url: "链接",
 };
 
-const PROP_TYPE_ICONS: Record<CardPropertyType, string> = {
-  text: "T",
-  number: "#",
-  select: "≡",
-  multiSelect: "☰",
-  date: "◫",
-  checkbox: "✓",
-  url: "⊕",
-};
-
 function genId() {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** 与笔记标签一致：按选项名稳定哈希的 pastel，不用 options 里的固定灰 */
+function choicePillStyle(valueName: string): CSSProperties {
+  return tagChipInlineStyle(valueName);
+}
+
+function collectionLinkIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (x): x is string =>
+          typeof x === "string" &&
+          Boolean(x.trim()) &&
+          x !== LOOSE_NOTES_COLLECTION_ID
+      )
+    ),
+  ];
 }
 
 /** 与 CardGallery 相同解析链（COS 预签名、本地 tauri: 等），避免直链 img 裂图 */
@@ -255,7 +267,6 @@ export interface CardPageViewProps {
   setCardTags: (colId: string, cardId: string, tags: string[]) => void;
   setCardCustomProps: (cardId: string, props: CardProperty[]) => void;
   setReminderPicker: Dispatch<SetStateAction<ReminderPickerTarget | null>>;
-  openAddToCollectionPicker: (colId: string, cardId: string) => void;
   setRelatedPanel: Dispatch<
     SetStateAction<{ colId: string; cardId: string } | null>
   >;
@@ -277,52 +288,10 @@ export interface CardPageViewProps {
     cardId: string,
     item: NoteMediaItem
   ) => void;
-}
-
-function SelectPropEditor({
-  prop,
-  onChangeValue,
-  onChangeOptions,
-}: {
-  prop: CardProperty;
-  onChangeValue: (v: string | null) => void;
-  onChangeOptions: (opts: CardPropertyOption[]) => void;
-}) {
-  const [val, setVal] = useState(
-    typeof prop.value === "string" ? prop.value : ""
-  );
-  const opts = prop.options ?? [];
-  const listId = `datalist-${prop.id}`;
-  return (
-    <div className="card-page__prop-select-wrap">
-      <input
-        type="text"
-        className="card-page__prop-input"
-        list={listId}
-        placeholder="输入或选择…"
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-        onBlur={() => {
-          const v = val.trim();
-          onChangeValue(v || null);
-          if (v && !opts.find((o) => o.name === v)) {
-            onChangeOptions([
-              ...opts,
-              { id: genId(), name: v, color: "#e0e0e0" },
-            ]);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-      />
-      <datalist id={listId}>
-        {opts.map((o) => (
-          <option key={o.id} value={o.name} />
-        ))}
-      </datalist>
-    </div>
-  );
+  /** 与侧栏「隐藏合集圆点」一致 */
+  hideCollectionDots?: boolean;
+  /** 笔记详情：标签式「合集」栏添加归属（与 ⋯ 添加至合集逻辑一致） */
+  onAddCardPlacement?: (targetColId: string) => void | Promise<void>;
 }
 
 function PropValueEditor({
@@ -330,143 +299,230 @@ function PropValueEditor({
   canEdit,
   onChangeValue,
   onChangeOptions,
+  collections,
+  hideCollectionDots = false,
 }: {
   prop: CardProperty;
   canEdit: boolean;
   onChangeValue: (v: CardProperty["value"]) => void;
   onChangeOptions: (opts: CardPropertyOption[]) => void;
+  collections: Collection[];
+  hideCollectionDots?: boolean;
 }) {
   const ui = useAppChrome();
 
   if (!canEdit) {
     if (prop.type === "checkbox") {
       return (
-        <span className="card-page__prop-val-text">
-          {prop.value ? "✓" : "—"}
-        </span>
+        <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+          {prop.value ? (
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+              ✓
+            </span>
+          ) : (
+            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+              —
+            </span>
+          )}
+        </div>
       );
     }
-    if (prop.type === "multiSelect" && Array.isArray(prop.value)) {
-      const vals = prop.value as string[];
-      return vals.length ? (
-        <span className="card-page__prop-chips">
-          {vals.map((v) => (
-            <span key={v} className="card-page__prop-chip">
-              {v}
-            </span>
-          ))}
-        </span>
-      ) : (
-        <span className="card-page__prop-empty">—</span>
+    if (prop.type === "choice") {
+      const vals = Array.isArray(prop.value)
+        ? (prop.value as string[])
+        : [];
+      return (
+        <CardPageTagsPanel
+          cardId={prop.id}
+          tags={vals}
+          tagOptions={[]}
+          canEdit={false}
+          onCommit={() => {}}
+          getPillStyle={(t) => choicePillStyle(t)}
+          chipShape="rect"
+        />
+      );
+    }
+    if (prop.type === "collectionLink") {
+      const ids = collectionLinkIds(prop.value);
+      return (
+        <CardPageCollectionTagsPanel
+          instanceId={prop.id}
+          collections={collections}
+          selectedCollectionIds={ids}
+          pickerExcludeIds={new Set()}
+          canEdit={false}
+          onAdd={() => {}}
+          onRemove={() => {}}
+          addInputPlaceholder=""
+          dropdownEmptyText=""
+          dropdownAriaLabel=""
+          removePillAriaLabel={() => ""}
+          unknownLabel={ui.propUnknownCollection}
+          chipShape="rect"
+        />
       );
     }
     if (prop.type === "url") {
       const raw = typeof prop.value === "string" ? prop.value.trim() : "";
       if (!raw) {
-        return <span className="card-page__prop-empty">—</span>;
+        return (
+          <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+              —
+            </span>
+          </div>
+        );
       }
       const href = safeHttpHrefFromPropValue(raw);
       if (!href) {
         return (
-          <span className="card-page__prop-val-text" title={raw}>
-            {raw}
-          </span>
+          <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+            <span
+              className="card-page__tags-hit-btn card-page__tags-hit-btn--readonly-text"
+              title={raw}
+            >
+              {raw}
+            </span>
+          </div>
         );
       }
       return (
-        <a
-          className="card-page__prop-val-link"
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={raw}
-        >
-          {raw}
-        </a>
+        <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+          <a
+            className="card-page__prop-val-link card-page__prop-val-link--tags-panel"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={raw}
+          >
+            {raw}
+          </a>
+        </div>
       );
     }
+    const empty = prop.value == null || prop.value === "";
     return (
-      <span
-        className={
-          prop.value == null || prop.value === ""
-            ? "card-page__prop-empty"
-            : "card-page__prop-val-text"
-        }
-      >
-        {prop.value == null || prop.value === "" ? "—" : String(prop.value)}
-      </span>
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        {empty ? (
+          <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+            —
+          </span>
+        ) : (
+          <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+            {String(prop.value)}
+          </span>
+        )}
+      </div>
     );
   }
 
   if (prop.type === "checkbox") {
     return (
-      <input
-        type="checkbox"
-        className="card-page__prop-checkbox"
-        checked={Boolean(prop.value)}
-        onChange={(e) => onChangeValue(e.target.checked)}
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        <div className="card-page__prop-checkbox-cell">
+          <input
+            type="checkbox"
+            className="card-page__prop-checkbox"
+            checked={Boolean(prop.value)}
+            onChange={(e) => onChangeValue(e.target.checked)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (prop.type === "choice") {
+    return (
+      <CardPageTagsPanel
+        cardId={prop.id}
+        tags={Array.isArray(prop.value) ? (prop.value as string[]) : []}
+        tagOptions={(prop.options ?? []).map((o) => o.name)}
+        canEdit
+        chipShape="rect"
+        getPillStyle={(t) => choicePillStyle(t)}
+        addInputPlaceholder="添加选项…"
+        dropdownEmptyText="暂无可选项；输入新名称后回车添加"
+        dropdownAriaLabel="选择项候选"
+        removePillAriaLabel={(t) => `移除选项 ${t}`}
+        onCommit={(tags) => {
+          onChangeValue(tags.length ? tags : null);
+          const opts = prop.options ?? [];
+          const names = new Set(opts.map((o) => o.name));
+          const next = [...opts];
+          for (const t of tags) {
+            if (!names.has(t)) {
+              next.push({ id: genId(), name: t, color: "#e0e0e0" });
+              names.add(t);
+            }
+          }
+          if (next.length !== opts.length) {
+            onChangeOptions(next);
+          }
+        }}
       />
     );
   }
 
-  if (prop.type === "multiSelect") {
-    const tags = Array.isArray(prop.value) ? (prop.value as string[]) : [];
+  if (prop.type === "collectionLink") {
+    const ids = collectionLinkIds(prop.value);
+    const exclude = new Set([...ids, LOOSE_NOTES_COLLECTION_ID]);
     return (
-      <input
-        type="text"
-        className="card-page__prop-input"
-        placeholder="用逗号分隔"
-        defaultValue={tags.join("，")}
-        onBlur={(e) => {
-          const vals = e.target.value
-            .split(/[,，]/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-          onChangeValue(vals.length ? vals : null);
+      <CardPageCollectionTagsPanel
+        instanceId={prop.id}
+        collections={collections}
+        selectedCollectionIds={ids}
+        pickerExcludeIds={exclude}
+        canEdit
+        hideCollectionDots={hideCollectionDots}
+        onAdd={(cid) => {
+          if (ids.includes(cid)) return;
+          onChangeValue([...ids, cid]);
         }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        onRemove={(cid) => {
+          const next = ids.filter((x) => x !== cid);
+          onChangeValue(next.length ? next : null);
         }}
-      />
-    );
-  }
-
-  if (prop.type === "select") {
-    return (
-      <SelectPropEditor
-        prop={prop}
-        onChangeValue={onChangeValue}
-        onChangeOptions={onChangeOptions}
+        addInputPlaceholder={ui.cardCollectionTagInputPlaceholder}
+        dropdownEmptyText={ui.cardCollectionTagDropdownEmpty}
+        dropdownAriaLabel={ui.cardCollectionTagDropdownAria}
+        removePillAriaLabel={ui.propCollectionLinkRemoveAria}
+        unknownLabel={ui.propUnknownCollection}
+        chipShape="rect"
       />
     );
   }
 
   if (prop.type === "date") {
     return (
-      <input
-        type="date"
-        className="card-page__prop-input"
-        value={typeof prop.value === "string" ? prop.value : ""}
-        onChange={(e) => onChangeValue(e.target.value || null)}
-      />
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        <input
+          type="date"
+          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+          value={typeof prop.value === "string" ? prop.value : ""}
+          onChange={(e) => onChangeValue(e.target.value || null)}
+        />
+      </div>
     );
   }
 
   if (prop.type === "number") {
     return (
-      <input
-        type="number"
-        className="card-page__prop-input"
-        placeholder="—"
-        defaultValue={typeof prop.value === "number" ? prop.value : ""}
-        onBlur={(e) => {
-          const v = e.target.value;
-          onChangeValue(v === "" ? null : Number(v));
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-      />
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        <input
+          type="number"
+          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+          placeholder="—"
+          defaultValue={typeof prop.value === "number" ? prop.value : ""}
+          onBlur={(e) => {
+            const v = e.target.value;
+            onChangeValue(v === "" ? null : Number(v));
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </div>
     );
   }
 
@@ -474,45 +530,49 @@ function PropValueEditor({
     const strVal = typeof prop.value === "string" ? prop.value : "";
     const openHref = safeHttpHrefFromPropValue(strVal);
     return (
-      <div className="card-page__prop-url-edit-row">
-        <input
-          type="url"
-          className="card-page__prop-input"
-          placeholder="https://…"
-          defaultValue={strVal}
-          onBlur={(e) => onChangeValue(e.target.value || null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-        />
-        {openHref ? (
-          <a
-            className="card-page__prop-url-external"
-            href={openHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={ui.uiOpenInNewWindow}
-            aria-label={ui.uiOpenInNewWindow}
-            onClick={(e) => e.stopPropagation()}
-          >
-            ↗
-          </a>
-        ) : null}
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        <div className="card-page__prop-url-edit-row card-page__prop-url-edit-row--tags-plain">
+          <input
+            type="url"
+            className="card-page__tags-add-input card-page__tags-add-input--url-field"
+            placeholder="https://…"
+            defaultValue={strVal}
+            onBlur={(e) => onChangeValue(e.target.value || null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
+          {openHref ? (
+            <a
+              className="card-page__prop-url-external"
+              href={openHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={ui.uiOpenInNewWindow}
+              aria-label={ui.uiOpenInNewWindow}
+              onClick={(e) => e.stopPropagation()}
+            >
+              ↗
+            </a>
+          ) : null}
+        </div>
       </div>
     );
   }
 
   return (
-    <input
-      type="text"
-      className="card-page__prop-input"
-      placeholder="—"
-      defaultValue={typeof prop.value === "string" ? prop.value : ""}
-      onBlur={(e) => onChangeValue(e.target.value || null)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-    />
+    <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+      <input
+        type="text"
+        className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+        placeholder="—"
+        defaultValue={typeof prop.value === "string" ? prop.value : ""}
+        onBlur={(e) => onChangeValue(e.target.value || null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+      />
+    </div>
   );
 }
 
@@ -527,12 +587,13 @@ export function CardPageView({
   setCardTags,
   setCardCustomProps,
   setReminderPicker,
-  openAddToCollectionPicker,
   setRelatedPanel,
   uploadFilesToCard,
   removeCardMediaItem,
   onRemoveCardFromCollection,
   setCardMediaCoverItem,
+  hideCollectionDots = false,
+  onAddCardPlacement,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
   const ui = useAppChrome();
@@ -601,12 +662,23 @@ export function CardPageView({
     try { localStorage.setItem(PROPS_WIDTH_KEY, String(next)); } catch { /* ignore */ }
   }, []);
 
-  const customProps = card.customProps ?? [];
+  const customPropsKey = useMemo(
+    () => JSON.stringify(card.customProps ?? []),
+    [card.customProps]
+  );
+  const customProps = useMemo(
+    () => migrateCustomPropsList(card.customProps ?? []),
+    [customPropsKey]
+  );
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   /** 侧栏不展示「未归类」；详情里也不出 chip，避免与真实用户合集并列造成困惑 */
   const colIds = [
     ...collectionIdsContainingCardId(collections, card.id),
   ].filter((id) => id !== LOOSE_NOTES_COLLECTION_ID);
+  const placementPickerExclude = useMemo(
+    () => collectionIdsContainingCardId(collections, card.id),
+    [collections, card.id]
+  );
   const tagLibrary = useMemo(
     () => collectAllTagsFromCollections(collections),
     [collections]
@@ -1060,8 +1132,15 @@ export function CardPageView({
     };
   }, [attachMenu]);
 
+  useEffect(() => {
+    const raw = card.customProps ?? [];
+    const normalized = migrateCustomPropsList(raw);
+    if (JSON.stringify(raw) === JSON.stringify(normalized)) return;
+    setCardCustomProps(card.id, normalized);
+  }, [card.id, customPropsKey, setCardCustomProps]);
+
   function updateCustomProps(next: CardProperty[]) {
-    setCardCustomProps(card.id, next);
+    setCardCustomProps(card.id, migrateCustomPropsList(next));
   }
 
   function addProperty(type: CardPropertyType) {
@@ -1091,125 +1170,104 @@ export function CardPageView({
             </div>
           </div>
 
-          <div className="card-page__prop-row">
+          <div className="card-page__prop-row card-page__prop-row--tags">
             <span className="card-page__prop-label">提醒</span>
             <div className="card-page__prop-content">
-              {hasReminder ? (
-                <button
-                  type="button"
-                  className="card-page__prop-link"
-                  onClick={() =>
-                    setReminderPicker({ kind: "card", colId, cardId: card.id })
-                  }
-                >
-                  {card.reminderOn}
-                  {card.reminderTime ? ` ${card.reminderTime}` : ""}
-                  {card.reminderNote ? ` · ${card.reminderNote}` : ""}
-                </button>
-              ) : canEdit ? (
-                <button
-                  type="button"
-                  className="card-page__prop-link card-page__prop-link--placeholder"
-                  onClick={() =>
-                    setReminderPicker({ kind: "card", colId, cardId: card.id })
-                  }
-                >
-                  添加提醒…
-                </button>
-              ) : (
-                <span className="card-page__prop-empty">—</span>
-              )}
-            </div>
-          </div>
-
-          <div className="card-page__prop-row">
-            <span className="card-page__prop-label">合集</span>
-            <div className="card-page__prop-content card-page__prop-content--row">
-              {colIds.map((id) => {
-                const pathLabel = collectionPathLabel(collections, id);
-                const showRemove = Boolean(
-                  canEdit && onRemoveCardFromCollection
-                );
-                return (
-                  <span
-                    key={id}
-                    className={`card-page__prop-chip card-page__prop-chip--col${
-                      showRemove ? " card-page__prop-chip--removable" : ""
-                    }`}
+              <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+                {hasReminder ? (
+                  <button
+                    type="button"
+                    className="card-page__tags-hit-btn"
+                    onClick={() =>
+                      setReminderPicker({ kind: "card", colId, cardId: card.id })
+                    }
                   >
-                    <span
-                      className="card-page__prop-chip-col-text"
-                      title={pathLabel}
-                    >
-                      {pathLabel}
-                    </span>
-                    {showRemove ? (
-                      <button
-                        type="button"
-                        className="card-page__tags-pill-remove"
-                        aria-label={ui.cardRemoveFromCollectionChipAria(
-                          pathLabel
-                        )}
-                        onClick={() => onRemoveCardFromCollection?.(id)}
-                      >
-                        ×
-                      </button>
-                    ) : null}
+                    {card.reminderOn}
+                    {card.reminderTime ? ` ${card.reminderTime}` : ""}
+                    {card.reminderNote ? ` · ${card.reminderNote}` : ""}
+                  </button>
+                ) : canEdit ? (
+                  <button
+                    type="button"
+                    className="card-page__tags-hit-btn card-page__tags-hit-btn--placeholder"
+                    onClick={() =>
+                      setReminderPicker({ kind: "card", colId, cardId: card.id })
+                    }
+                  >
+                    添加提醒…
+                  </button>
+                ) : (
+                  <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+                    —
                   </span>
-                );
-              })}
-              {canEdit && (
-                <button
-                  type="button"
-                  className="card-page__prop-link card-page__prop-link--add"
-                  onClick={() =>
-                    openAddToCollectionPicker(colId, card.id)
-                  }
-                >
-                  + 添加至合集
-                </button>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="card-page__prop-row">
+          <div className="card-page__prop-row card-page__prop-row--tags">
+            <span className="card-page__prop-label">合集</span>
+            <div className="card-page__prop-content">
+              <CardPageCollectionTagsPanel
+                instanceId={`${card.id}-placement`}
+                collections={collections}
+                selectedCollectionIds={colIds}
+                pickerExcludeIds={placementPickerExclude}
+                canEdit={Boolean(canEdit && onRemoveCardFromCollection)}
+                hideCollectionDots={hideCollectionDots}
+                onAdd={(targetColId) => void onAddCardPlacement?.(targetColId)}
+                onRemove={(placementColId) =>
+                  onRemoveCardFromCollection?.(placementColId)
+                }
+                addInputPlaceholder={ui.cardCollectionTagInputPlaceholder}
+                dropdownEmptyText={ui.cardCollectionTagDropdownEmpty}
+                dropdownAriaLabel={ui.cardCollectionTagDropdownAria}
+                removePillAriaLabel={ui.cardRemoveFromCollectionChipAria}
+                unknownLabel={ui.propUnknownCollection}
+                chipShape="rect"
+              />
+            </div>
+          </div>
+
+          <div className="card-page__prop-row card-page__prop-row--tags">
             <span className="card-page__prop-label">相关笔记</span>
             <div className="card-page__prop-content">
-              {relatedCount > 0 ? (
-                <button
-                  type="button"
-                  className="card-page__prop-link"
-                  onClick={() =>
-                    setRelatedPanel({ colId, cardId: card.id })
-                  }
-                >
-                  {relatedCount} 条相关
-                </button>
-              ) : canEdit ? (
-                <button
-                  type="button"
-                  className="card-page__prop-link card-page__prop-link--placeholder"
-                  onClick={() =>
-                    setRelatedPanel({ colId, cardId: card.id })
-                  }
-                >
-                  添加关联…
-                </button>
-              ) : (
-                <span className="card-page__prop-empty">—</span>
-              )}
+              <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+                {relatedCount > 0 ? (
+                  <button
+                    type="button"
+                    className="card-page__tags-hit-btn"
+                    onClick={() =>
+                      setRelatedPanel({ colId, cardId: card.id })
+                    }
+                  >
+                    {relatedCount} 条相关
+                  </button>
+                ) : canEdit ? (
+                  <button
+                    type="button"
+                    className="card-page__tags-hit-btn card-page__tags-hit-btn--placeholder"
+                    onClick={() =>
+                      setRelatedPanel({ colId, cardId: card.id })
+                    }
+                  >
+                    添加关联…
+                  </button>
+                ) : (
+                  <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+                    —
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           {customProps.map((prop) => (
             <div
               key={prop.id}
-              className="card-page__prop-row card-page__prop-row--custom"
+              className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
             >
               <div className="card-page__prop-label-wrap">
-                <span className="card-page__prop-type-icon">
-                  {PROP_TYPE_ICONS[prop.type]}
-                </span>
                 {canEdit ? (
                   <input
                     type="text"
@@ -1236,6 +1294,8 @@ export function CardPageView({
                 <PropValueEditor
                   prop={prop}
                   canEdit={canEdit}
+                  collections={collections}
+                  hideCollectionDots={hideCollectionDots}
                   onChangeValue={(v) =>
                     updateCustomProps(
                       customProps.map((p) =>
@@ -1287,9 +1347,6 @@ export function CardPageView({
                       className="card-page__prop-type-option"
                       onClick={() => addProperty(type)}
                     >
-                      <span className="card-page__prop-type-icon">
-                        {PROP_TYPE_ICONS[type]}
-                      </span>
                       {PROP_TYPE_LABELS[type]}
                     </button>
                   ))}

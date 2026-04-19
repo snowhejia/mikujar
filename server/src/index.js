@@ -80,6 +80,7 @@ import {
   listCardAttachmentsPage,
   attachmentStorageBytesByUserId,
   queryCardGraph,
+  createFileCardForNoteMedia,
 } from "./storage-pg.js";
 import {
   broadcastCollectionsChanged,
@@ -1163,6 +1164,27 @@ app.post(
       console.error(e);
       const status = e.message?.includes("不存在") ? 404 : 400;
       res.status(status).json({ error: e.message || "添加失败" });
+    }
+  }
+);
+
+/** POST /api/cards/:noteCardId/file-object — 由笔记附件元数据创建「文件」对象卡并建 attachment 双向边 */
+app.post(
+  "/api/cards/:noteCardId/file-object",
+  collectionsWriterMw,
+  async (req, res) => {
+    try {
+      const out = await createFileCardForNoteMedia(
+        getUserId(req),
+        req.params.noteCardId,
+        req.body ?? {}
+      );
+      notifyCollectionsSync(req);
+      res.status(201).json(out);
+    } catch (e) {
+      console.error(e);
+      const status = e.message?.includes("不存在") ? 404 : 400;
+      res.status(status).json({ error: e.message || "创建失败" });
     }
   }
 );

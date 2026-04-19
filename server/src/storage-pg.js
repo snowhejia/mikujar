@@ -97,7 +97,7 @@ async function loadRelatedRefsMapFromLinks(userId, cardIds) {
       `SELECT l.from_card_id, l.to_card_id
        FROM card_links l
        INNER JOIN cards fr ON fr.id = l.from_card_id AND fr.trashed_at IS NULL
-       WHERE l.from_card_id = ANY($1) AND l.link_type = 'related'
+       WHERE l.from_card_id = ANY($1) AND l.link_type IN ('related', 'attachment')
          AND fr.user_id IS NULL`,
       [unique]
     );
@@ -106,7 +106,7 @@ async function loadRelatedRefsMapFromLinks(userId, cardIds) {
       `SELECT l.from_card_id, l.to_card_id
        FROM card_links l
        INNER JOIN cards fr ON fr.id = l.from_card_id AND fr.trashed_at IS NULL
-       WHERE l.from_card_id = ANY($1) AND l.link_type = 'related'
+       WHERE l.from_card_id = ANY($1) AND l.link_type IN ('related', 'attachment')
          AND (fr.user_id = $2 OR fr.user_id IS NULL)`,
       [unique, userId]
     );
@@ -241,7 +241,7 @@ export async function queryCardGraph(userId, rootCardId, opts = {}) {
   const linkTypes =
     Array.isArray(opts.linkTypes) && opts.linkTypes.length > 0
       ? opts.linkTypes
-      : ["related"];
+      : ["related", "attachment"];
 
   const { sql: uidSql, params: uidParams } = cardOwnershipCondition(userId, 2);
   const rootOk = await query(
@@ -699,7 +699,7 @@ export async function createCollection(userId, data) {
 }
 
 /**
- * 更新合集元数据（name / dotColor / parentId / sortOrder）。
+ * 更新合集元数据（name / dotColor / parentId / sortOrder / 类别与 schema）。
  * @param {string|null} userId
  * @param {string} collectionId
  * @param {object} patch
@@ -729,6 +729,30 @@ export async function updateCollection(userId, collectionId, patch) {
     fields.push(`hint = $${i++}`);
     params.push(patch.hint);
   }
+  if (typeof patch.isCategory === "boolean") {
+    fields.push(`is_category = $${i++}`);
+    params.push(patch.isCategory);
+  }
+  if ("cardSchema" in patch) {
+    fields.push(`card_schema = $${i++}::jsonb`);
+    const v = patch.cardSchema;
+    params.push(
+      v === null || v === undefined
+        ? "{}"
+        : typeof v === "string"
+          ? v
+          : JSON.stringify(v)
+    );
+  }
+  if ("presetTypeId" in patch) {
+    fields.push(`preset_type_id = $${i++}`);
+    const v = patch.presetTypeId;
+    params.push(
+      v === null || v === undefined || v === ""
+        ? null
+        : String(v).trim() || null
+    );
+  }
 
   if (fields.length === 0) throw new Error("未提供任何可更新字段");
 
@@ -738,7 +762,8 @@ export async function updateCollection(userId, collectionId, patch) {
   const res = await query(
     `UPDATE collections SET ${fields.join(", ")}
      WHERE id = $${i} AND ${uidSql}
-     RETURNING id, name, dot_color, parent_id, sort_order, hint`,
+     RETURNING id, name, dot_color, parent_id, sort_order, hint,
+               is_category, card_schema, preset_type_id`,
     [...params, ...uidParams]
   );
   if (res.rowCount === 0) throw new Error("合集不存在或无权限");
@@ -970,6 +995,101 @@ export async function createCard(userId, collectionId, card) {
       ? { customProps }
       : {}),
   };
+}
+
+/**
+ * 由笔记上的单个附件元数据创建「文件」对象卡，并与笔记建双向 attachment 边。
+ * @param {string|null} userId
+ * @param {string} noteCardId
+ * @param {{ media: object, placementCollectionId: string }} body
+ * @returns {{ fileCardId: string, noteCardId: string }}
+ */
+export async function createFileCardForNoteMedia(userId, noteCardId, body) {
+  const placementCollectionId =
+    typeof body.placementCollectionId === "string"
+      ? body.placementCollectionId.trim()
+      : "";
+  const raw = body.media;
+  if (!placementCollectionId || !raw || typeof raw !== "object") {
+    throw new Error("缺少 placementCollectionId 或 media");
+  }
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  if (!url) throw new Error("media.url 为必填");
+
+  const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 2);
+  const noteRow = await query(
+    `SELECT id, user_id FROM cards WHERE id = $1 AND (${cOwnSql}) AND trashed_at IS NULL`,
+    [noteCardId, ...cOwnParams]
+  );
+  if (noteRow.rowCount === 0) throw new Error("笔记不存在或无权限");
+
+  const plCheck = await query(
+    `SELECT 1 FROM card_placements WHERE card_id = $1 AND collection_id = $2`,
+    [noteCardId, placementCollectionId]
+  );
+  if (plCheck.rowCount === 0) {
+    throw new Error("该笔记不在指定合集中");
+  }
+
+  const uid = noteRow.rows[0].user_id;
+
+  const now = new Date();
+  const minutesOfDay = now.getHours() * 60 + now.getMinutes();
+  const y = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, "0");
+  const da = String(now.getDate()).padStart(2, "0");
+  const day = `${y}-${mo}-${da}`;
+  const newId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const kind =
+    raw.kind === "image" ||
+    raw.kind === "video" ||
+    raw.kind === "audio" ||
+    raw.kind === "file"
+      ? raw.kind
+      : "file";
+  /** @type {Record<string, unknown>} */
+  const mediaItem = {
+    url,
+    kind,
+  };
+  if (typeof raw.name === "string" && raw.name.trim())
+    mediaItem.name = raw.name.trim();
+  if (typeof raw.coverUrl === "string" && raw.coverUrl.trim())
+    mediaItem.coverUrl = raw.coverUrl.trim();
+  if (typeof raw.thumbnailUrl === "string" && raw.thumbnailUrl.trim())
+    mediaItem.thumbnailUrl = raw.thumbnailUrl.trim();
+  if (typeof raw.sizeBytes === "number" && Number.isFinite(raw.sizeBytes))
+    mediaItem.sizeBytes = raw.sizeBytes;
+  if (typeof raw.durationSec === "number" && Number.isFinite(raw.durationSec))
+    mediaItem.durationSec = raw.durationSec;
+
+  await createCard(userId, placementCollectionId, {
+    id: newId,
+    text: "",
+    minutesOfDay,
+    addedOn: day,
+    media: [mediaItem],
+    tags: [],
+    relatedRefs: [],
+    objectKind: "file",
+    insertAtStart: false,
+  });
+
+  await query(
+    `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+     VALUES ($1, $2, $3, 'attachment')
+     ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+    [uid, noteCardId, newId]
+  );
+  await query(
+    `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+     VALUES ($1, $2, $3, 'attachment')
+     ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+    [uid, newId, noteCardId]
+  );
+
+  return { fileCardId: newId, noteCardId };
 }
 
 /**

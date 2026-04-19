@@ -17,7 +17,7 @@ function undirectedPairKey(a: string, b: string): string {
   return a < b ? `${a}\n${b}` : `${b}\n${a}`;
 }
 
-/** 从全库 relatedRefs 收集无向连接边（字典序稳定朝向） */
+/** 从全库 relatedRefs 收集无向连接边（含 related 与 attachment；字典序稳定朝向） */
 export function collectConnectionEdges(cols: Collection[]): ConnectionEdge[] {
   const raw: ConnectionEdge[] = [];
   walkCollections(cols, (fromCol) => {

@@ -1,4 +1,9 @@
-import type { Collection, NoteCard } from "../types";
+import type {
+  Collection,
+  CollectionCardSchema,
+  NoteCard,
+  NoteMediaItem,
+} from "../types";
 import { getAdminToken } from "../auth/token";
 import { apiBase, apiFetchInit } from "./apiBase";
 
@@ -95,12 +100,19 @@ export async function createCollectionApi(data: {
   }
 }
 
-/** 更新合集元数据（name / dotColor / hint / parentId / sortOrder）；返回是否成功 */
+/** 更新合集元数据（含类别合集与 card_schema）；返回是否成功 */
 export async function updateCollectionApi(
   id: string,
-  patch: Partial<Pick<Collection, "name" | "dotColor" | "hint">> & {
+  patch: Partial<
+    Pick<
+      Collection,
+      "name" | "dotColor" | "hint" | "isCategory" | "presetTypeId"
+    >
+  > & {
     parentId?: string | null;
     sortOrder?: number;
+    /** 传 null 可清空为 {} */
+    cardSchema?: CollectionCardSchema | null;
   }
 ): Promise<boolean> {
   const base = apiBase();
@@ -264,6 +276,28 @@ export type CardRemotePatch = Partial<
   collectionId?: string;
   sortOrder?: number;
 };
+
+/** 由笔记上的单个附件元数据创建「文件」对象卡，并建 attachment 双向边 */
+export async function createFileCardForNoteMediaApi(
+  noteCardId: string,
+  body: { placementCollectionId: string; media: NoteMediaItem }
+): Promise<{ fileCardId: string; noteCardId: string } | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/cards/${encodeURIComponent(noteCardId)}/file-object`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify(body),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as { fileCardId: string; noteCardId: string };
+  } catch {
+    return null;
+  }
+}
 
 /** 更新卡片任意字段子集；返回是否成功 */
 export async function updateCardApi(

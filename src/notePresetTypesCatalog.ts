@@ -1,6 +1,6 @@
 /**
  * 笔记设置「对象类型」目录。
- * 「类型」含：笔记、文件、主题、任务、网页、其他 —— 子类型挂在对应父级下；无法归类的并入「其他」。
+ * 「类型」含：笔记、文件、主题、任务、网页、其他；子类型归属父级，无法归类的预设并入「其他」子类型。
  */
 
 export type PresetObjectTypeItem = {
@@ -37,12 +37,11 @@ function subhead(
   return { kind: "subhead", id, nameZh, nameEn };
 }
 
-/** 「类型」下一级：父类型 + 子类型（无子类型时 UI 出一张父级卡） */
+/** 类型分组：顶层类型一张卡 + 其下子类型列表（子类型为空则仅顶层卡，无下方 section） */
 export type PresetTypeGroup = {
   baseId: string;
   baseLabelZh: string;
   baseLabelEn: string;
-  /** 无 children 时用于单卡展示 */
   baseEmoji: string;
   baseTint: string;
   children: PresetObjectTypeItem[];
@@ -332,16 +331,13 @@ export const PRESET_OBJECT_TYPES_RECOMMENDED: PresetObjectRow[] = [
   }),
 ];
 
-/** 无子类型时，用父级自身作为一张类型卡 */
-export function presetTypeGroupCards(group: PresetTypeGroup): PresetObjectTypeItem[] {
-  if (group.children.length > 0) return group.children;
-  return [
-    {
-      id: `${group.baseId}__root`,
-      nameZh: group.baseLabelZh,
-      nameEn: group.baseLabelEn,
-      emoji: group.baseEmoji,
-      tint: group.baseTint,
-    },
-  ];
+/** 顶层「类型」网格：每个父类型一张卡（与下方子类型 section 对应） */
+export function presetTypeParentCard(group: PresetTypeGroup): PresetObjectTypeItem {
+  return {
+    id: group.baseId,
+    nameZh: group.baseLabelZh,
+    nameEn: group.baseLabelEn,
+    emoji: group.baseEmoji,
+    tint: group.baseTint,
+  };
 }

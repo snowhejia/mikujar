@@ -217,7 +217,7 @@ const zh: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "对象类型",
   noteSettingsObjectTypesTitle: "对象类型",
   noteSettingsObjectTypesLead:
-    "「类型」含笔记、文件、主题、任务、网页、其他；每类下为子类型，无法归入子类的预设并入「其他」。推荐预设可与字段模板、图谱逐步绑定。",
+    "上方为六个「类型」卡（可扩展）；其下按类型分块展示子类型。无法归入子类的预设并入「其他」。推荐预设可与字段模板、图谱逐步绑定。",
   noteSettingsObjectTypesSectionTypes: "类型",
   noteSettingsObjectTypesTierRecommended: "推荐预设",
   noteSettingsPresetComingSoon: "即将推出",
@@ -354,7 +354,7 @@ const en: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "Object types",
   noteSettingsObjectTypesTitle: "Object types",
   noteSettingsObjectTypesLead:
-    "Types include Note, File, Topic, Task, Web, and Other — each lists subtypes; items that don’t fit go under Other. Recommended presets can link to schemas and the graph later.",
+    "The grid shows six type cards (extensible); below, subtypes are grouped under each parent. Items that don’t fit go under Other. Recommended presets can link to schemas later.",
   noteSettingsObjectTypesSectionTypes: "Types",
   noteSettingsObjectTypesTierRecommended: "Recommended presets",
   noteSettingsPresetComingSoon: "Coming soon",

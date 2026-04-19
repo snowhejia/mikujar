@@ -7583,17 +7583,22 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
-.note-settings-modal__type-stack {
+/** 顶层「类型」六格；与下方子类型区分开 */
+.note-settings-modal__type-root-grid {
+  margin-bottom: 1.15rem;
+}
+
+.note-settings-modal__subtype-stack {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-.note-settings-modal__type-group {
-  margin-top: 0.85rem;
+.note-settings-modal__subtype-stack .note-settings-modal__type-group {
+  margin-top: 1rem;
 }
 
-.note-settings-modal__type-group:first-child {
+.note-settings-modal__subtype-stack .note-settings-modal__type-group:first-child {
   margin-top: 0.35rem;
 }
 

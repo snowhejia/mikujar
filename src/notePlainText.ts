@@ -1,5 +1,6 @@
 import type { NoteCard } from "./types";
 import { isClipPresetObjectKind } from "./notePresetTypesCatalog";
+import { isFileCard } from "./appkit/collectionModel";
 
 /** 从笔记 HTML 正文得到纯文本（供 AI、摘要等） */
 export function plainTextFromNoteHtml(html: string): string {
@@ -34,6 +35,17 @@ export function readClipTitleFromCustomProps(card: NoteCard): string {
   return "";
 }
 
+/** 文件卡「标题」属性（sf-file-title） */
+export function readFileTitleFromCustomProps(card: NoteCard): string {
+  for (const p of card.customProps ?? []) {
+    if (p.id === "sf-file-title" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
 export function cardHeadlinePlain(card: NoteCard): string {
   if ((card.objectKind ?? "note") === "person") {
     const n = readPersonNameFromCustomProps(card);
@@ -41,6 +53,10 @@ export function cardHeadlinePlain(card: NoteCard): string {
   }
   if (isClipPresetObjectKind(card.objectKind)) {
     const t = readClipTitleFromCustomProps(card);
+    if (t) return t.slice(0, 160);
+  }
+  if (isFileCard(card)) {
+    const t = readFileTitleFromCustomProps(card);
     if (t) return t.slice(0, 160);
   }
   const plain = plainTextFromNoteHtml(card.text || "");

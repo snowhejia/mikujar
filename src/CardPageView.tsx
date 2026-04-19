@@ -35,7 +35,10 @@ import type {
   NoteMediaItem,
   SchemaField,
 } from "./types";
-import { cardHeadlinePlain } from "./notePlainText";
+import {
+  cardHeadlinePlain,
+  readFileTitleFromCustomProps,
+} from "./notePlainText";
 import { fetchCardEffectiveSchema } from "./api/collections";
 import type { ReminderPickerTarget } from "./ReminderPickerModal";
 import { useAppUiLang } from "./appUiLang";
@@ -768,11 +771,16 @@ export function CardPageView({
   );
   /** 顶栏：对象卡主标题（人物名 / 剪藏标题 / 主题实体首行等），普通笔记不占用避免与正文重复 */
   const cardPageHeaderTitle = useMemo(() => {
-    if (isFileCard(card)) return "";
+    if (isFileCard(card)) {
+      return readFileTitleFromCustomProps(card).trim();
+    }
     const kind = card.objectKind ?? "note";
     if (kind === "note") return "";
     return cardHeadlinePlain(card).trim();
   }, [card]);
+  const propsPanelInnerClassName =
+    "card-page__props-panel-inner" +
+    (isFileCard(card) ? " card-page__props-panel-inner--file-card" : "");
   /** 小屏：软键盘占位时隐藏底部附件栏（visualViewport 与 layout viewport 高度差） */
   const [compactKeyboardHidesAttachments, setCompactKeyboardHidesAttachments] =
     useState(false);
@@ -1322,6 +1330,23 @@ export function CardPageView({
     return () => { cancelled = true; };
   }, [card.id]);
 
+  /** 文件卡：服务端 schema 可能尚未含父级「标题」时，补一条便于展示与编辑 */
+  const schemaFieldsForPanel = useMemo(() => {
+    const fields = effectiveSchema?.fields ?? [];
+    if (!isFileCard(card)) return fields;
+    if (fields.some((f) => f.id === "sf-file-title")) return fields;
+    const titleName = lang === "en" ? "Title" : "标题";
+    const titleField: SchemaField = {
+      id: "sf-file-title",
+      name: titleName,
+      type: "text",
+      order: -1,
+    };
+    return [...fields, titleField].sort(
+      (a, b) => (a.order ?? 0) - (b.order ?? 0)
+    );
+  }, [effectiveSchema, card, lang]);
+
   function updateCustomProps(next: CardProperty[]) {
     setCardCustomProps(card.id, migrateCustomPropsList(next));
   }
@@ -1519,9 +1544,11 @@ export function CardPageView({
               </div>
             </div>
           </div>
+        </>
+        )}
 
-          {/* ── Schema 字段区：来自合集类型定义，优先展示 ── */}
-          {(effectiveSchema?.fields ?? []).map((field) => {
+        {/* ── Schema 字段区：来自合集类型定义，优先展示（含文件卡） ── */}
+        {schemaFieldsForPanel.map((field) => {
             const matchProp = customProps.find((p) => p.id === field.id);
             const editorProp = coerceSchemaPropForEditor(field, matchProp, card);
             const linkFillRef =
@@ -1615,10 +1642,10 @@ export function CardPageView({
           })}
 
           {/* ── 卡片自有属性区：id 不在 schema 字段集合内的额外属性 ── */}
-          {customProps
+        {customProps
             .filter(
               (prop) =>
-                !(effectiveSchema?.fields ?? []).some((f) => f.id === prop.id)
+                !schemaFieldsForPanel.some((f) => f.id === prop.id)
             )
             .map((prop) => (
             <div
@@ -1686,7 +1713,6 @@ export function CardPageView({
               )}
             </div>
           ))}
-        </>)}
       </>
     );
   }
@@ -2137,7 +2163,7 @@ export function CardPageView({
                 {renderPropertyTypePickerChrome()}
               </div>
               {propsPanelOpen ? (
-                <div className="card-page__props-panel-inner">
+                <div className={propsPanelInnerClassName}>
                   {renderPropsFieldsBlock()}
                 </div>
               ) : null}
@@ -2354,7 +2380,7 @@ export function CardPageView({
                 </div>
               </div>
               <div className="card-page__sheet-body card-page__sheet-body--props">
-                <div className="card-page__props-panel-inner">
+                <div className={propsPanelInnerClassName}>
                   {renderPropsFieldsBlock()}
                 </div>
               </div>

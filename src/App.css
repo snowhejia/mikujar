@@ -11026,6 +11026,55 @@ body.app--card-page-open .app {
   gap: 2px;
 }
 
+/* 文件卡属性：格式/大小/标题等侧栏字号略收紧，避免像主正文一样抢眼 */
+.card-page__props-panel-inner--file-card {
+  --card-page-prop-value-h: 34px;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-label {
+  font-size: 0.75rem;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-label-wrap {
+  min-height: var(--card-page-prop-value-h, 34px);
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-val-text,
+.card-page__props-panel-inner--file-card .card-page__prop-val-text--tags-panel,
+.card-page__props-panel-inner--file-card .card-page__prop-input,
+.card-page__props-panel-inner--file-card .card-page__prop-name-input,
+.card-page__props-panel-inner--file-card .card-page__prop-empty,
+.card-page__props-panel-inner--file-card .card-page__prop-empty--in-tags-panel,
+.card-page__props-panel-inner--file-card .card-page__tags-hit-btn,
+.card-page__props-panel-inner--file-card .card-page__tags-hit-btn--readonly-text,
+.card-page__props-panel-inner--file-card .card-page__prop-val-link,
+.card-page__props-panel-inner--file-card .card-page__prop-val-link--tags-panel,
+.card-page__props-panel-inner--file-card .card-page__file-meta-val {
+  font-size: 0.75rem;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-val-text--tags-panel {
+  min-height: var(--card-page-prop-value-h, 34px);
+  padding: 6px 8px;
+}
+
+.card-page__props-panel-inner--file-card .card-page__tags-panel {
+  min-height: var(--card-page-prop-value-h, 34px);
+}
+
+.card-page__file-meta-val {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.78);
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgba(55, 53, 47, 0.055);
+  word-break: break-word;
+}
+
 .card-page__toc {
   position: relative;
   display: flex;

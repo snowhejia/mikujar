@@ -146,6 +146,9 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
     baseLabelEn: "File",
     baseEmoji: "📎",
     baseTint: "rgba(55, 53, 47, 0.1)",
+    schemaFields: [
+      { id: "sf-file-title", name: "标题", type: "text", order: 0 },
+    ],
     children: [
       {
         id: "file_image",
@@ -154,8 +157,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         emoji: "🖼",
         tint: "rgba(236, 72, 153, 0.12)",
         schemaFields: [
-          { id: "sf-img-taken", name: "拍摄时间", type: "date", order: 0 },
-          { id: "sf-img-location", name: "地点", type: "text", order: 1 },
+          { id: "sf-img-taken", name: "拍摄时间", type: "date", order: 1 },
+          { id: "sf-img-location", name: "地点", type: "text", order: 2 },
         ],
       },
       {
@@ -165,8 +168,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         emoji: "🎬",
         tint: "rgba(124, 58, 237, 0.14)",
         schemaFields: [
-          { id: "sf-vid-duration-sec", name: "时长（秒）", type: "number", order: 0 },
-          { id: "sf-vid-resolution", name: "分辨率", type: "text", order: 1 },
+          { id: "sf-vid-duration-sec", name: "时长（秒）", type: "number", order: 1 },
+          { id: "sf-vid-resolution", name: "分辨率", type: "text", order: 2 },
         ],
       },
       {
@@ -176,8 +179,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         emoji: "🎵",
         tint: "rgba(14, 165, 233, 0.14)",
         schemaFields: [
-          { id: "sf-aud-duration-sec", name: "时长（秒）", type: "number", order: 0 },
-          { id: "sf-aud-artist", name: "表演者 / 播客", type: "text", order: 1 },
+          { id: "sf-aud-duration-sec", name: "时长（秒）", type: "number", order: 1 },
+          { id: "sf-aud-artist", name: "表演者 / 播客", type: "text", order: 2 },
         ],
       },
       {
@@ -187,8 +190,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         emoji: "📄",
         tint: "rgba(55, 53, 47, 0.08)",
         schemaFields: [
-          { id: "sf-doc-pages", name: "页数", type: "number", order: 0 },
-          { id: "sf-doc-author", name: "作者", type: "text", order: 1 },
+          { id: "sf-doc-pages", name: "页数", type: "number", order: 1 },
+          { id: "sf-doc-author", name: "作者", type: "text", order: 2 },
         ],
       },
       {
@@ -198,8 +201,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         emoji: "📦",
         tint: "rgba(55, 53, 47, 0.07)",
         schemaFields: [
-          { id: "sf-file-other-mime", name: "类型说明", type: "text", order: 0 },
-          { id: "sf-file-other-note", name: "备注", type: "text", order: 1 },
+          { id: "sf-file-other-mime", name: "类型说明", type: "text", order: 1 },
+          { id: "sf-file-other-note", name: "备注", type: "text", order: 2 },
         ],
       },
     ],

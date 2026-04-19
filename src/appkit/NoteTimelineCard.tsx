@@ -24,7 +24,7 @@ import {
   filesFromDataTransfer,
 } from "../filesFromDataTransfer";
 import type { Collection, NoteCard, NoteMediaItem } from "../types";
-import { findCollectionById } from "./collectionModel";
+import { findCollectionById, isFileCard } from "./collectionModel";
 import {
   isClipPresetObjectKind,
   isTopicGroupEntityObjectKind,
@@ -216,6 +216,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   /** 人物名或剪藏标题（sf-clip-title）；时间线在上方，本标题在第二行 */
   const entityTimelineTitle = useMemo(() => {
     const kind = card.objectKind ?? "note";
+    if (isFileCard(card)) return cardHeadlinePlain(card).trim();
     if (kind !== "person" && !isClipPresetObjectKind(kind)) return "";
     return cardHeadlinePlain(card).trim();
   }, [card]);
@@ -263,7 +264,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         title={c.uiViewDetail}
         aria-label={c.uiViewDetail}
         onClick={() =>
-          (card.objectKind ?? "note") === "file"
+          isFileCard(card)
             ? openCardPage(colId, card.id)
             : setDetailCard({
                 card,

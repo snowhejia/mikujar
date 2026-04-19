@@ -1,5 +1,5 @@
 import type { Collection, NoteCard, NoteMediaItem } from "../types";
-import { findCardInTree } from "./collectionModel";
+import { findCardInTree, isFileCard } from "./collectionModel";
 
 /** 该笔记的「相关」里是否已有同一 URL 的 file 对象卡（attachment 边会并入 relatedRefs） */
 export function noteHasLinkedFileCardForMedia(
@@ -21,7 +21,7 @@ export function findLinkedFileCardForNoteMedia(
   for (const ref of noteCard.relatedRefs ?? []) {
     const hit = findCardInTree(collections, ref.colId, ref.cardId);
     if (!hit) continue;
-    if ((hit.card.objectKind ?? "note") !== "file") continue;
+    if (!isFileCard(hit.card)) continue;
     const m0 = hit.card.media?.[0];
     if (m0?.url?.trim() === url) return { colId: hit.col.id, card: hit.card };
   }

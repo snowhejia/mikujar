@@ -165,6 +165,19 @@ export type ExtraModalChrome = {
     errors: number,
     backfillTitles: number
   ) => string;
+  /** 文件卡：正文首行或附件名 → 属性「标题」 */
+  noteSettingsMigrateFileTitlesTitle: string;
+  noteSettingsMigrateFileTitlesDesc: string;
+  noteSettingsMigrateFileTitlesBtn: string;
+  noteSettingsMigrateFileTitlesBusy: string;
+  noteSettingsMigrateFileTitlesNone: string;
+  noteSettingsMigrateFileTitlesConfirm: (n: number) => string;
+  noteSettingsMigrateFileTitlesResult: (
+    fileCards: number,
+    eligible: number,
+    updated: number,
+    failed: number
+  ) => string;
   /** 对象类型页标题栏右侧：添加自定义类型 */
   noteSettingsAddCustomType: string;
   /** 自定义对象类型弹窗 */
@@ -387,6 +400,17 @@ const zh: ExtraModalChrome = {
   ) =>
     `扫描 ${scanned} 张，已迁入 ${migrated} 张；未启用对应预设 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
     (backfillTitles > 0 ? ` 已从正文补全剪藏「标题」${backfillTitles} 张。` : ""),
+  noteSettingsMigrateFileTitlesTitle: "文件卡标题迁移",
+  noteSettingsMigrateFileTitlesDesc:
+    "对属性「标题」为空的文件卡：优先用正文第一行（例如以前的 ## 文件名）写入「标题」；正文没有可用文字时，再用首个附件的文件名。本地与云端均可执行；云端将逐张 PATCH 保存。",
+  noteSettingsMigrateFileTitlesBtn: "执行迁移",
+  noteSettingsMigrateFileTitlesBusy: "迁移中…",
+  noteSettingsMigrateFileTitlesNone:
+    "没有需要迁移的文件卡（均已填写标题，或正文与附件都无法推断标题）。",
+  noteSettingsMigrateFileTitlesConfirm: (n) =>
+    `将为 ${n} 张文件卡写入属性「标题」，是否继续？`,
+  noteSettingsMigrateFileTitlesResult: (fileCards, eligible, updated, failed) =>
+    `共 ${fileCards} 张文件卡，其中 ${eligible} 张待写入；已成功 ${updated} 张${failed > 0 ? `，失败 ${failed} 张` : ""}。`,
   noteSettingsAddCustomType: "添加自定义类型",
   noteSettingsCustomTypeTitleCreate: "新建对象类型",
   noteSettingsCustomTypeTitleEdit: "编辑对象类型与属性",
@@ -620,6 +644,17 @@ const en: ExtraModalChrome = {
     (backfillTitles > 0
       ? ` Filled missing Clip title from body for ${backfillTitles} card(s).`
       : ""),
+  noteSettingsMigrateFileTitlesTitle: "File cards: fill Title property",
+  noteSettingsMigrateFileTitlesDesc:
+    "For file cards with an empty Title property: use the first line of the body (e.g. a former ## heading), or if that’s empty, the first attachment’s file name. Works in local and cloud mode; cloud saves each card via PATCH.",
+  noteSettingsMigrateFileTitlesBtn: "Run migration",
+  noteSettingsMigrateFileTitlesBusy: "Migrating…",
+  noteSettingsMigrateFileTitlesNone:
+    "No file cards need migration (titles already set, or no title could be inferred).",
+  noteSettingsMigrateFileTitlesConfirm: (n) =>
+    `Fill the Title property on ${n} file card(s)?`,
+  noteSettingsMigrateFileTitlesResult: (fileCards, eligible, updated, failed) =>
+    `${fileCards} file card(s) total; ${eligible} to update. Updated ${updated}.${failed > 0 ? ` Failed: ${failed}.` : ""}`,
   noteSettingsAddCustomType: "Add custom type",
   noteSettingsCustomTypeTitleCreate: "New object type",
   noteSettingsCustomTypeTitleEdit: "Edit type & schema",

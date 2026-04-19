@@ -15,6 +15,41 @@ async function safeRollback(client) {
   }
 }
 
+function stripExtFilename(s) {
+  const t = typeof s === "string" ? s.trim() : "";
+  if (!t) return "";
+  const i = t.lastIndexOf(".");
+  if (i <= 0 || i >= t.length - 1) return t;
+  return t.slice(0, i);
+}
+
+/** @param {{ url?: string, name?: string }} mediaItem */
+function deriveFileCardTitleFromMediaItem(mediaItem) {
+  const name = typeof mediaItem.name === "string" ? mediaItem.name.trim() : "";
+  if (name) return stripExtFilename(name);
+  const url = typeof mediaItem.url === "string" ? mediaItem.url.trim() : "";
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const seg = parts[parts.length - 1] || "";
+    return stripExtFilename(decodeURIComponent(seg));
+  } catch {
+    const noQuery = url.split("?")[0] || "";
+    const parts = noQuery.split("/").filter(Boolean);
+    const seg = parts[parts.length - 1] || "";
+    return stripExtFilename(seg);
+  }
+}
+
+/** @param {string} kind */
+function objectKindForFileMediaKind(kind) {
+  if (kind === "image") return "file_image";
+  if (kind === "video") return "file_video";
+  if (kind === "audio") return "file_audio";
+  return "file_document";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 内部工具
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1088,7 +1123,7 @@ export async function createFileCardForNoteMedia(userId, noteCardId, body) {
        WHERE l.from_card_id = $1
          AND l.link_type = 'attachment'
          AND c.user_id = $2
-         AND c.object_kind = 'file'
+         AND c.object_kind LIKE 'file%'
          AND c.trashed_at IS NULL
          AND (c.media->0->>'url') = $3
        LIMIT 1`,
@@ -1107,6 +1142,18 @@ export async function createFileCardForNoteMedia(userId, noteCardId, body) {
     const da = String(now.getDate()).padStart(2, "0");
     const day = `${y}-${mo}-${da}`;
     const newId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const fileObjectKind = objectKindForFileMediaKind(kind);
+    const title = deriveFileCardTitleFromMediaItem(mediaItem);
+    const customProps = title
+      ? [
+          {
+            id: "sf-file-title",
+            name: "标题",
+            type: "text",
+            value: title,
+          },
+        ]
+      : [];
 
     await createCard(
       userId,
@@ -1119,7 +1166,8 @@ export async function createFileCardForNoteMedia(userId, noteCardId, body) {
         media: [mediaItem],
         tags: [],
         relatedRefs: [],
-        objectKind: "file",
+        objectKind: fileObjectKind,
+        customProps,
         insertAtStart: false,
       },
       client
@@ -2747,6 +2795,20 @@ export async function batchMigrateAttachmentsToFileCards(userId, opts) {
 
         const { addedOn, minutesOfDay } = nowDateParts();
         const newId = newCardId();
+        const titleFromMigrate =
+          typeof raw.name === "string" && raw.name.trim()
+            ? stripExtFilename(raw.name.trim())
+            : deriveFileCardTitleFromMediaItem(mediaItem);
+        const customPropsMigrate = titleFromMigrate
+          ? [
+              {
+                id: "sf-file-title",
+                name: "标题",
+                type: "text",
+                value: titleFromMigrate,
+              },
+            ]
+          : [];
 
         const client = await getClient();
         try {
@@ -2763,6 +2825,7 @@ export async function batchMigrateAttachmentsToFileCards(userId, opts) {
               tags: [],
               relatedRefs: [],
               media: [mediaItem],
+              customProps: customPropsMigrate,
               insertAtStart: false,
             },
             client

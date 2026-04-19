@@ -133,6 +133,15 @@ import type {
   UserNotePrefs,
 } from "./types";
 import { collectBlankCardsInTree } from "./blankCardUtils";
+import {
+  mapEveryCardInCollections,
+  mergeFileTitleIntoCustomProps,
+  migrationTitleCandidateForFileCard,
+} from "./migrateFileCardTitles";
+import {
+  deriveFileCardTitleFromMedia,
+  objectKindFromNoteMediaKind,
+} from "./fileCardTitle";
 import { loadLocalNotePrefs, saveLocalNotePrefs } from "./notePrefsStorage";
 import { migrateCollectionTree } from "./migrateCollections";
 import type { ParsedExportNote } from "./import/parseAppleNotesExport";
@@ -2215,13 +2224,26 @@ export default function App() {
           const minutesOfDay = now.getHours() * 60 + now.getMinutes();
           const day = localDateString(now);
           const mediaCopy: NoteMediaItem = { ...itemAgain };
+          const fileTitle = deriveFileCardTitleFromMedia(mediaCopy);
           const newFileCard: NoteCard = {
             id: fileCardId,
             text: "",
             minutesOfDay,
             addedOn: day,
-            objectKind: "file",
+            objectKind: objectKindFromNoteMediaKind(mediaCopy.kind),
             media: [mediaCopy],
+            ...(fileTitle
+              ? {
+                  customProps: [
+                    {
+                      id: "sf-file-title",
+                      name: "标题",
+                      type: "text",
+                      value: fileTitle,
+                    },
+                  ],
+                }
+              : {}),
           };
           flushSync(() => {
             setCollections((prev) => {
@@ -3036,6 +3058,59 @@ export default function App() {
     }
     window.alert(c.noteSettingsPurgeBlankDone(list.length));
   }, [deleteCard, c]);
+
+  const handleMigrateFileCardTitles = useCallback(async () => {
+    const roots = collectionsRef.current;
+    let fileCards = 0;
+    const pending: { card: NoteCard; title: string }[] = [];
+    walkCollections(roots, (col) => {
+      for (const card of col.cards) {
+        if (!isFileCard(card)) continue;
+        fileCards++;
+        const title = migrationTitleCandidateForFileCard(card);
+        if (title) pending.push({ card, title });
+      }
+    });
+    if (pending.length === 0) {
+      window.alert(c.noteSettingsMigrateFileTitlesNone);
+      return null;
+    }
+    if (!window.confirm(c.noteSettingsMigrateFileTitlesConfirm(pending.length))) {
+      return null;
+    }
+    let updated = 0;
+    let failed = 0;
+    if (dataMode === "remote") {
+      for (const { card, title } of pending) {
+        const customProps = mergeFileTitleIntoCustomProps(card, title);
+        const ok = await updateCardApi(card.id, { customProps });
+        if (ok) updated++;
+        else failed++;
+      }
+      await resyncRemoteCollectionsTree();
+    } else {
+      const idToTitle = new Map(
+        pending.map((p) => [p.card.id, p.title] as const)
+      );
+      setCollections((prev) =>
+        mapEveryCardInCollections(prev, (card) => {
+          const t = idToTitle.get(card.id);
+          if (!t) return card;
+          return {
+            ...card,
+            customProps: mergeFileTitleIntoCustomProps(card, t),
+          };
+        })
+      );
+      updated = pending.length;
+    }
+    return {
+      fileCards,
+      eligible: pending.length,
+      updated,
+      failed,
+    };
+  }, [dataMode, c, resyncRemoteCollectionsTree]);
 
   /** 与笔记详情页标签式「合集」栏相同的入树逻辑 */
   const executeAddCardPlacement = useCallback(
@@ -7052,7 +7127,7 @@ export default function App() {
                 onOpenTarget={(colId, cardId) => {
                   const hit = findCardInTree(collections, colId, cardId);
                   if (!hit) return;
-                  if ((hit.card.objectKind ?? "note") === "file") {
+                  if (isFileCard(hit.card)) {
                     setDetailCard(null);
                     setCardPageCard({
                       colId: hit.col.id,
@@ -7759,6 +7834,7 @@ export default function App() {
             onCollectionsChange={onNoteSettingsCollectionsChange}
             onPurgeBlankCards={handlePurgeBlankCards}
             onNotePrefsApplied={setUserNotePrefs}
+            onMigrateFileCardTitles={handleMigrateFileCardTitles}
           />
         </Suspense>
       ) : null}

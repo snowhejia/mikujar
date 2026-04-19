@@ -39,6 +39,19 @@ export function assertMediaKeyAllowedForUpload(key, userId) {
   }
 }
 
+/** 直传约定：`1739-xxxx…24hex`；外链/B 站等导入常为 `md5_115` 等，仍须在 media 前缀下且字符安全 */
+const CANONICAL_UPLOAD_STEM_RE = /^\d+-[a-f0-9]{24}$/i;
+
+/** @param {string} stem 不含扩展名的主文件名 */
+function isAllowedCosMediaFilenameStem(stem) {
+  const s = String(stem || "").trim();
+  if (!s || s.length > 240) return false;
+  if (s.includes("..") || s.includes("/") || s.includes("\\")) return false;
+  if (CANONICAL_UPLOAD_STEM_RE.test(s)) return true;
+  if (/^[a-zA-Z0-9._-]+$/.test(s) && s.length >= 4) return true;
+  return false;
+}
+
 /** 写入 COS/磁盘的封面上限；再大则尝试 sharp 压图，仍过大则跳过 */
 const MAX_EMBEDDED_COVER_BYTES = 512 * 1024;
 /** 允许尝试压缩的原始内嵌图上限（避免异常大图占满内存） */
@@ -1301,7 +1314,7 @@ export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
   if (dot < 1) throw new Error("无效的对象路径");
   const tokenPart = base.slice(0, dot);
   const ext = base.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     throw new Error("无效的对象路径");
   }
   const mimetype =
@@ -1344,7 +1357,7 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
   if (dot < 1) throw new Error("无效的对象路径");
   const tokenPart = base.slice(0, dot);
   const ext = base.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     throw new Error("无效的对象路径");
   }
   const mimetype =
@@ -1393,7 +1406,7 @@ export async function finalizePdfThumbnailAfterCosUpload(objectKey, userId) {
   if (dot < 1) throw new Error("无效的对象路径");
   const tokenPart = base.slice(0, dot);
   const ext = base.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     throw new Error("无效的对象路径");
   }
   if (ext !== "pdf") {
@@ -1431,7 +1444,7 @@ export async function finalizeImagePreviewAfterCosUpload(objectKey, userId) {
   if (dot < 1) throw new Error("无效的对象路径");
   const tokenPart = base.slice(0, dot);
   const ext = base.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     throw new Error("无效的对象路径");
   }
   const mimetype =
@@ -1479,7 +1492,7 @@ export async function generateVideoThumbnailForExistingCosKey(objectKey) {
   if (dot < 1) return { skipped: "bad_name" };
   const tokenPart = file.slice(0, dot);
   const ext = file.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     return { skipped: "bad_token" };
   }
   const mimetype =
@@ -1533,7 +1546,7 @@ export async function probeVideoOrAudioDurationFromCosKey(objectKey) {
   if (dot < 1) return { skipped: "bad_name" };
   const tokenPart = file.slice(0, dot);
   const ext = file.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     return { skipped: "bad_token" };
   }
   const mimetype =
@@ -1579,7 +1592,7 @@ export async function generateImagePreviewForExistingCosKey(objectKey) {
   if (dot < 1) return { skipped: "bad_name" };
   const tokenPart = file.slice(0, dot);
   const ext = file.slice(dot + 1).toLowerCase();
-  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) {
     return { skipped: "bad_token" };
   }
   const mimetype =

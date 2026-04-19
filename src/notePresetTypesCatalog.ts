@@ -1,6 +1,6 @@
 /**
  * 笔记设置「对象类型」目录。
- * 「类型」含：笔记、文件、主题、任务、网页、其他；子类型归属父级，无法归类的预设并入「其他」子类型。
+ * 「类型」平铺为独立顶层类型；有子类型的在下方分块展示，无子类型的仅占顶层一格。
  */
 
 export type PresetObjectTypeItem = {
@@ -47,9 +47,7 @@ export type PresetTypeGroup = {
   children: PresetObjectTypeItem[];
 };
 
-/**
- * 第一层：类型（六类）— 子类型与父级对应；其余归入「其他」
- */
+/** 顶层类型（平铺）+ 各类型下子类型 */
 export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
   {
     baseId: "note",
@@ -166,89 +164,88 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
     ],
   },
   {
-    baseId: "other",
-    baseLabelZh: "其他",
-    baseLabelEn: "Other",
-    baseEmoji: "📦",
-    baseTint: "rgba(55, 53, 47, 0.09)",
-    children: [
-      {
-        id: "quote",
-        nameZh: "摘抄",
-        nameEn: "Quote",
-        emoji: "❝",
-        tint: "rgba(239, 68, 68, 0.12)",
-      },
-      {
-        id: "habit_log",
-        nameZh: "习惯打卡",
-        nameEn: "Habit log",
-        emoji: "✅",
-        tint: "rgba(52, 211, 153, 0.14)",
-      },
-      {
-        id: "event",
-        nameZh: "事件",
-        nameEn: "Event",
-        emoji: "📌",
-        tint: "rgba(251, 191, 36, 0.16)",
-      },
-      {
-        id: "place",
-        nameZh: "地点",
-        nameEn: "Place",
-        emoji: "📍",
-        tint: "rgba(34, 197, 94, 0.12)",
-      },
-      {
-        id: "expense",
-        nameZh: "开支",
-        nameEn: "Expense",
-        emoji: "💳",
-        tint: "rgba(52, 211, 153, 0.12)",
-      },
-      {
-        id: "idea",
-        nameZh: "灵感",
-        nameEn: "Idea",
-        emoji: "💡",
-        tint: "rgba(250, 204, 21, 0.18)",
-      },
-      {
-        id: "journal",
-        nameZh: "日记",
-        nameEn: "Journal",
-        emoji: "📔",
-        tint: "rgba(180, 83, 9, 0.12)",
-      },
-      {
-        id: "account",
-        nameZh: "账户",
-        nameEn: "Account",
-        emoji: "🏦",
-        tint: "rgba(59, 130, 246, 0.12)",
-      },
-      {
-        id: "course",
-        nameZh: "课程",
-        nameEn: "Course",
-        emoji: "🎓",
-        tint: "rgba(99, 102, 241, 0.12)",
-      },
-      {
-        id: "tool",
-        nameZh: "工具",
-        nameEn: "Tool",
-        emoji: "🛠",
-        tint: "rgba(55, 53, 47, 0.1)",
-      },
-    ],
+    baseId: "quote",
+    baseLabelZh: "摘抄",
+    baseLabelEn: "Quote",
+    baseEmoji: "❝",
+    baseTint: "rgba(239, 68, 68, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "habit_log",
+    baseLabelZh: "习惯打卡",
+    baseLabelEn: "Habit log",
+    baseEmoji: "✅",
+    baseTint: "rgba(52, 211, 153, 0.14)",
+    children: [],
+  },
+  {
+    baseId: "event",
+    baseLabelZh: "事件",
+    baseLabelEn: "Event",
+    baseEmoji: "📌",
+    baseTint: "rgba(251, 191, 36, 0.16)",
+    children: [],
+  },
+  {
+    baseId: "place",
+    baseLabelZh: "地点",
+    baseLabelEn: "Place",
+    baseEmoji: "📍",
+    baseTint: "rgba(34, 197, 94, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "expense",
+    baseLabelZh: "开支",
+    baseLabelEn: "Expense",
+    baseEmoji: "💳",
+    baseTint: "rgba(52, 211, 153, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "idea",
+    baseLabelZh: "灵感",
+    baseLabelEn: "Idea",
+    baseEmoji: "💡",
+    baseTint: "rgba(250, 204, 21, 0.18)",
+    children: [],
+  },
+  {
+    baseId: "journal",
+    baseLabelZh: "日记",
+    baseLabelEn: "Journal",
+    baseEmoji: "📔",
+    baseTint: "rgba(180, 83, 9, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "account",
+    baseLabelZh: "账户",
+    baseLabelEn: "Account",
+    baseEmoji: "🏦",
+    baseTint: "rgba(59, 130, 246, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "course",
+    baseLabelZh: "课程",
+    baseLabelEn: "Course",
+    baseEmoji: "🎓",
+    baseTint: "rgba(99, 102, 241, 0.12)",
+    children: [],
+  },
+  {
+    baseId: "tool",
+    baseLabelZh: "工具",
+    baseLabelEn: "Tool",
+    baseEmoji: "🛠",
+    baseTint: "rgba(55, 53, 47, 0.1)",
+    children: [],
   },
 ];
 
-/**
- * 推荐预设（已从「类型」迁出的：链接→网页，任务/项目→任务，摘抄/习惯等→其他）
- */
+/** 推荐预设（人物、组织、作品、投稿等） */
 export const PRESET_OBJECT_TYPES_RECOMMENDED: PresetObjectRow[] = [
   item({
     id: "person",

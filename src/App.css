@@ -7602,13 +7602,17 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
-.note-settings-modal__preset-subhead--type-parent {
-  margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: rgba(55, 53, 47, 0.62);
+/** 子类型区块上方：与顶层同款的父类型卡 */
+.note-settings-modal__type-parent-display {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+.note-settings-modal__subtype-grid {
+  padding-left: 0.25rem;
+  border-left: 2px solid rgba(55, 53, 47, 0.08);
+  margin-left: 0.15rem;
 }
 
 .note-settings-modal__preset-grid .note-settings-modal__preset-subhead--span {

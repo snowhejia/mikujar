@@ -318,21 +318,26 @@ export function NoteSettingsModal({
             lang === "en" ? "Subtypes by type" : "各类子类型"
           }
         >
-          {PRESET_OBJECT_TYPES_GROUPS.map((group) =>
-            group.children.length === 0 ? null : (
+          {PRESET_OBJECT_TYPES_GROUPS.map((group) => {
+            if (group.children.length === 0) return null;
+            const parent = presetTypeParentCard(group);
+            return (
               <section
                 key={group.baseId}
                 className="note-settings-modal__type-group"
                 aria-labelledby={`note-settings-type-${group.baseId}`}
               >
-                <h4
-                  id={`note-settings-type-${group.baseId}`}
-                  className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--type-parent"
-                >
-                  {lang === "en" ? group.baseLabelEn : group.baseLabelZh}
-                </h4>
                 <div
-                  className="note-settings-modal__preset-grid"
+                  id={`note-settings-type-${group.baseId}`}
+                  className="note-settings-modal__type-parent-display"
+                >
+                  <PresetTypeCard
+                    item={parent}
+                    label={presetLabel(parent)}
+                  />
+                </div>
+                <div
+                  className="note-settings-modal__preset-grid note-settings-modal__subtype-grid"
                   role="list"
                   aria-label={
                     lang === "en"
@@ -347,8 +352,8 @@ export function NoteSettingsModal({
                   ))}
                 </div>
               </section>
-            )
-          )}
+            );
+          })}
         </div>
 
         <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">

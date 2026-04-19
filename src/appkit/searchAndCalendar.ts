@@ -1,7 +1,7 @@
 import { htmlToPlainText } from "../noteEditor/plainHtml";
 import type { Collection, NoteCard } from "../types";
 import { localDateString } from "./dateUtils";
-import { walkCollectionsWithPath } from "./collectionModel";
+import { walkCollectionsWithPath, isFileCard } from "./collectionModel";
 
 export function cardTextMatchesQuery(card: NoteCard, q: string): boolean {
   if (htmlToPlainText(card.text).toLowerCase().includes(q)) return true;
@@ -36,6 +36,7 @@ export function buildSearchResults(
       collectionMatches.push({ col, path });
     }
     for (const card of col.cards) {
+      if (isFileCard(card)) continue;
       if (cardTextMatchesQuery(card, q)) {
         cardHits.push({ col, path, card });
       }

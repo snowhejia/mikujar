@@ -52,6 +52,20 @@ export type AppChrome = {
   sidebarNotesSection: string;
   /** 侧栏「文件」分区（所有附件） */
   sidebarFilesSection: string;
+  /** 侧栏「主题」分区（对象类型 · 主题；仅当已启用人物预设时显示） */
+  sidebarTopicSection: string;
+  /** 侧栏「主题」下：人物类目（preset person） */
+  sidebarTopicPersonEntry: string;
+  /** 侧栏「主题」下人物子行列表无障碍标签 */
+  sidebarTopicSubtypeListAria: string;
+  /** 侧栏「剪藏」分区（启用剪藏预设时显示） */
+  sidebarClipSection: string;
+  /** 侧栏「剪藏」下子类型列表无障碍标签 */
+  sidebarClipSubtypeListAria: string;
+  /** 侧栏「文件」下：子类型列表（图片/视频…）无障碍标签 */
+  sidebarFileSubtypeListAria: string;
+  /** 侧栏「笔记」下笔记预设子类型（学习/灵感…）列表无障碍标签 */
+  sidebarNoteSubtypeListAria: string;
   allNotesEntry: string;
   titleAllNotes: string;
   /** 内部「未归类」合集展示名（侧栏不显示该合集） */
@@ -356,6 +370,13 @@ const zh: AppChrome = {
   sidebarFeaturesSection: "功能",
   sidebarNotesSection: "笔记",
   sidebarFilesSection: "文件",
+  sidebarTopicSection: "主题",
+  sidebarTopicPersonEntry: "人物",
+  sidebarTopicSubtypeListAria: "主题下的人物类目",
+  sidebarClipSection: "剪藏",
+  sidebarClipSubtypeListAria: "剪藏下的子类型",
+  sidebarFileSubtypeListAria: "文件子类型",
+  sidebarNoteSubtypeListAria: "笔记类型（学习、灵感等）",
   allNotesEntry: "全部笔记",
   titleAllNotes: "全部笔记",
   looseNotesCollectionName: "未归类笔记",
@@ -656,6 +677,13 @@ const en: AppChrome = {
   sidebarFeaturesSection: "Features",
   sidebarNotesSection: "Notes",
   sidebarFilesSection: "Files",
+  sidebarTopicSection: "Topics",
+  sidebarTopicPersonEntry: "People",
+  sidebarTopicSubtypeListAria: "People under Topics",
+  sidebarClipSection: "Clips",
+  sidebarClipSubtypeListAria: "Clip subtypes",
+  sidebarFileSubtypeListAria: "File subtypes",
+  sidebarNoteSubtypeListAria: "Note subtypes (study, ideas, …)",
   allNotesEntry: "All notes",
   titleAllNotes: "All Notes",
   looseNotesCollectionName: "Inbox",

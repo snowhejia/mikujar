@@ -41,6 +41,26 @@ export function isDocumentLikeAttachment(item: NoteMediaItem): boolean {
   return DOC_NAME_RE.test(pathTailLower(item.url));
 }
 
+/** 对象类型目录中「文件」子类型 id → 附件筛选键（侧栏快捷入口） */
+export function presetFileSubtypeIdToAttachmentFilterKey(
+  presetId: string
+): AttachmentUiCategory | null {
+  switch (presetId) {
+    case "file_image":
+      return "image";
+    case "file_video":
+      return "video";
+    case "file_audio":
+      return "audio";
+    case "file_document":
+      return "document";
+    case "file_other":
+      return "other";
+    default:
+      return null;
+  }
+}
+
 export function getAttachmentUiCategory(item: NoteMediaItem): AttachmentUiCategory {
   if (item.kind === "image") return "image";
   if (item.kind === "video") return "video";

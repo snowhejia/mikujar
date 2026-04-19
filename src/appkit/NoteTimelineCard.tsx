@@ -5,6 +5,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
   useCallback,
+  useMemo,
   useRef,
   useSyncExternalStore,
 } from "react";
@@ -24,6 +25,11 @@ import {
 } from "../filesFromDataTransfer";
 import type { Collection, NoteCard, NoteMediaItem } from "../types";
 import { findCollectionById } from "./collectionModel";
+import {
+  isClipPresetObjectKind,
+  isTopicGroupEntityObjectKind,
+} from "../notePresetTypesCatalog";
+import { cardHeadlinePlain } from "../notePlainText";
 import {
   NOTE_CARD_DRAG_MIME,
   NOTE_CARD_TEXT_PREFIX,
@@ -103,6 +109,8 @@ export type NoteTimelineCardProps = {
   onCreateFileCardFromAttachment?: (item: NoteMediaItem) => void;
   /** 若该附件已有对应文件卡，隐藏创建项 */
   attachmentHasLinkedFileCard?: (item: NoteMediaItem) => boolean;
+  /** 已有文件卡时点击直接打开卡片页 */
+  onOpenFileCard?: (item: NoteMediaItem) => void;
   setCardMediaCoverItem: (
     colId: string,
     cardId: string,
@@ -152,6 +160,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     removeCardMediaItem,
     onCreateFileCardFromAttachment,
     attachmentHasLinkedFileCard,
+    onOpenFileCard,
     setCardMediaCoverItem,
     togglePin,
     removeCardFromCollection,
@@ -201,6 +210,13 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     cardDropMarker.colId === colId &&
     cardDropMarker.cardId === card.id;
 
+  /** 人物名或剪藏标题（sf-clip-title），与时间线首行样式一致 */
+  const entityTimelineTitle = useMemo(() => {
+    const kind = card.objectKind ?? "note";
+    if (kind !== "person" && !isClipPresetObjectKind(kind)) return "";
+    return cardHeadlinePlain(card).trim();
+  }, [card]);
+
   const mobileTextDblTapRef = useRef<{
     t: number;
     x: number;
@@ -236,6 +252,118 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     [foldTimelineReadOnly, colId, card.id, openCardPage]
   );
 
+  const toolbarActionsEl = (
+    <div className="card__toolbar-actions">
+      <button
+        type="button"
+        className="card__icon-btn card__detail-btn"
+        title={c.uiViewDetail}
+        aria-label={c.uiViewDetail}
+        onClick={() =>
+          (card.objectKind ?? "note") === "file"
+            ? openCardPage(colId, card.id)
+            : setDetailCard({
+                card,
+                colId,
+              })
+        }
+      >
+        <svg
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M1 1h5v1.5H2.5V5H1V1zm9 0h5v4h-1.5V2.5H10V1zM1 10h1.5v2.5H5V14H1v-4zM15 10h-1.5v2.5H11V14H15v-4z" />
+        </svg>
+      </button>
+      {showCardOverflowMenu ? (
+        <div
+          className="card__menu-root"
+          data-card-menu-root={card.id}
+        >
+          <button
+            type="button"
+            className="card__more"
+            aria-label={c.uiMoreActions}
+            aria-expanded={cardMenuId === card.id}
+            onClick={() =>
+              setCardMenuId((id) => (id === card.id ? null : card.id))
+            }
+          >
+            …
+          </button>
+          {cardMenuId === card.id && (
+            <div
+              className="card__menu"
+              role="menu"
+              aria-orientation="vertical"
+            >
+              {canEdit && canAttachMedia ? (
+                <button
+                  type="button"
+                  className="card__menu-item"
+                  role="menuitem"
+                  disabled={uploadBusyCardId === card.id}
+                  onClick={() => beginCardMediaUpload(colId, card.id)}
+                >
+                  {uploadBusyCardId === card.id ? c.uiUploading : c.uiAddAttachment}
+                </button>
+              ) : null}
+              {canEdit && hasGallery ? (
+                <button
+                  type="button"
+                  className="card__menu-item"
+                  role="menuitem"
+                  onClick={() => clearCardMedia(colId, card.id)}
+                >
+                  {c.uiClearAttachments}
+                </button>
+              ) : null}
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="card__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    togglePin(colId, card.id);
+                    setCardMenuId(null);
+                  }}
+                >
+                  {card.pinned ? c.uiUnpin : c.uiPin}
+                </button>
+              ) : null}
+              {canEdit && showRemoveFromCollectionMenu ? (
+                <button
+                  type="button"
+                  className="card__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    removeCardFromCollection(colId, card.id);
+                    setCardMenuId(null);
+                  }}
+                >
+                  {c.cardMenuRemoveFromCollection}
+                </button>
+              ) : null}
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="card__menu-item card__menu-item--danger"
+                  role="menuitem"
+                  onClick={() => deleteCard(colId, card.id)}
+                >
+                  {c.cardMenuDeleteCard}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <li
       data-masonry-key={noteKey}
@@ -244,6 +372,9 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         "card" +
         (cardMenuId === card.id ? " is-menu-open" : "") +
         (foldBodyMaxLines === 3 ? " card--timeline-fold-body" : "") +
+        (isTopicGroupEntityObjectKind(card.objectKind)
+          ? " card--topic-entity"
+          : "") +
         (cardDragOverId === card.id && canDropFilesOnCard
           ? " card--file-drag-over"
           : "") +
@@ -424,139 +555,14 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             " card__paper--with-move-rail"
           }
         >
-          <div className="card__toolbar">
-            <span className="card__time">
-              {formatCardTimeLabel(card, lang)}
-              {reminderBesideTime ? (
-                <span className="card__time-reminder">
-                  {reminderBesideTime}
-                </span>
-              ) : null}
-              {card.reminderNote ? (
-                <span className="card__time-reminder">
-                  {" · "}
-                  {card.reminderNote}
-                </span>
-              ) : null}
-            </span>
-            <div className="card__toolbar-actions">
-              <button
-                type="button"
-                className="card__icon-btn card__detail-btn"
-                title={c.uiViewDetail}
-                aria-label={c.uiViewDetail}
-                onClick={() =>
-                  setDetailCard({
-                    card,
-                    colId,
-                  })
-                }
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  width="13"
-                  height="13"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M1 1h5v1.5H2.5V5H1V1zm9 0h5v4h-1.5V2.5H10V1zM1 10h1.5v2.5H5V14H1v-4zM15 10h-1.5v2.5H11V14H15v-4z" />
-                </svg>
-              </button>
-              {showCardOverflowMenu ? (
-              <div
-                className="card__menu-root"
-                data-card-menu-root={card.id}
-              >
-                <button
-                  type="button"
-                  className="card__more"
-                  aria-label={c.uiMoreActions}
-                  aria-expanded={cardMenuId === card.id}
-                  onClick={() =>
-                    setCardMenuId((id) =>
-                      id === card.id ? null : card.id
-                    )
-                  }
-                >
-                  …
-                </button>
-                {cardMenuId === card.id && (
-                  <div
-                    className="card__menu"
-                    role="menu"
-                    aria-orientation="vertical"
-                  >
-                    {canEdit && canAttachMedia ? (
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        disabled={uploadBusyCardId === card.id}
-                        onClick={() =>
-                          beginCardMediaUpload(colId, card.id)
-                        }
-                      >
-                        {uploadBusyCardId === card.id
-                          ? c.uiUploading
-                          : c.uiAddAttachment}
-                      </button>
-                    ) : null}
-                    {canEdit && hasGallery ? (
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        onClick={() =>
-                          clearCardMedia(colId, card.id)
-                        }
-                      >
-                        {c.uiClearAttachments}
-                      </button>
-                    ) : null}
-                    {canEdit ? (
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          togglePin(colId, card.id);
-                          setCardMenuId(null);
-                        }}
-                      >
-                        {card.pinned ? c.uiUnpin : c.uiPin}
-                      </button>
-                    ) : null}
-                    {canEdit && showRemoveFromCollectionMenu ? (
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          removeCardFromCollection(colId, card.id);
-                          setCardMenuId(null);
-                        }}
-                      >
-                        {c.cardMenuRemoveFromCollection}
-                      </button>
-                    ) : null}
-                    {canEdit ? (
-                      <button
-                        type="button"
-                        className="card__menu-item card__menu-item--danger"
-                        role="menuitem"
-                        onClick={() =>
-                          deleteCard(colId, card.id)
-                        }
-                      >
-                        {c.cardMenuDeleteCard}
-                      </button>
-                    ) : null}
-                  </div>
-                )}
+          {entityTimelineTitle ? (
+            <div className="card__person-timeline-head">
+              <div className="card__person-timeline-name">
+                {entityTimelineTitle}
               </div>
-              ) : null}
+              {toolbarActionsEl}
             </div>
-          </div>
+          ) : null}
           <div
             className="card__text-dbltap-host"
             onTouchEnd={onCardTextTouchEnd}
@@ -580,6 +586,28 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               }
             />
           </div>
+          <div
+            className={
+              "card__toolbar" +
+              (entityTimelineTitle ? " card__toolbar--person-time-row" : "")
+            }
+          >
+            <span className="card__time">
+              {formatCardTimeLabel(card, lang)}
+              {reminderBesideTime ? (
+                <span className="card__time-reminder">
+                  {reminderBesideTime}
+                </span>
+              ) : null}
+              {card.reminderNote ? (
+                <span className="card__time-reminder">
+                  {" · "}
+                  {card.reminderNote}
+                </span>
+              ) : null}
+            </span>
+            {entityTimelineTitle ? null : toolbarActionsEl}
+          </div>
         </div>
         {hasGallery ? (
           <CardGallery
@@ -598,6 +626,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             }
             onCreateFileCard={onCreateFileCardFromAttachment}
             attachmentHasLinkedFileCard={attachmentHasLinkedFileCard}
+            onOpenFileCard={onOpenFileCard}
             uploadPending={mediaUploadPending}
             uploadProgress={galleryUploadProgress}
           />

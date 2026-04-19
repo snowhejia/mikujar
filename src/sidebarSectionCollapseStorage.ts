@@ -5,20 +5,42 @@ export type SidebarSectionCollapseState = {
   notes: boolean;
   /** 侧栏「所有附件」 */
   files: boolean;
+  /** 侧栏「主题」（人物类目） */
+  topic: boolean;
+  /** 侧栏「剪藏」（网页剪藏 / 小红书 / B 站等） */
+  clip: boolean;
+  /** 侧栏「网页」预设分区 */
+  web: boolean;
+  /** 侧栏「作品」预设分区 */
+  work: boolean;
+  /** 侧栏「任务」预设分区 */
+  task: boolean;
+  /** 侧栏「项目」预设分区 */
+  project: boolean;
+  /** 侧栏「开支」预设分区 */
+  expense: boolean;
+  /** 侧栏「账户」预设分区 */
+  account: boolean;
   calendar: boolean;
   favorites: boolean;
   collections: boolean;
-  tags: boolean;
 };
 
 export function defaultSidebarSectionCollapseState(): SidebarSectionCollapseState {
   return {
     notes: false,
     files: false,
+    topic: false,
+    clip: false,
+    web: false,
+    work: false,
+    task: false,
+    project: false,
+    expense: false,
+    account: false,
     calendar: false,
     favorites: false,
     collections: false,
-    tags: false,
   };
 }
 
@@ -45,7 +67,7 @@ export function readSidebarSectionsCollapsed(
     const raw = localStorage.getItem(key);
     if (!raw) return defaultState();
     const o = JSON.parse(raw) as Partial<
-      SidebarSectionCollapseState & { features?: boolean }
+      SidebarSectionCollapseState & { features?: boolean; tags?: boolean }
     >;
     const legacy =
       typeof o.features === "boolean" &&
@@ -54,10 +76,17 @@ export function readSidebarSectionsCollapsed(
     return {
       notes: legacy ? Boolean(o.features) : Boolean(o.notes),
       files: legacy ? Boolean(o.features) : Boolean(o.files),
+      topic: typeof o.topic === "boolean" ? o.topic : false,
+      clip: typeof o.clip === "boolean" ? o.clip : false,
+      web: typeof o.web === "boolean" ? o.web : false,
+      work: typeof o.work === "boolean" ? o.work : false,
+      task: typeof o.task === "boolean" ? o.task : false,
+      project: typeof o.project === "boolean" ? o.project : false,
+      expense: typeof o.expense === "boolean" ? o.expense : false,
+      account: typeof o.account === "boolean" ? o.account : false,
       calendar: Boolean(o.calendar),
       favorites: Boolean(o.favorites),
       collections: Boolean(o.collections),
-      tags: Boolean(o.tags),
     };
   } catch {
     return defaultState();

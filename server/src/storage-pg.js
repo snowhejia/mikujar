@@ -6,6 +6,15 @@
 
 import { query, getClient } from "./db.js";
 
+/** @param {import("pg").PoolClient} client */
+async function safeRollback(client) {
+  try {
+    await client.query("ROLLBACK");
+  } catch {
+    /* ignore */
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 内部工具
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,19 +103,18 @@ async function loadRelatedRefsMapFromLinks(userId, cardIds) {
   let linksRes;
   if (userId === null || userId === undefined) {
     linksRes = await query(
-      `SELECT l.from_card_id, l.to_card_id
+      `SELECT l.from_card_id, l.to_card_id, l.link_type
        FROM card_links l
        INNER JOIN cards fr ON fr.id = l.from_card_id AND fr.trashed_at IS NULL
-       WHERE l.from_card_id = ANY($1) AND l.link_type IN ('related', 'attachment')
-         AND fr.user_id IS NULL`,
+       WHERE l.from_card_id = ANY($1) AND fr.user_id IS NULL`,
       [unique]
     );
   } else {
     linksRes = await query(
-      `SELECT l.from_card_id, l.to_card_id
+      `SELECT l.from_card_id, l.to_card_id, l.link_type
        FROM card_links l
        INNER JOIN cards fr ON fr.id = l.from_card_id AND fr.trashed_at IS NULL
-       WHERE l.from_card_id = ANY($1) AND l.link_type IN ('related', 'attachment')
+       WHERE l.from_card_id = ANY($1)
          AND (fr.user_id = $2 OR fr.user_id IS NULL)`,
       [unique, userId]
     );
@@ -139,7 +147,15 @@ async function loadRelatedRefsMapFromLinks(userId, cardIds) {
     const refs = [];
     for (const r of rows) {
       const colId = placementMap.get(r.to_card_id);
-      if (colId) refs.push({ colId, cardId: r.to_card_id });
+      if (colId) {
+        const lt =
+          typeof r.link_type === "string" && r.link_type.trim()
+            ? r.link_type.trim()
+            : undefined;
+        refs.push(
+          lt ? { colId, cardId: r.to_card_id, linkType: lt } : { colId, cardId: r.to_card_id }
+        );
+      }
     }
     out.set(id, refs);
   }
@@ -241,7 +257,7 @@ export async function queryCardGraph(userId, rootCardId, opts = {}) {
   const linkTypes =
     Array.isArray(opts.linkTypes) && opts.linkTypes.length > 0
       ? opts.linkTypes
-      : ["related", "attachment"];
+      : ["related", "attachment", "creator", "source", "source_url"];
 
   const { sql: uidSql, params: uidParams } = cardOwnershipCondition(userId, 2);
   const rootOk = await query(
@@ -865,10 +881,12 @@ export async function addCardToCollectionPlacement(
  * @param {string|null} userId
  * @param {string} collectionId
  * @param {object} card
+ * @param {import("pg").PoolClient|null} [pgClient] 传入时在同一连接上执行（用于事务）
  */
-export async function createCard(userId, collectionId, card) {
+export async function createCard(userId, collectionId, card, pgClient = null) {
+  const q = pgClient ? (sql, params) => pgClient.query(sql, params) : query;
   const { sql: uidSql, params: uidParams } = userIdCondition(userId, 2);
-  const colCheck = await query(
+  const colCheck = await q(
     `SELECT id FROM collections WHERE id = $1 AND ${uidSql}`,
     [collectionId, ...uidParams]
   );
@@ -897,7 +915,7 @@ export async function createCard(userId, collectionId, card) {
   if (!id) throw new Error("card.id 为必填项");
 
   const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 2);
-  const existing = await query(
+  const existing = await q(
     `SELECT id, user_id, trashed_at FROM cards WHERE id = $1 AND (${cOwnSql})`,
     [id, ...cOwnParams]
   );
@@ -910,7 +928,7 @@ export async function createCard(userId, collectionId, card) {
       insertAtStart,
       pinned,
     });
-    const row = await query(
+    const row = await q(
       `SELECT c.id, c.text, c.minutes_of_day, c.added_on, c.reminder_on,
               c.reminder_time, c.reminder_note, c.reminder_completed_at, c.reminder_completed_note,
               c.tags, c.related_refs, c.media, c.custom_props, c.object_kind, p.pinned
@@ -927,14 +945,14 @@ export async function createCard(userId, collectionId, card) {
 
   let sortOrder;
   if (insertAtStart) {
-    const minRes = await query(
+    const minRes = await q(
       `SELECT MIN(sort_order) AS m FROM card_placements WHERE collection_id = $1`,
       [collectionId]
     );
     const m = minRes.rows[0]?.m;
     sortOrder = m === null || m === undefined ? 0 : m - 1;
   } else {
-    const orderRes = await query(
+    const orderRes = await q(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM card_placements WHERE collection_id = $1`,
       [collectionId]
     );
@@ -946,7 +964,7 @@ export async function createCard(userId, collectionId, card) {
       ? String(card.objectKind).trim().slice(0, 64)
       : "note";
 
-  await query(
+  await q(
     `INSERT INTO cards
        (id, user_id, text, minutes_of_day, added_on, reminder_on,
         reminder_time, reminder_note, reminder_completed_at, reminder_completed_note, tags, related_refs, media, custom_props, object_kind)
@@ -970,7 +988,7 @@ export async function createCard(userId, collectionId, card) {
     ]
   );
 
-  await query(
+  await q(
     `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
      VALUES ($1, $2, $3, $4)`,
     [id, collectionId, pinned, sortOrder]
@@ -1033,14 +1051,6 @@ export async function createFileCardForNoteMedia(userId, noteCardId, body) {
 
   const uid = noteRow.rows[0].user_id;
 
-  const now = new Date();
-  const minutesOfDay = now.getHours() * 60 + now.getMinutes();
-  const y = now.getFullYear();
-  const mo = String(now.getMonth() + 1).padStart(2, "0");
-  const da = String(now.getDate()).padStart(2, "0");
-  const day = `${y}-${mo}-${da}`;
-  const newId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
   const kind =
     raw.kind === "image" ||
     raw.kind === "video" ||
@@ -1064,32 +1074,78 @@ export async function createFileCardForNoteMedia(userId, noteCardId, body) {
   if (typeof raw.durationSec === "number" && Number.isFinite(raw.durationSec))
     mediaItem.durationSec = raw.durationSec;
 
-  await createCard(userId, placementCollectionId, {
-    id: newId,
-    text: "",
-    minutesOfDay,
-    addedOn: day,
-    media: [mediaItem],
-    tags: [],
-    relatedRefs: [],
-    objectKind: "file",
-    insertAtStart: false,
-  });
+  const client = await getClient();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1::text))`, [
+      `fileobj:${noteCardId}\0${url}`,
+    ]);
 
-  await query(
-    `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
-     VALUES ($1, $2, $3, 'attachment')
-     ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
-    [uid, noteCardId, newId]
-  );
-  await query(
-    `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
-     VALUES ($1, $2, $3, 'attachment')
-     ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
-    [uid, newId, noteCardId]
-  );
+    const existingFile = await client.query(
+      `SELECT c.id
+       FROM card_links l
+       INNER JOIN cards c ON c.id = l.to_card_id
+       WHERE l.from_card_id = $1
+         AND l.link_type = 'attachment'
+         AND c.user_id = $2
+         AND c.object_kind = 'file'
+         AND c.trashed_at IS NULL
+         AND (c.media->0->>'url') = $3
+       LIMIT 1`,
+      [noteCardId, uid, url]
+    );
+    if (existingFile.rowCount > 0) {
+      const fid = existingFile.rows[0].id;
+      await client.query("COMMIT");
+      return { fileCardId: fid, noteCardId };
+    }
 
-  return { fileCardId: newId, noteCardId };
+    const now = new Date();
+    const minutesOfDay = now.getHours() * 60 + now.getMinutes();
+    const y = now.getFullYear();
+    const mo = String(now.getMonth() + 1).padStart(2, "0");
+    const da = String(now.getDate()).padStart(2, "0");
+    const day = `${y}-${mo}-${da}`;
+    const newId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    await createCard(
+      userId,
+      placementCollectionId,
+      {
+        id: newId,
+        text: "",
+        minutesOfDay,
+        addedOn: day,
+        media: [mediaItem],
+        tags: [],
+        relatedRefs: [],
+        objectKind: "file",
+        insertAtStart: false,
+      },
+      client
+    );
+
+    await client.query(
+      `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+       VALUES ($1, $2, $3, 'attachment')
+       ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+      [uid, noteCardId, newId]
+    );
+    await client.query(
+      `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+       VALUES ($1, $2, $3, 'attachment')
+       ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+      [uid, newId, noteCardId]
+    );
+
+    await client.query("COMMIT");
+    return { fileCardId: newId, noteCardId };
+  } catch (e) {
+    await safeRollback(client);
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -1791,7 +1847,8 @@ export async function countCardAttachments(ownerKey, filterKey = "all") {
   const res = await query(
     `SELECT COUNT(*)::bigint AS n
      FROM card_attachments a
-     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL AND (${cUidQ})
+     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL
+       AND (${cUidQ}) AND c.object_kind LIKE 'file%'
      WHERE ${filt}`,
     cUidParams
   );
@@ -1823,7 +1880,8 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
             a.kind, a.url, a.name, a.thumbnail_url, a.cover_url, a.size_bytes,
             a.duration_sec
      FROM card_attachments a
-     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL AND (${cUidQ})
+     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL
+       AND (${cUidQ}) AND c.object_kind LIKE 'file%'
      LEFT JOIN LATERAL (
        SELECT p.collection_id AS cid
        FROM card_placements p
@@ -1886,4 +1944,1755 @@ export async function attachmentStorageBytesByUserId() {
     map.set(id, Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
   }
   return map;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 对象类型 Schema / 自动关联引擎 / 附件迁移
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 从当前时间生成 YYYY-MM-DD 和 minutesOfDay */
+function nowDateParts() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, "0");
+  const da = String(now.getDate()).padStart(2, "0");
+  return { addedOn: `${y}-${mo}-${da}`, minutesOfDay: now.getHours() * 60 + now.getMinutes() };
+}
+
+/** 生成与现有代码一致的卡片 id */
+function newCardId() {
+  return `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * 展开 AutoLinkRule（支持 targets[] 或单 targetObjectKind + linkType）。
+ * @param {object} rule
+ * @returns {Array<{ ruleId: string, trigger: string, targetKey: string, targetObjectKind: string, linkType: string, targetPresetTypeId?: string }>}
+ */
+function expandAutoLinkRuleSteps(rule) {
+  const rid = rule.ruleId;
+  const trig = rule.trigger ?? "on_save";
+  const ruleLevelCol =
+    typeof rule.targetCollectionId === "string" && rule.targetCollectionId.trim()
+      ? rule.targetCollectionId.trim()
+      : undefined;
+  const ruleTargetSync =
+    typeof rule.targetSyncSchemaFieldId === "string" &&
+    rule.targetSyncSchemaFieldId.trim()
+      ? rule.targetSyncSchemaFieldId.trim()
+      : undefined;
+  if (Array.isArray(rule.targets) && rule.targets.length > 0) {
+    return rule.targets.map((t) => {
+      const stepCol =
+        typeof t.targetCollectionId === "string" && t.targetCollectionId.trim()
+          ? t.targetCollectionId.trim()
+          : ruleLevelCol;
+      const tSync =
+        typeof t.targetSyncSchemaFieldId === "string" &&
+        t.targetSyncSchemaFieldId.trim()
+          ? t.targetSyncSchemaFieldId.trim()
+          : ruleTargetSync;
+      return {
+        ruleId: rid,
+        trigger: trig,
+        targetKey: t.targetKey ?? "default",
+        targetObjectKind: t.targetObjectKind,
+        linkType: t.linkType,
+        targetPresetTypeId: t.targetPresetTypeId,
+        targetCollectionId: stepCol,
+        syncSchemaFieldId:
+          typeof t.syncSchemaFieldId === "string" && t.syncSchemaFieldId.trim()
+            ? t.syncSchemaFieldId.trim()
+            : undefined,
+        targetSyncSchemaFieldId: tSync,
+      };
+    });
+  }
+  if (rule.targetObjectKind && rule.linkType) {
+    const ruleSync =
+      typeof rule.syncSchemaFieldId === "string" && rule.syncSchemaFieldId.trim()
+        ? rule.syncSchemaFieldId.trim()
+        : undefined;
+    return [
+      {
+        ruleId: rid,
+        trigger: trig,
+        targetKey: "default",
+        targetObjectKind: rule.targetObjectKind,
+        linkType: rule.linkType,
+        targetPresetTypeId: rule.targetPresetTypeId,
+        targetCollectionId: ruleLevelCol,
+        syncSchemaFieldId: ruleSync,
+        targetSyncSchemaFieldId: ruleTargetSync,
+      },
+    ];
+  }
+  return [];
+}
+
+const AUTO_LINK_NEW_CARD_TITLE_MAX = 500;
+
+/** @param {object|undefined|null} prop custom_props 单项 */
+function customPropValueAsAutoLinkTitle(prop) {
+  if (!prop || prop.value == null || prop.value === "") return "";
+  const v = prop.value;
+  const t = prop.type;
+  if (t === "text" || t === "url" || t === "date") return String(v).trim();
+  if (t === "number") return String(v).trim();
+  if (t === "choice") {
+    if (Array.isArray(v)) return v.map(String).filter(Boolean).join(", ").trim();
+    return String(v).trim();
+  }
+  if (t === "checkbox" || t === "cardLink") return "";
+  if (t === "collectionLink") {
+    if (Array.isArray(v)) return v.length ? v.join(", ") : "";
+    return "";
+  }
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function truncateAutoLinkCardTitle(s) {
+  const t = String(s ?? "").trim();
+  if (!t) return "";
+  if (t.length <= AUTO_LINK_NEW_CARD_TITLE_MAX) return t;
+  return t.slice(0, AUTO_LINK_NEW_CARD_TITLE_MAX);
+}
+
+/**
+ * 自动建卡：用源卡 schema 属性作为目标卡标题（cards.text）。
+ * 优先 step.syncSchemaFieldId；无则 source 类目标尝试源上首个 url 字段；再回落正文首行。
+ *
+ * @param {{ syncSchemaFieldId?: string, linkType?: string, targetKey?: string }} step
+ * @param {{ text?: string, custom_props?: unknown }} sourceCardRow
+ * @param {Map<string, object>} mergedFieldMap
+ */
+function autoLinkNewCardTitleFromSource(step, sourceCardRow, mergedFieldMap) {
+  const props = Array.isArray(sourceCardRow.custom_props) ? sourceCardRow.custom_props : [];
+  const readByFieldId = (fid) => {
+    const id = typeof fid === "string" ? fid.trim() : "";
+    if (!id) return "";
+    const p = props.find((x) => x && x.id === id);
+    return customPropValueAsAutoLinkTitle(p);
+  };
+
+  const syncId =
+    typeof step.syncSchemaFieldId === "string" && step.syncSchemaFieldId.trim()
+      ? step.syncSchemaFieldId.trim()
+      : "";
+  if (syncId) {
+    return truncateAutoLinkCardTitle(readByFieldId(syncId));
+  }
+
+  const key = typeof step.targetKey === "string" ? step.targetKey : "";
+  const ltype = typeof step.linkType === "string" ? step.linkType : "";
+  if (key === "source" || ltype === "source") {
+    const urlFields = [...mergedFieldMap.values()].filter((f) => f && f.type === "url");
+    urlFields.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const f of urlFields) {
+      const t = readByFieldId(f.id);
+      if (t) return truncateAutoLinkCardTitle(t);
+    }
+  }
+
+  const body = typeof sourceCardRow.text === "string" ? sourceCardRow.text.trim() : "";
+  if (body) {
+    const line = body.split("\n")[0].trim();
+    if (line) return truncateAutoLinkCardTitle(line);
+  }
+  return "";
+}
+
+/** 目标合集无 preset_type_id 时新建卡默认 note */
+function objectKindFromCollectionRow(colRow) {
+  if (!colRow) return "note";
+  const pid =
+    typeof colRow.preset_type_id === "string" ? colRow.preset_type_id.trim() : "";
+  return pid || "note";
+}
+
+function normalizeCardObjectKindRow(row) {
+  const raw = row?.object_kind;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return "note";
+}
+
+/**
+ * 未设置 source 条件时视为匹配（兼容内置 schema 规则）。
+ * @param {object} cardRow cards 行（须含 object_kind）
+ * @param {string[]} colIds 源卡 placement 合集 id
+ * @param {Map<string, object>} colMap collections 行映射（须含 preset_type_id、parent_id）
+ * @param {object} rule
+ */
+function cardMatchesAutoLinkRuleSource(cardRow, colIds, colMap, rule) {
+  const scol =
+    typeof rule.sourceCollectionId === "string" && rule.sourceCollectionId.trim()
+      ? rule.sourceCollectionId.trim()
+      : "";
+  if (scol && !colIds.includes(scol)) return false;
+
+  const so =
+    typeof rule.sourceObjectKind === "string" && rule.sourceObjectKind.trim()
+      ? rule.sourceObjectKind.trim()
+      : "";
+  const sp =
+    typeof rule.sourcePresetTypeId === "string" && rule.sourcePresetTypeId.trim()
+      ? rule.sourcePresetTypeId.trim()
+      : "";
+  if (!so && !sp) return true;
+
+  if (so) {
+    const got = normalizeCardObjectKindRow(cardRow);
+    if (got !== so) return false;
+  }
+  if (sp) {
+    let found = false;
+    for (const colId of colIds) {
+      let cur = colMap.get(colId);
+      while (cur) {
+        const pid =
+          typeof cur.preset_type_id === "string" ? cur.preset_type_id.trim() : "";
+        if (pid && pid === sp) {
+          found = true;
+          break;
+        }
+        cur = cur.parent_id ? colMap.get(cur.parent_id) : null;
+      }
+      if (found) break;
+    }
+    if (!found) return false;
+  }
+  return true;
+}
+
+/** preset_type_id 候选（网页链接可回落到父类型 web） */
+function presetTypeIdCandidates(presetTypeId, objectKind) {
+  /** @type {string[]} */
+  const out = [];
+  const add = (x) => {
+    if (typeof x === "string" && x.trim() && !out.includes(x)) out.push(x.trim());
+  };
+  add(presetTypeId);
+  add(objectKind);
+  if (objectKind === "web_page") add("web");
+  return out;
+}
+
+/**
+ * 为自动关联规则解析目标类别合集 id；找不到则返回 null（调用方用源卡首个合集）。
+ * @param {string|null} userId
+ * @param {string|undefined} presetTypeId
+ * @param {string} objectKind
+ */
+async function findPresetCollectionIdForAutoLink(userId, presetTypeId, objectKind) {
+  const { sql: tUidSql, params: tUidParams } = userIdCondition(userId, 2);
+  for (const pid of presetTypeIdCandidates(presetTypeId, objectKind)) {
+    const tColRes = await query(
+      `SELECT id FROM collections WHERE preset_type_id = $1 AND ${tUidSql} LIMIT 1`,
+      [pid, ...tUidParams]
+    );
+    if (tColRes.rowCount > 0) return tColRes.rows[0].id;
+  }
+  return null;
+}
+
+/**
+ * 按 preset_type_id 查找用户（或单用户 null）的类别合集 id。
+ * @param {string|null} userId
+ * @param {string} presetTypeId
+ * @returns {Promise<string|null>}
+ */
+export async function getPresetCollectionId(userId, presetTypeId) {
+  const pid = String(presetTypeId || "").trim();
+  if (!pid) return null;
+  const { sql: uidSql, params: uidParams } = userIdCondition(userId, 2);
+  const res = await query(
+    `SELECT id FROM collections WHERE preset_type_id = $1 AND ${uidSql} LIMIT 1`,
+    [pid, ...uidParams]
+  );
+  return res.rowCount > 0 ? res.rows[0].id : null;
+}
+
+/**
+ * 将 cardLink 引用写入源卡 custom_props（与 auto-link 同事务）。
+ * @param {import("pg").PoolClient} client
+ * @param {string|null} userId
+ * @param {string} sourceCardId
+ * @param {string} fieldId
+ * @param {{ colId: string, cardId: string }} ref
+ * @param {Map<string, object>} mergedFieldMap
+ */
+async function mergeCardLinkCustomPropWithClient(
+  client,
+  userId,
+  sourceCardId,
+  fieldId,
+  ref,
+  mergedFieldMap
+) {
+  if (!fieldId || !ref?.colId || !ref?.cardId) return;
+  const { sql: ownSql, params: ownParams } = cardOwnershipCondition(userId, 2);
+  const res = await client.query(
+    `SELECT custom_props FROM cards WHERE id = $1 AND (${ownSql}) AND trashed_at IS NULL`,
+    [sourceCardId, ...ownParams]
+  );
+  if (res.rowCount === 0) return;
+  const props = Array.isArray(res.rows[0].custom_props)
+    ? res.rows[0].custom_props
+    : [];
+  const fieldMeta = mergedFieldMap.get(fieldId);
+  const name = fieldMeta?.name ?? fieldId;
+  const idx = props.findIndex((p) => p && p.id === fieldId);
+  const nextVal = { colId: ref.colId, cardId: ref.cardId };
+  let nextProps;
+  if (idx >= 0) {
+    nextProps = props.map((p, i) =>
+      i === idx
+        ? { ...p, id: fieldId, name: p.name || name, type: "cardLink", value: nextVal }
+        : p
+    );
+  } else {
+    nextProps = [...props, { id: fieldId, name, type: "cardLink", value: nextVal }];
+  }
+  await client.query(
+    `UPDATE cards SET custom_props = $2::jsonb WHERE id = $1 AND (${ownSql}) AND trashed_at IS NULL`,
+    [sourceCardId, JSON.stringify(nextProps), ...ownParams]
+  );
+}
+
+/**
+ * 解析合集树中一条合集链（colId → 父 → 爷…）的有效 Schema，
+ * 合并 autoLinkRules（子优先覆盖父，按 ruleId 去重）。
+ *
+ * @param {Map<string, object>} colMap  - 所有合集的 id → row 映射
+ * @param {string} colId
+ * @returns {{ rules: Array, fields: Array }}
+ */
+function resolveSchemaFromChain(colMap, colId) {
+  const chain = [];
+  let cur = colMap.get(colId);
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parent_id ? colMap.get(cur.parent_id) : null;
+  }
+  const ruleMap = new Map();
+  const fieldMap = new Map();
+  for (const node of chain) {
+    const schema = node.card_schema ?? {};
+    for (const r of (schema.autoLinkRules ?? [])) ruleMap.set(r.ruleId, r);
+    for (const f of (schema.fields ?? [])) fieldMap.set(f.id, f);
+  }
+  return {
+    rules: [...ruleMap.values()],
+    fields: [...fieldMap.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  };
+}
+
+/**
+ * 用户笔记偏好（与 trashed_notes.owner_key 一致：JWT sub 或 __single__）。
+ * @param {Map<string, object>} ruleMap
+ * @param {{ disabledAutoLinkRuleIds?: string[], extraAutoLinkRules?: object[] }} prefs
+ */
+function applyNotePrefsToAutoLinkRuleMap(ruleMap, prefs) {
+  if (!prefs || typeof prefs !== "object") return;
+  const raw = prefs.disabledAutoLinkRuleIds;
+  if (Array.isArray(raw)) {
+    for (const id of raw) {
+      if (typeof id === "string" && id.trim()) ruleMap.delete(id.trim());
+    }
+  }
+  const extras = prefs.extraAutoLinkRules;
+  if (Array.isArray(extras)) {
+    for (const r of extras) {
+      if (r && typeof r === "object" && typeof r.ruleId === "string" && r.ruleId.trim()) {
+        ruleMap.set(r.ruleId.trim(), r);
+      }
+    }
+  }
+}
+
+/**
+ * @param {string} ownerKey
+ * @returns {Promise<{ disabledAutoLinkRuleIds: string[], extraAutoLinkRules: object[] }>}
+ */
+export async function getNotePrefsForOwnerKey(ownerKey) {
+  const key = typeof ownerKey === "string" && ownerKey.trim() ? ownerKey.trim() : "__single__";
+  const empty = { disabledAutoLinkRuleIds: [], extraAutoLinkRules: [] };
+  const res = await query(
+    `SELECT prefs FROM user_note_prefs WHERE owner_key = $1`,
+    [key]
+  );
+  if (res.rowCount === 0) return empty;
+  const p = res.rows[0].prefs;
+  if (!p || typeof p !== "object") return empty;
+  const disabled = Array.isArray(p.disabledAutoLinkRuleIds) ? p.disabledAutoLinkRuleIds : [];
+  const extra = Array.isArray(p.extraAutoLinkRules) ? p.extraAutoLinkRules : [];
+  return {
+    disabledAutoLinkRuleIds: disabled.filter((x) => typeof x === "string"),
+    extraAutoLinkRules: extra.filter((x) => x && typeof x === "object"),
+  };
+}
+
+const NOTE_PREFS_MAX_DISABLED = 80;
+const NOTE_PREFS_MAX_EXTRA_RULES = 24;
+
+/**
+ * @param {unknown} body
+ * @returns {{ disabledAutoLinkRuleIds: string[], extraAutoLinkRules: object[] }}
+ */
+export function normalizeNotePrefsPayload(body) {
+  const o = body && typeof body === "object" ? body : {};
+  const dis = Array.isArray(o.disabledAutoLinkRuleIds) ? o.disabledAutoLinkRuleIds : [];
+  const disabledAutoLinkRuleIds = [];
+  const seen = new Set();
+  for (const x of dis) {
+    if (typeof x !== "string") continue;
+    const id = x.trim();
+    if (!id || id.length > 120 || seen.has(id)) continue;
+    seen.add(id);
+    disabledAutoLinkRuleIds.push(id);
+    if (disabledAutoLinkRuleIds.length >= NOTE_PREFS_MAX_DISABLED) break;
+  }
+  const ex = Array.isArray(o.extraAutoLinkRules) ? o.extraAutoLinkRules : [];
+  const extraAutoLinkRules = [];
+  for (const r of ex) {
+    if (!r || typeof r !== "object") continue;
+    const ruleId = typeof r.ruleId === "string" ? r.ruleId.trim() : "";
+    if (!ruleId || ruleId.length > 120) continue;
+    extraAutoLinkRules.push({ ...r, ruleId });
+    if (extraAutoLinkRules.length >= NOTE_PREFS_MAX_EXTRA_RULES) break;
+  }
+  return { disabledAutoLinkRuleIds, extraAutoLinkRules };
+}
+
+/**
+ * @param {string} ownerKey
+ * @param {{ disabledAutoLinkRuleIds: string[], extraAutoLinkRules: object[] }} prefs
+ */
+export async function replaceNotePrefsForOwnerKey(ownerKey, prefs) {
+  const key = typeof ownerKey === "string" && ownerKey.trim() ? ownerKey.trim() : "__single__";
+  const normalized = normalizeNotePrefsPayload(prefs);
+  await query(
+    `INSERT INTO user_note_prefs (owner_key, prefs, updated_at)
+     VALUES ($1, $2::jsonb, now())
+     ON CONFLICT (owner_key) DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = now()`,
+    [key, JSON.stringify(normalized)]
+  );
+  return normalized;
+}
+
+/**
+ * 保存卡片后，根据所在合集的 autoLinkRules 静默创建缺失的关联卡片并双向连接。
+ * fire-and-forget 设计：规则级异常单独 catch + 日志，不影响主请求。
+ *
+ * @param {string|null} userId
+ * @param {string} cardId
+ */
+export async function runAutoLinkRulesForCard(userId, cardId) {
+  try {
+    // 1. 验证卡片存在
+    const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 2);
+    const cardRes = await query(
+      `SELECT id, user_id, object_kind, text, custom_props FROM cards WHERE id = $1 AND (${cOwnSql}) AND trashed_at IS NULL`,
+      [cardId, ...cOwnParams]
+    );
+    if (cardRes.rowCount === 0) return;
+    const uid = cardRes.rows[0].user_id;
+    const cardRow = cardRes.rows[0];
+
+    // 2. 找到卡片所在的所有合集
+    const placementsRes = await query(
+      `SELECT collection_id FROM card_placements WHERE card_id = $1`,
+      [cardId]
+    );
+    const colIds = placementsRes.rows.map((r) => r.collection_id);
+    if (colIds.length === 0) return;
+
+    // 3. 加载当前用户的全部合集（用于父链遍历）
+    const { sql: colUidSql, params: colUidParams } = userIdCondition(userId, 1);
+    const allColsRes = await query(
+      `SELECT id, parent_id, is_category, card_schema, preset_type_id FROM collections WHERE ${colUidSql}`,
+      colUidParams
+    );
+    const colMap = new Map(allColsRes.rows.map((r) => [r.id, r]));
+
+    // 4. 合并所有合集的规则（按 ruleId 去重，后合集覆盖前）
+    const allRules = new Map();
+    for (const colId of colIds) {
+      const { rules } = resolveSchemaFromChain(colMap, colId);
+      for (const rule of rules) {
+        if (!allRules.has(rule.ruleId)) allRules.set(rule.ruleId, rule);
+      }
+    }
+
+    const prefsOwnerKey = uid != null ? String(uid) : "__single__";
+    const notePrefs = await getNotePrefsForOwnerKey(prefsOwnerKey);
+    applyNotePrefsToAutoLinkRuleMap(allRules, notePrefs);
+
+    if (allRules.size === 0) return;
+
+    const mergedFieldMap = new Map();
+    for (const cid of colIds) {
+      const { fields } = resolveSchemaFromChain(colMap, cid);
+      for (const f of fields) mergedFieldMap.set(f.id, f);
+    }
+
+    // 5. 对每条规则的每个 target：按需建卡 + 写入 cardLink 型 custom_props
+    for (const [, rule] of allRules) {
+      if (!cardMatchesAutoLinkRuleSource(cardRow, colIds, colMap, rule)) continue;
+      const steps = expandAutoLinkRuleSteps(rule);
+      if (steps.length === 0) continue;
+
+      for (const step of steps) {
+        try {
+          const existLink = await query(
+            `SELECT l.to_card_id
+             FROM card_links l
+             INNER JOIN cards tc ON tc.id = l.to_card_id AND tc.trashed_at IS NULL
+             WHERE l.from_card_id = $1 AND l.link_type = $2 AND tc.object_kind = $3
+             LIMIT 1`,
+            [cardId, step.linkType, step.targetObjectKind]
+          );
+
+          if (existLink.rowCount > 0 && !step.syncSchemaFieldId) continue;
+
+          const client = await getClient();
+          try {
+            await client.query("BEGIN");
+            let linkedColId;
+            let linkedCardId;
+
+            if (existLink.rowCount > 0) {
+              linkedCardId = existLink.rows[0].to_card_id;
+              const pl = await client.query(
+                `SELECT collection_id FROM card_placements WHERE card_id = $1 ORDER BY collection_id LIMIT 1`,
+                [linkedCardId]
+              );
+              linkedColId = pl.rows[0]?.collection_id ?? colIds[0];
+            } else {
+              let targetColId = colIds[0];
+              const explicitCol =
+                typeof step.targetCollectionId === "string"
+                  ? step.targetCollectionId.trim()
+                  : "";
+              if (explicitCol) {
+                const { sql: ownColSql, params: ownColParams } = userIdCondition(
+                  userId,
+                  2
+                );
+                const colOk = await client.query(
+                  `SELECT id FROM collections WHERE id = $1 AND (${ownColSql})`,
+                  [explicitCol, ...ownColParams]
+                );
+                if (colOk.rowCount > 0) targetColId = explicitCol;
+              } else {
+                const resolved = await findPresetCollectionIdForAutoLink(
+                  userId,
+                  step.targetPresetTypeId,
+                  step.targetObjectKind
+                );
+                if (resolved) targetColId = resolved;
+              }
+
+              const { addedOn, minutesOfDay } = nowDateParts();
+              const newId = newCardId();
+              const colRowForKind = colMap.get(targetColId);
+              const effectiveObjectKind =
+                step.targetObjectKind && String(step.targetObjectKind).trim()
+                  ? String(step.targetObjectKind).trim()
+                  : objectKindFromCollectionRow(colRowForKind);
+              const newCardTitle = autoLinkNewCardTitleFromSource(
+                step,
+                cardRow,
+                mergedFieldMap
+              );
+              /** 人物卡列表标题读 sf-person-name；网页卡可读 sf-web-url */
+              let initialCustomProps = [];
+              if (newCardTitle && effectiveObjectKind === "person") {
+                initialCustomProps = [
+                  {
+                    id: "sf-person-name",
+                    name: "名称",
+                    type: "text",
+                    value: newCardTitle,
+                  },
+                ];
+              } else if (
+                newCardTitle &&
+                (effectiveObjectKind === "web" ||
+                  effectiveObjectKind === "web_page") &&
+                /^https?:\/\//i.test(newCardTitle)
+              ) {
+                initialCustomProps = [
+                  {
+                    id: "sf-web-url",
+                    name: "链接",
+                    type: "url",
+                    value: newCardTitle,
+                  },
+                ];
+              }
+
+              await createCard(
+                userId,
+                targetColId,
+                {
+                  id: newId,
+                  text: newCardTitle,
+                  minutesOfDay,
+                  addedOn,
+                  objectKind: effectiveObjectKind,
+                  tags: [],
+                  relatedRefs: [],
+                  media: [],
+                  customProps: initialCustomProps,
+                  insertAtStart: false,
+                },
+                client
+              );
+              await client.query(
+                `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+                [uid, cardId, newId, step.linkType]
+              );
+              await client.query(
+                `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+                [uid, newId, cardId, step.linkType]
+              );
+              linkedColId = targetColId;
+              linkedCardId = newId;
+            }
+
+            if (step.syncSchemaFieldId) {
+              await mergeCardLinkCustomPropWithClient(
+                client,
+                userId,
+                cardId,
+                step.syncSchemaFieldId,
+                { colId: linkedColId, cardId: linkedCardId },
+                mergedFieldMap
+              );
+            }
+
+            if (step.targetSyncSchemaFieldId) {
+              const targetMerged = new Map();
+              const { fields: tf } = resolveSchemaFromChain(colMap, linkedColId);
+              for (const f of tf) targetMerged.set(f.id, f);
+              const srcColForRef =
+                typeof rule.sourceCollectionId === "string" &&
+                rule.sourceCollectionId.trim() &&
+                colIds.includes(rule.sourceCollectionId.trim())
+                  ? rule.sourceCollectionId.trim()
+                  : colIds[0];
+              await mergeCardLinkCustomPropWithClient(
+                client,
+                userId,
+                linkedCardId,
+                step.targetSyncSchemaFieldId,
+                { colId: srcColForRef, cardId: cardId },
+                targetMerged
+              );
+            }
+
+            await client.query("COMMIT");
+          } catch (e) {
+            await safeRollback(client);
+            console.error(
+              `[auto-link] rule ${step.ruleId}/${step.targetKey} card ${cardId}:`,
+              e.message
+            );
+          } finally {
+            client.release();
+          }
+        } catch (e) {
+          console.error(`[auto-link] rule check ${rule.ruleId}:`, e.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[auto-link] outer error:", e.message);
+  }
+}
+
+/**
+ * 计算卡片在所有 category 合集（含父链）上的合并有效 Schema。
+ * 用于前端展示 Schema 感知属性面板。
+ *
+ * @param {string|null} userId
+ * @param {string} cardId
+ * @returns {Promise<{ fields: Array, autoLinkRules: Array }>}
+ */
+export async function getEffectiveSchemaForCard(userId, cardId) {
+  const empty = { fields: [], autoLinkRules: [] };
+
+  const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 2);
+  const exists = await query(
+    `SELECT user_id FROM cards WHERE id = $1 AND (${cOwnSql}) AND trashed_at IS NULL`,
+    [cardId, ...cOwnParams]
+  );
+  if (exists.rowCount === 0) return empty;
+  const cardUid = exists.rows[0].user_id;
+
+  const placementsRes = await query(
+    `SELECT collection_id FROM card_placements WHERE card_id = $1`,
+    [cardId]
+  );
+  const colIds = placementsRes.rows.map((r) => r.collection_id);
+  if (colIds.length === 0) return empty;
+
+  const { sql: colUidSql, params: colUidParams } = userIdCondition(userId, 1);
+  const allColsRes = await query(
+    `SELECT id, parent_id, is_category, card_schema FROM collections WHERE ${colUidSql}`,
+    colUidParams
+  );
+  const colMap = new Map(allColsRes.rows.map((r) => [r.id, r]));
+
+  const mergedFields = new Map();
+  const mergedRules = new Map();
+  for (const colId of colIds) {
+    const { fields, rules } = resolveSchemaFromChain(colMap, colId);
+    for (const f of fields) mergedFields.set(f.id, f);
+    for (const r of rules) mergedRules.set(r.ruleId, r);
+  }
+
+  const prefsOwnerKey = cardUid != null ? String(cardUid) : "__single__";
+  const notePrefs = await getNotePrefsForOwnerKey(prefsOwnerKey);
+  applyNotePrefsToAutoLinkRuleMap(mergedRules, notePrefs);
+
+  return {
+    fields: [...mergedFields.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    autoLinkRules: [...mergedRules.values()],
+  };
+}
+
+/**
+ * 批量将现有卡片的 media[] 附件迁移为独立文件卡片，并双向连接。
+ * 幂等：通过检查已有 attachment 链接 + 匹配 URL 跳过已处理项。
+ *
+ * @param {string|null} userId
+ * @param {{ fileCollectionId: string, clearOriginalMedia?: boolean }} opts
+ * @returns {Promise<{ processed: number, created: number, skipped: number }>}
+ */
+export async function batchMigrateAttachmentsToFileCards(userId, opts) {
+  const { fileCollectionId, clearOriginalMedia = false } = opts ?? {};
+  if (!fileCollectionId) throw new Error("缺少 fileCollectionId");
+
+  const { sql: colUidSql, params: colUidParams } = userIdCondition(userId, 2);
+  const colCheck = await query(
+    `SELECT id FROM collections WHERE id = $1 AND ${colUidSql}`,
+    [fileCollectionId, ...colUidParams]
+  );
+  if (colCheck.rowCount === 0) throw new Error("目标文件合集不存在或无权限");
+
+  const { sql: cUidSql, params: cUidParams } = cardOwnershipCondition(userId, 1);
+  const cardsRes = await query(
+    `SELECT id, user_id, media FROM cards
+     WHERE (${cUidSql})
+       AND trashed_at IS NULL
+       AND jsonb_array_length(COALESCE(media, '[]'::jsonb)) > 0`,
+    cUidParams
+  );
+
+  let processed = 0;
+  let created = 0;
+  let skipped = 0;
+
+  for (const cardRow of cardsRes.rows) {
+    const noteCardId = cardRow.id;
+    const uid = cardRow.user_id;
+    const mediaItems = Array.isArray(cardRow.media) ? cardRow.media : [];
+
+    for (const raw of mediaItems) {
+      const url = typeof raw.url === "string" ? raw.url.trim() : "";
+      if (!url) { skipped++; continue; }
+      processed++;
+
+      try {
+        // 幂等检查
+        const existLink = await query(
+          `SELECT l.to_card_id
+           FROM card_links l
+           INNER JOIN cards tc ON tc.id = l.to_card_id AND tc.trashed_at IS NULL
+           WHERE l.from_card_id = $1
+             AND l.link_type = 'attachment'
+             AND (tc.media->0->>'url') = $2
+           LIMIT 1`,
+          [noteCardId, url]
+        );
+        if (existLink.rowCount > 0) { skipped++; continue; }
+
+        const kind = ["image", "video", "audio", "file"].includes(raw.kind) ? raw.kind : "file";
+        const objectKind =
+          kind === "image" ? "file_image"
+          : kind === "video" ? "file_video"
+          : kind === "audio" ? "file_audio"
+          : "file_document";
+
+        const mediaItem = { url, kind };
+        if (raw.name) mediaItem.name = raw.name;
+        if (raw.coverUrl) mediaItem.coverUrl = raw.coverUrl;
+        if (raw.thumbnailUrl) mediaItem.thumbnailUrl = raw.thumbnailUrl;
+        if (typeof raw.sizeBytes === "number") mediaItem.sizeBytes = raw.sizeBytes;
+        if (typeof raw.durationSec === "number") mediaItem.durationSec = raw.durationSec;
+
+        const { addedOn, minutesOfDay } = nowDateParts();
+        const newId = newCardId();
+
+        const client = await getClient();
+        try {
+          await client.query("BEGIN");
+          await createCard(
+            userId,
+            fileCollectionId,
+            {
+              id: newId,
+              text: raw.name ? `## ${raw.name}` : "",
+              minutesOfDay,
+              addedOn,
+              objectKind,
+              tags: [],
+              relatedRefs: [],
+              media: [mediaItem],
+              insertAtStart: false,
+            },
+            client
+          );
+          await client.query(
+            `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+             VALUES ($1, $2, $3, 'attachment')
+             ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+            [uid, noteCardId, newId]
+          );
+          await client.query(
+            `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+             VALUES ($1, $2, $3, 'attachment')
+             ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+            [uid, newId, noteCardId]
+          );
+
+          if (clearOriginalMedia) {
+            await client.query(
+              `UPDATE cards
+               SET media = (
+                 SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+                 FROM jsonb_array_elements(COALESCE(media, '[]'::jsonb)) AS elem
+                 WHERE trim(elem->>'url') <> $2
+               )
+               WHERE id = $1`,
+              [noteCardId, url]
+            );
+          }
+
+          await client.query("COMMIT");
+          created++;
+        } catch (e) {
+          await safeRollback(client);
+          console.error(`[migrate-attachments] card ${noteCardId} url ${url}:`, e.message);
+          skipped++;
+        } finally {
+          client.release();
+        }
+      } catch (e) {
+        console.error(`[migrate-attachments] outer card ${noteCardId}:`, e.message);
+        skipped++;
+      }
+    }
+  }
+
+  return { processed, created, skipped };
+}
+
+/** @param {unknown} raw */
+function bilibiliAuthorFromCustomProps(raw) {
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    const id = typeof p.id === "string" ? p.id : "";
+    const typ = typeof p.type === "string" ? p.type : "";
+    if (id === "sf-bili-author" && typ === "cardLink") {
+      const v = p.value;
+      const cid =
+        v && typeof v === "object" && typeof v.cardId === "string" ? v.cardId.trim() : "";
+      if (cid) return null;
+    }
+    if (typ === "cardLink" && typeof p.name === "string" && p.name.trim() === "UP 主") {
+      const v = p.value;
+      const cid =
+        v && typeof v === "object" && typeof v.cardId === "string" ? v.cardId.trim() : "";
+      if (cid) return null;
+    }
+  }
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    const id = typeof p.id === "string" ? p.id : "";
+    const name = typeof p.name === "string" ? p.name.trim() : "";
+    const typ = typeof p.type === "string" ? p.type : "";
+    if (id === "sf-bili-author" && typ === "text") {
+      const v = p.value;
+      const s = typeof v === "string" ? v.trim() : "";
+      if (s) return s;
+    }
+    if (name === "作者" && typ === "text") {
+      const v = p.value;
+      const s = typeof v === "string" ? v.trim() : "";
+      if (s) return s;
+    }
+  }
+  return null;
+}
+
+/** @param {unknown} raw */
+function bilibiliAuthorCardLinkAlreadySet(raw) {
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    const id = typeof p.id === "string" ? p.id : "";
+    const typ = typeof p.type === "string" ? p.type : "";
+    if (id !== "sf-bili-author" || typ !== "cardLink") continue;
+    const v = p.value;
+    if (v && typeof v === "object") {
+      const cid = typeof v.cardId === "string" ? v.cardId.trim() : "";
+      if (cid) return true;
+    }
+  }
+  return false;
+}
+
+/** @param {string} text */
+function personHeadlineNormForMatch(text) {
+  let t = String(text || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const m = t.match(/^#{1,6}\s+(.+)$/m);
+  if (m) t = m[1].trim().replace(/\s+/g, " ");
+  return t.trim().toLowerCase();
+}
+
+/** @param {unknown[]} props @param {{ colId: string, cardId: string }} ref */
+function mergeBilibiliAuthorCustomProps(props, ref) {
+  const list = Array.isArray(props) ? [...props] : [];
+  const filtered = list.filter((p) => {
+    if (!p || typeof p !== "object") return true;
+    const name = typeof p.name === "string" ? p.name.trim() : "";
+    const typ = typeof p.type === "string" ? p.type : "";
+    if (name === "作者" && typ === "text") return false;
+    return true;
+  });
+  const fieldId = "sf-bili-author";
+  const fieldName = "UP 主";
+  const idx = filtered.findIndex((p) => p && p.id === fieldId);
+  const nextVal = { colId: ref.colId, cardId: ref.cardId };
+  if (idx >= 0) {
+    return filtered.map((p, i) =>
+      i === idx
+        ? { ...p, id: fieldId, name: fieldName, type: "cardLink", value: nextVal }
+        : p
+    );
+  }
+  return [...filtered, { id: fieldId, name: fieldName, type: "cardLink", value: nextVal }];
+}
+
+/** @param {unknown} raw */
+function readSfPersonNameFromPropsJson(raw) {
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    if (p.id === "sf-person-name" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return null;
+}
+
+/** @param {unknown[]} props @param {string} name */
+function mergePersonNameIntoPropsArray(props, name) {
+  const list = Array.isArray(props) ? [...props] : [];
+  const idx = list.findIndex((p) => p && p.id === "sf-person-name");
+  const v = String(name || "").trim();
+  if (idx >= 0) {
+    return list.map((p, i) =>
+      i === idx
+        ? { ...p, id: "sf-person-name", name: p.name || "名称", type: "text", value: v }
+        : p
+    );
+  }
+  return [...list, { id: "sf-person-name", name: "名称", type: "text", value: v }];
+}
+
+/**
+ * 正文仅为单个标题（HTML h* 或行首 # 的 Markdown）时返回名称，否则 null。
+ * @param {unknown} raw
+ */
+function legacyPersonNameFromBodyText(raw) {
+  const t = String(raw ?? "").trim();
+  if (!t) return null;
+  const hm = t.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
+  if (hm) {
+    const inner = hm[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    if (!inner) return null;
+    const after = t.slice(t.indexOf(hm[0]) + hm[0].length).trim();
+    const afterPlain = after.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    if (afterPlain) return null;
+    return inner;
+  }
+  const plain = t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const m = plain.match(/^#{1,6}\s+(.+)$/);
+  if (m) {
+    const rest = plain.slice(m[0].length).trim();
+    if (rest) return null;
+    return m[1].trim();
+  }
+  return null;
+}
+
+/** @param {unknown} text @param {unknown} customProps */
+function personCardNameMatchKey(text, customProps) {
+  const fromProp = readSfPersonNameFromPropsJson(customProps);
+  if (fromProp) return personHeadlineNormForMatch(fromProp);
+  return personHeadlineNormForMatch(text);
+}
+
+/**
+ * 将旧版「正文只有 ## 名」的人物卡迁入 sf-person-name 并清空正文。
+ * @param {string|null} userId
+ * @param {string} personColId
+ * @param {boolean} dryRun
+ * @param {{ migratedPersonNameFromBody: number, errors: number }} stats
+ */
+async function repairLegacyPersonCardsInCollection(userId, personColId, dryRun, stats) {
+  const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 1);
+  const colParamIdx = cOwnParams.length + 1;
+  const r = await query(
+    `SELECT c.id, c.text, c.custom_props
+     FROM cards c
+     INNER JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $${colParamIdx}
+     WHERE (${cOwnSql.replace(/\buser_id\b/g, "c.user_id")})
+       AND c.trashed_at IS NULL
+       AND c.object_kind = 'person'`,
+    [...cOwnParams, personColId]
+  );
+  for (const row of r.rows) {
+    const prop = readSfPersonNameFromPropsJson(row.custom_props);
+    const legacy = legacyPersonNameFromBodyText(row.text);
+    /** @type {unknown[] | null} */
+    let nextProps = null;
+    let nextText = null;
+    if (!prop && legacy) {
+      nextProps = mergePersonNameIntoPropsArray(
+        Array.isArray(row.custom_props) ? row.custom_props : [],
+        legacy
+      );
+      nextText = "";
+    } else if (prop && legacy && personHeadlineNormForMatch(legacy) === personHeadlineNormForMatch(prop)) {
+      nextProps = mergePersonNameIntoPropsArray(
+        Array.isArray(row.custom_props) ? row.custom_props : [],
+        prop
+      );
+      nextText = "";
+    } else {
+      continue;
+    }
+    if (dryRun) {
+      stats.migratedPersonNameFromBody++;
+      continue;
+    }
+    const client = await getClient();
+    try {
+      await client.query(
+        `UPDATE cards SET custom_props = $2::jsonb, text = $3
+         WHERE id = $1 AND trashed_at IS NULL`,
+        [row.id, JSON.stringify(nextProps), nextText ?? ""]
+      );
+      stats.migratedPersonNameFromBody++;
+    } catch (e) {
+      console.error(`[backfill-bilibili-person] repair person ${row.id}:`, e.message);
+      stats.errors++;
+    } finally {
+      client.release();
+    }
+  }
+}
+
+const PERSON_PRESET_BACKFILL = "person";
+const PERSON_DOT_BACKFILL = "rgba(249, 115, 22, 0.14)";
+
+/**
+ * @param {string|null} userId
+ */
+async function ensurePersonCollectionForBackfill(userId) {
+  const ex =
+    userId === null || userId === undefined
+      ? await query(
+          `SELECT id FROM collections WHERE user_id IS NULL AND preset_type_id = $1`,
+          [PERSON_PRESET_BACKFILL]
+        )
+      : await query(
+          `SELECT id FROM collections WHERE user_id = $1 AND preset_type_id = $2`,
+          [userId, PERSON_PRESET_BACKFILL]
+        );
+  if (ex.rowCount > 0) return ex.rows[0].id;
+
+  const id = `preset-${PERSON_PRESET_BACKFILL}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await createCollection(userId, {
+    id,
+    name: "人物",
+    dotColor: PERSON_DOT_BACKFILL,
+    parentId: null,
+  });
+  await updateCollection(userId, id, {
+    isCategory: true,
+    presetTypeId: PERSON_PRESET_BACKFILL,
+    cardSchema: {},
+  });
+  return id;
+}
+
+/**
+ * 扫描带 bilibili 标签的笔记：从 custom_props 读取扩展写入的「作者」或 sf-bili-author（text），
+ * 在人物预设合集建/复用人物卡，写入 creator 双边边与 sf-bili-author（cardLink）。
+ *
+ * @param {{ userId?: string|null, dryRun?: boolean }} opts
+ *   userId 省略=全部用户；userId: null 仅匿名 user_id IS NULL。
+ * @returns {Promise<object>}
+ */
+export async function backfillBilibiliCreatorsAsPersonCards(opts = {}) {
+  const dryRun = opts.dryRun === true;
+  const filterUserId = opts.userId;
+  const params = [];
+  let pIdx = 1;
+  let userClause = "";
+  if (filterUserId !== undefined) {
+    if (filterUserId === null) {
+      userClause = "AND c.user_id IS NULL";
+    } else {
+      userClause = `AND c.user_id = $${pIdx++}`;
+      params.push(filterUserId);
+    }
+  }
+
+  const listRes = await query(
+    `SELECT c.id, c.user_id, c.custom_props
+     FROM cards c
+     WHERE c.trashed_at IS NULL
+       AND EXISTS (
+         SELECT 1 FROM unnest(c.tags) AS t(tag)
+         WHERE lower(tag) = 'bilibili'
+       )
+       ${userClause}`,
+    params
+  );
+
+  const stats = {
+    notesSeen: listRes.rowCount,
+    skippedNoAuthor: 0,
+    skippedAlreadyCardLink: 0,
+    skippedNoPersonCollection: 0,
+    ensuredPersonCollections: 0,
+    createdPersonCards: 0,
+    reusedPersonCards: 0,
+    linkedNotes: 0,
+    filledPersonNameProp: 0,
+    migratedPersonNameFromBody: 0,
+    errors: 0,
+  };
+
+  /** @type {Map<string, { userId: string|null, rows: object[] }>} */
+  const byUser = new Map();
+  for (const row of listRes.rows) {
+    const key = row.user_id == null ? "__null__" : String(row.user_id);
+    if (!byUser.has(key)) {
+      byUser.set(key, { userId: row.user_id ?? null, rows: [] });
+    }
+    byUser.get(key).rows.push(row);
+  }
+
+  for (const { userId: uid, rows } of byUser.values()) {
+    let personColId = await findPresetCollectionIdForAutoLink(uid, "person", "person");
+    const hadPersonCol = Boolean(personColId);
+    if (!personColId && !dryRun) {
+      personColId = await ensurePersonCollectionForBackfill(uid);
+      if (!hadPersonCol) stats.ensuredPersonCollections++;
+    }
+    if (!personColId) {
+      for (const row of rows) {
+        const author = bilibiliAuthorFromCustomProps(row.custom_props);
+        if (!author) stats.skippedNoAuthor++;
+        else if (bilibiliAuthorCardLinkAlreadySet(row.custom_props))
+          stats.skippedAlreadyCardLink++;
+        else stats.skippedNoPersonCollection++;
+      }
+      console.error(
+        `[backfill-bilibili-person] user_id=${uid ?? "null"}: 无人物预设合集；` +
+          (dryRun ? "请先启用「人物」或去掉 --dry-run 以自动创建。" : "未能创建合集。")
+      );
+      continue;
+    }
+
+    const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(uid, 1);
+    const colParamIdx = cOwnParams.length + 1;
+    const pmapRes = await query(
+      `SELECT c.id, c.text, c.custom_props
+       FROM cards c
+       INNER JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $${colParamIdx}
+       WHERE (${cOwnSql.replace(/\buser_id\b/g, "c.user_id")})
+         AND c.trashed_at IS NULL
+         AND (c.object_kind = 'person' OR c.object_kind IS NULL)`,
+      [...cOwnParams, personColId]
+    );
+    /** @type {Map<string, string>} */
+    const nameToPersonId = new Map();
+    for (const pr of pmapRes.rows) {
+      const k = personCardNameMatchKey(pr.text, pr.custom_props);
+      if (k && !nameToPersonId.has(k)) nameToPersonId.set(k, pr.id);
+    }
+
+    for (const row of rows) {
+      const noteId = row.id;
+      try {
+        if (bilibiliAuthorCardLinkAlreadySet(row.custom_props)) {
+          stats.skippedAlreadyCardLink++;
+          continue;
+        }
+        const author = bilibiliAuthorFromCustomProps(row.custom_props);
+        if (!author) {
+          stats.skippedNoAuthor++;
+          continue;
+        }
+        const authorKey = personHeadlineNormForMatch(author);
+        if (!authorKey) {
+          stats.skippedNoAuthor++;
+          continue;
+        }
+
+        const exCr = await query(
+          `SELECT l.to_card_id
+           FROM card_links l
+           INNER JOIN cards tc ON tc.id = l.to_card_id AND tc.trashed_at IS NULL
+           WHERE l.from_card_id = $1
+             AND l.link_type = 'creator'
+             AND tc.object_kind = 'person'
+           LIMIT 1`,
+          [noteId]
+        );
+
+        let personCardId =
+          exCr.rowCount > 0 ? exCr.rows[0].to_card_id : nameToPersonId.get(authorKey) ?? null;
+        let createdNew = false;
+
+        if (!personCardId) {
+          createdNew = true;
+          personCardId = dryRun ? `__dry_${noteId}__` : newCardId();
+          if (dryRun) {
+            nameToPersonId.set(authorKey, personCardId);
+            stats.createdPersonCards++;
+            stats.linkedNotes++;
+            continue;
+          }
+        }
+
+        const reusedByName = !createdNew && exCr.rowCount === 0;
+
+        if (dryRun) {
+          stats.linkedNotes++;
+          if (reusedByName) stats.reusedPersonCards++;
+          continue;
+        }
+
+        const client = await getClient();
+        try {
+          await client.query("BEGIN");
+          if (createdNew) {
+            const { addedOn, minutesOfDay } = nowDateParts();
+            await createCard(
+              uid,
+              personColId,
+              {
+                id: personCardId,
+                text: "",
+                minutesOfDay,
+                addedOn,
+                objectKind: "person",
+                tags: [],
+                relatedRefs: [],
+                media: [],
+                customProps: mergePersonNameIntoPropsArray([], author),
+                insertAtStart: false,
+              },
+              client
+            );
+            nameToPersonId.set(authorKey, personCardId);
+          } else {
+            const prow = await client.query(
+              `SELECT text, custom_props FROM cards WHERE id = $1 AND trashed_at IS NULL`,
+              [personCardId]
+            );
+            if (prow.rowCount > 0) {
+              let pProps = Array.isArray(prow.rows[0].custom_props)
+                ? prow.rows[0].custom_props
+                : [];
+              let t = String(prow.rows[0].text ?? "");
+              let changed = false;
+              if (!readSfPersonNameFromPropsJson(pProps)) {
+                pProps = mergePersonNameIntoPropsArray(pProps, author);
+                changed = true;
+              }
+              const leg = legacyPersonNameFromBodyText(t);
+              if (
+                leg &&
+                personHeadlineNormForMatch(leg) === personHeadlineNormForMatch(author)
+              ) {
+                t = "";
+                changed = true;
+              }
+              if (changed) {
+                await client.query(
+                  `UPDATE cards SET custom_props = $2::jsonb, text = $3 WHERE id = $1`,
+                  [personCardId, JSON.stringify(pProps), t]
+                );
+                stats.filledPersonNameProp++;
+              }
+            }
+          }
+
+          await client.query(
+            `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+             VALUES ($1, $2, $3, 'creator')
+             ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+            [uid, noteId, personCardId]
+          );
+          await client.query(
+            `INSERT INTO card_links (user_id, from_card_id, to_card_id, link_type)
+             VALUES ($1, $2, $3, 'creator')
+             ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING`,
+            [uid, personCardId, noteId]
+          );
+
+          const props = Array.isArray(row.custom_props) ? row.custom_props : [];
+          const nextProps = mergeBilibiliAuthorCustomProps(props, {
+            colId: personColId,
+            cardId: personCardId,
+          });
+          await client.query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+            noteId,
+            JSON.stringify(nextProps),
+          ]);
+
+          await client.query("COMMIT");
+          stats.linkedNotes++;
+          if (createdNew) stats.createdPersonCards++;
+          else if (reusedByName) stats.reusedPersonCards++;
+        } catch (e) {
+          await safeRollback(client);
+          console.error(`[backfill-bilibili-person] note ${noteId}:`, e.message);
+          stats.errors++;
+        } finally {
+          client.release();
+        }
+      } catch (e) {
+        console.error(`[backfill-bilibili-person] outer ${noteId}:`, e.message);
+        stats.errors++;
+      }
+    }
+
+    await repairLegacyPersonCardsInCollection(uid, personColId, dryRun, stats);
+  }
+
+  return stats;
+}
+
+/** @param {unknown} tags */
+function clipPresetTypeForTags(tags) {
+  if (!Array.isArray(tags)) return null;
+  const hasBili = tags.some((t) => String(t).toLowerCase() === "bilibili");
+  const hasXhs = tags.some((t) => t === "小红书");
+  if (hasBili) return "post_bilibili";
+  if (hasXhs) return "post_xhs";
+  return null;
+}
+
+/** @param {unknown} tags */
+function stripClipSourceTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((t) => t !== "小红书" && String(t).toLowerCase() !== "bilibili");
+}
+
+/** @param {unknown} raw */
+function readLegacyClipUrlFromProps(raw) {
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object" || p.type !== "url") continue;
+    const id = typeof p.id === "string" ? p.id : "";
+    if (id === "sf-xhs-url" || id === "sf-bili-url" || id === "sf-clip-url") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  for (const p of props) {
+    if (!p || typeof p !== "object" || p.type !== "url") continue;
+    const name = typeof p.name === "string" ? p.name.trim() : "";
+    if (name === "链接") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+/** @param {unknown} raw */
+function readLegacyClipAuthorTextFromProps(raw) {
+  const fromBili = bilibiliAuthorFromCustomProps(raw);
+  if (fromBili) return fromBili;
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    if (p.id === "sf-xhs-author" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    if (typeof p.name === "string" && p.name.trim() === "作者" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+/** @param {unknown} raw */
+function readLegacyClipTitleFromProps(raw) {
+  const props = Array.isArray(raw) ? raw : [];
+  for (const p of props) {
+    if (!p || typeof p !== "object") continue;
+    if (p.id === "sf-clip-title" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+/** 扩展/旧正文首段 <p><strong>标题</strong></p> */
+function titleFromClipNoteHtml(html) {
+  const raw = String(html ?? "");
+  const m = raw.match(/<p>\s*<strong>([\s\S]*?)<\/strong>\s*<\/p>/i);
+  if (!m) return "";
+  return String(m[1] ?? "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clipHtmlStripLeadingTitleParagraph(html) {
+  return String(html ?? "")
+    .replace(/^\s*<p>\s*<strong>[\s\S]*?<\/strong>\s*<\/p>\s*/i, "")
+    .trim();
+}
+
+/**
+ * 为已存在子类字段的剪藏卡补父级「链接」「标题」，不删其它自定义字段。
+ * @param {unknown[]} rawProps
+ * @param {string} url
+ * @param {string} clipTitle
+ */
+function patchClipParentFieldsIntoProps(rawProps, url, clipTitle) {
+  const list = Array.isArray(rawProps) ? [...rawProps] : [];
+  const u = typeof url === "string" ? url.trim() : "";
+  const t = typeof clipTitle === "string" ? clipTitle.trim() : "";
+  const idxX = list.findIndex((p) => p && p.id === "sf-xhs-url");
+  const idxB = list.findIndex((p) => p && p.id === "sf-bili-url");
+  const anchor = idxX >= 0 ? idxX : idxB >= 0 ? idxB : list.length;
+
+  if (u && !list.some((p) => p && p.id === "sf-clip-url")) {
+    list.splice(anchor, 0, {
+      id: "sf-clip-url",
+      name: "链接",
+      type: "url",
+      value: u,
+    });
+  }
+  if (t && !list.some((p) => p && p.id === "sf-clip-title")) {
+    const clipUrlIdx = list.findIndex((p) => p && p.id === "sf-clip-url");
+    const ins = clipUrlIdx >= 0 ? clipUrlIdx + 1 : anchor;
+    list.splice(ins, 0, {
+      id: "sf-clip-title",
+      name: "标题",
+      type: "text",
+      value: t,
+    });
+  }
+  return list;
+}
+
+/**
+ * @param {string} presetTypeId
+ * @param {string} url
+ * @param {string} authorText
+ * @param {string} clipTitle
+ */
+function buildPresetClipCustomPropsArray(presetTypeId, url, authorText, clipTitle) {
+  const u = typeof url === "string" ? url.trim() : "";
+  const a = typeof authorText === "string" ? authorText.trim() : "";
+  const tit = typeof clipTitle === "string" ? clipTitle.trim() : "";
+  const clipBase = [
+    { id: "sf-clip-url", name: "链接", type: "url", value: u || null },
+    { id: "sf-clip-title", name: "标题", type: "text", value: tit || null },
+  ];
+  if (presetTypeId === "post_xhs") {
+    return [
+      ...clipBase,
+      { id: "sf-xhs-url", name: "原始链接", type: "url", value: u || null },
+      { id: "sf-xhs-author", name: "作者", type: "text", value: a || null },
+    ];
+  }
+  if (presetTypeId === "post_bilibili") {
+    return [
+      ...clipBase,
+      { id: "sf-bili-url", name: "视频链接", type: "url", value: u || null },
+      { id: "sf-bili-author", name: "UP 主", type: "text", value: a || null },
+    ];
+  }
+  return [];
+}
+
+/**
+ * @param {unknown} raw
+ * @param {string} presetTypeId
+ * @param {object[]} baseProps
+ */
+function mergeAuthorCardLinkFromLegacy(raw, presetTypeId, baseProps) {
+  const idAuthor =
+    presetTypeId === "post_bilibili" ? "sf-bili-author" : "sf-xhs-author";
+  const props = Array.isArray(raw) ? raw : [];
+  const existing = props.find(
+    (p) =>
+      p &&
+      typeof p === "object" &&
+      p.id === idAuthor &&
+      p.type === "cardLink" &&
+      p.value &&
+      typeof p.value === "object" &&
+      typeof p.value.cardId === "string" &&
+      p.value.cardId.trim()
+  );
+  if (!existing) return baseProps;
+  return baseProps.map((p) =>
+    p.id === idAuthor ? { ...existing, name: p.name } : p
+  );
+}
+
+/**
+ * 将带扩展写入的「小红书」「bilibili」标签的笔记迁入剪藏预设子类（post_xhs / post_bilibili），
+ * 去掉来源标签，写入 schema 字段 id，并从「未归类」移除归属（若存在）。
+ *
+ * @param {string|null} userId
+ * @param {{ dryRun?: boolean }} [opts]
+ */
+export async function migrateClipTaggedNotesToPresetCards(userId, opts = {}) {
+  const dryRun = opts.dryRun === true;
+  /** @type {{ scanned: number, migrated: number, skippedNoPreset: number, skippedNoKind: number, errors: number, backfillTitles: number }} */
+  const stats = {
+    scanned: 0,
+    migrated: 0,
+    skippedNoPreset: 0,
+    skippedNoKind: 0,
+    errors: 0,
+    backfillTitles: 0,
+  };
+
+  const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 1);
+  const listRes = await query(
+    `SELECT c.id, c.tags, c.custom_props, c.text
+     FROM cards c
+     WHERE c.trashed_at IS NULL
+       AND (c.object_kind IS NULL OR c.object_kind = 'note')
+       AND (
+         EXISTS (SELECT 1 FROM unnest(c.tags) AS t(tag) WHERE tag = '小红书')
+         OR EXISTS (SELECT 1 FROM unnest(c.tags) AS t(tag) WHERE lower(tag) = 'bilibili')
+       )
+       AND (${cOwnSql.replace(/\buser_id\b/g, "c.user_id")})`,
+    [...cOwnParams]
+  );
+
+  for (const row of listRes.rows) {
+    stats.scanned++;
+    const tags = row.tags ?? [];
+    const presetType = clipPresetTypeForTags(tags);
+    if (!presetType) {
+      stats.skippedNoKind++;
+      continue;
+    }
+    const tgtCol = await getPresetCollectionId(userId, presetType);
+    if (!tgtCol) {
+      stats.skippedNoPreset++;
+      continue;
+    }
+
+    if (dryRun) {
+      stats.migrated++;
+      continue;
+    }
+
+    const client = await getClient();
+    try {
+      await client.query("BEGIN");
+      const url = readLegacyClipUrlFromProps(row.custom_props);
+      const author = readLegacyClipAuthorTextFromProps(row.custom_props);
+      const fromHtmlTitle = titleFromClipNoteHtml(row.text);
+      const clipTitle =
+        readLegacyClipTitleFromProps(row.custom_props) || fromHtmlTitle;
+      let nextProps = buildPresetClipCustomPropsArray(
+        presetType,
+        url,
+        author,
+        clipTitle
+      );
+      nextProps = mergeAuthorCardLinkFromLegacy(row.custom_props, presetType, nextProps);
+      const nextTags = stripClipSourceTags(tags);
+      let nextText = row.text;
+      if (fromHtmlTitle) {
+        const stripped = clipHtmlStripLeadingTitleParagraph(row.text);
+        nextText = stripped || "<p>（无正文）</p>";
+      }
+
+      await client.query(
+        `UPDATE cards
+         SET object_kind = $2, tags = $3, custom_props = $4::jsonb, text = $5
+         WHERE id = $1 AND trashed_at IS NULL`,
+        [row.id, presetType, nextTags, JSON.stringify(nextProps), nextText]
+      );
+
+      const orderRes = await client.query(
+        `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM card_placements WHERE collection_id = $1`,
+        [tgtCol]
+      );
+      const sortOrder = orderRes.rows[0].next;
+      await client.query(
+        `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+         VALUES ($1, $2, false, $3)
+         ON CONFLICT (card_id, collection_id) DO NOTHING`,
+        [row.id, tgtCol, sortOrder]
+      );
+
+      await client.query(
+        `DELETE FROM card_placements WHERE card_id = $1 AND collection_id = $2`,
+        [row.id, LOOSE_NOTES_COLLECTION_ID]
+      );
+
+      await client.query("COMMIT");
+      stats.migrated++;
+      runAutoLinkRulesForCard(userId, row.id).catch((e) =>
+        console.error("[migrate-clip-tagged] auto-link:", e.message)
+      );
+    } catch (e) {
+      await safeRollback(client);
+      console.error(`[migrate-clip-tagged] card ${row.id}:`, e.message);
+      stats.errors++;
+    } finally {
+      client.release();
+    }
+  }
+
+  if (!dryRun) {
+    const bf = await backfillClipPresetTitlesFromHtml(userId);
+    stats.backfillTitles = bf.updated;
+  }
+
+  return stats;
+}
+
+/**
+ * 已为剪藏子类、但缺少父级「标题」的旧数据：从正文首段 strong 补 sf-clip-title（及缺省时 sf-clip-url）。
+ * @param {string|null} userId
+ * @returns {Promise<{ updated: number }>}
+ */
+export async function backfillClipPresetTitlesFromHtml(userId) {
+  let updated = 0;
+  const { sql: cOwnSql, params: cOwnParams } = cardOwnershipCondition(userId, 1);
+  const listRes = await query(
+    `SELECT c.id, c.text, c.custom_props, c.object_kind
+     FROM cards c
+     WHERE c.trashed_at IS NULL
+       AND c.object_kind IN ('post_xhs', 'post_bilibili')
+       AND (${cOwnSql.replace(/\buser_id\b/g, "c.user_id")})`,
+    [...cOwnParams]
+  );
+
+  for (const row of listRes.rows) {
+    const props = Array.isArray(row.custom_props) ? row.custom_props : [];
+    const hasTitle = props.some(
+      (p) =>
+        p &&
+        p.id === "sf-clip-title" &&
+        typeof p.value === "string" &&
+        p.value.trim()
+    );
+    if (hasTitle) continue;
+    const fromHtml = titleFromClipNoteHtml(row.text);
+    if (!fromHtml) continue;
+    const url = readLegacyClipUrlFromProps(props);
+    const nextProps = patchClipParentFieldsIntoProps(props, url, fromHtml);
+    const nextText =
+      clipHtmlStripLeadingTitleParagraph(row.text) || "<p>（无正文）</p>";
+    try {
+      await query(
+        `UPDATE cards SET custom_props = $2::jsonb, text = $3
+         WHERE id = $1 AND trashed_at IS NULL`,
+        [row.id, JSON.stringify(nextProps), nextText]
+      );
+      updated++;
+    } catch (e) {
+      console.error(`[backfill-clip-title] card ${row.id}:`, e.message);
+    }
+  }
+  return { updated };
+}
+
+/**
+ * 将仍留在 cards.related_refs JSON 中的引用写入 card_links（双向 related），并清空 JSON 列。
+ * 供旧库或未跑全量迁移的实例一次性执行。
+ *
+ * @param {string|null} userId
+ * @returns {Promise<{ withJson: number, migrated: number }>}
+ */
+export async function migrateRelatedRefsJsonToCardLinks(userId) {
+  const { sql: cUidSql, params: cUidParams } = cardOwnershipCondition(userId, 1);
+  const res = await query(
+    `SELECT id, related_refs FROM cards
+     WHERE (${cUidSql}) AND trashed_at IS NULL
+       AND jsonb_array_length(COALESCE(related_refs, '[]'::jsonb)) > 0`,
+    cUidParams
+  );
+  let migrated = 0;
+  for (const row of res.rows) {
+    const raw = row.related_refs;
+    const refs = [];
+    if (Array.isArray(raw)) {
+      for (const r of raw) {
+        const cardId = r && typeof r.cardId === "string" ? r.cardId.trim() : "";
+        if (!cardId) continue;
+        const colId =
+          r && typeof r.colId === "string" && r.colId.trim() ? r.colId.trim() : undefined;
+        refs.push(colId ? { colId, cardId } : { cardId });
+      }
+    }
+    if (refs.length === 0) continue;
+    const client = await getClient();
+    try {
+      await syncCardRelatedLinksWithClient(client, userId, row.id, refs);
+      migrated++;
+    } catch (e) {
+      console.error(`[migrate-related-refs-json] card ${row.id}:`, e.message);
+    } finally {
+      client.release();
+    }
+  }
+  return { withJson: res.rowCount, migrated };
 }

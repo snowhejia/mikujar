@@ -35,6 +35,14 @@ export function migrateCustomPropsList(props: CardProperty[]): CardProperty[] {
         x = { ...x, value: v.length ? v : null };
       }
     }
+    if (x.type === "cardLink" && x.value != null && typeof x.value === "object") {
+      const o = x.value as Record<string, unknown>;
+      const colId = typeof o.colId === "string" ? o.colId.trim() : "";
+      const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
+      if (!colId || !cardId) {
+        x = { ...x, value: null };
+      }
+    }
     return x;
   });
 }

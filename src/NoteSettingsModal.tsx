@@ -1,17 +1,195 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppChrome } from "./i18n/useAppChrome";
 import { useAppUiLang } from "./appUiLang";
 import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
+import type {
+  AutoLinkRule,
+  Collection,
+  CollectionCardSchema,
+  SchemaField,
+  UserNotePrefs,
+} from "./types";
 import {
   PRESET_OBJECT_TYPES_GROUPS,
-  PRESET_OBJECT_TYPES_RECOMMENDED,
+  buildSchemaFromPreset,
+  listPresetAutoLinkRulesForSettings,
   presetTypeParentCard,
   type PresetObjectTypeItem,
+  type PresetTypeGroup,
 } from "./notePresetTypesCatalog";
+import {
+  enablePresetTypeApi,
+  updateCollectionApi,
+  deleteCollectionApi,
+  migrateAttachmentsApi,
+  migrateRelatedRefsJsonApi,
+  migrateClipTaggedNotesApi,
+  fetchMeNotePrefs,
+  putMeNotePrefs,
+} from "./api/collections";
+import { loadLocalNotePrefs, saveLocalNotePrefs } from "./notePrefsStorage";
+import {
+  walkCollections,
+  walkCollectionsWithPath,
+} from "./appkit/collectionModel";
 
-type NoteSettingsPanel = "general" | "objectTypes";
+const CATALOG_PRESET_IDS: Set<string> = (() => {
+  const s = new Set<string>();
+  for (const g of PRESET_OBJECT_TYPES_GROUPS) {
+    s.add(g.baseId);
+    for (const ch of g.children) s.add(ch.id);
+  }
+  return s;
+})();
+
+function collectionIdFromEnablePresetResponse(
+  res: Collection | { alreadyExists: true; id: string } | null
+): string | null {
+  if (!res || typeof res !== "object" || !("id" in res)) return null;
+  const id = (res as { id: string }).id;
+  return typeof id === "string" && id.trim() ? id : null;
+}
+
+function findParentOfCollectionId(
+  roots: Collection[],
+  targetId: string
+): Collection | null {
+  for (const c of roots) {
+    if (c.children?.some((ch) => ch.id === targetId)) return c;
+    if (c.children?.length) {
+      const r = findParentOfCollectionId(c.children, targetId);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+function catalogGroupBaseForPresetId(presetId: string): string | null {
+  const p = presetId.trim();
+  if (!p) return null;
+  for (const g of PRESET_OBJECT_TYPES_GROUPS) {
+    if (g.baseId === p) return g.baseId;
+    if (g.children.some((c) => c.id === p)) return g.baseId;
+  }
+  return null;
+}
+
+function dotColorFromName(name: string): string {
+  let h = 0;
+  const s = name.trim() || "x";
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsla(${hue}, 52%, 90%, 0.95)`;
+}
+
+const CUSTOM_SCHEMA_TYPE_OPTIONS: SchemaField["type"][] = [
+  "text",
+  "url",
+  "number",
+  "date",
+  "checkbox",
+  "cardLink",
+  "collectionLink",
+];
+
+type NoteSettingsPanel = "general" | "objectTypes" | "autoLink";
+
+function flattenCollectionsForPicker(
+  cols: Collection[] | undefined,
+  prefix = ""
+): { id: string; label: string }[] {
+  if (!cols?.length) return [];
+  const out: { id: string; label: string }[] = [];
+  for (const c of cols) {
+    const label = prefix ? `${prefix} / ${c.name}` : c.name;
+    out.push({ id: c.id, label });
+    if (c.children?.length) {
+      out.push(...flattenCollectionsForPicker(c.children, label));
+    }
+  }
+  return out;
+}
+
+function findCollectionChain(
+  roots: Collection[],
+  id: string,
+  chain: Collection[] = []
+): Collection[] | null {
+  for (const c of roots) {
+    const next = [...chain, c];
+    if (c.id === id) return next;
+    if (c.children?.length) {
+      const hit = findCollectionChain(c.children, id, next);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** 沿父链合并 card_schema，只取「关联卡片」类型字段 */
+function mergedCardLinkFieldsForCollection(
+  colId: string,
+  roots: Collection[] | undefined
+): SchemaField[] {
+  if (!colId.trim() || !roots?.length) return [];
+  const chain = findCollectionChain(roots, colId);
+  if (!chain) return [];
+  const map = new Map<string, SchemaField>();
+  for (const c of chain) {
+    for (const f of c.cardSchema?.fields ?? []) {
+      map.set(f.id, f);
+    }
+  }
+  return [...map.values()]
+    .filter((f) => f.type === "cardLink")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+function findCollectionById(
+  roots: Collection[] | undefined,
+  id: string
+): Collection | null {
+  if (!roots) return null;
+  for (const c of roots) {
+    if (c.id === id) return c;
+    const sub = findCollectionById(c.children, id);
+    if (sub) return sub;
+  }
+  return null;
+}
+
+function summarizeCustomAutoLinkRule(
+  rule: AutoLinkRule,
+  lang: "zh" | "en"
+): string {
+  if (rule.labelZh?.trim() || rule.labelEn?.trim()) {
+    return lang === "en"
+      ? (rule.labelEn ?? rule.labelZh ?? rule.ruleId)
+      : (rule.labelZh ?? rule.labelEn ?? rule.ruleId);
+  }
+  const parts: string[] = [];
+  if (rule.sourceCollectionId)
+    parts.push(lang === "en" ? `from col ${rule.sourceCollectionId}` : `源合集 ${rule.sourceCollectionId}`);
+  if (rule.sourceObjectKind)
+    parts.push(lang === "en" ? `kind ${rule.sourceObjectKind}` : `形态 ${rule.sourceObjectKind}`);
+  if (rule.sourcePresetTypeId)
+    parts.push(lang === "en" ? `preset ${rule.sourcePresetTypeId}` : `预设 ${rule.sourcePresetTypeId}`);
+  const cond = parts.length ? parts.join(lang === "en" ? "; " : "，") : "—";
+  const tgt = rule.targetObjectKind ?? "?";
+  const place =
+    rule.targetCollectionId ??
+    (rule.targetPresetTypeId
+      ? lang === "en"
+        ? `preset:${rule.targetPresetTypeId}`
+        : `预设:${rule.targetPresetTypeId}`
+      : "?");
+  const lt = rule.linkType ?? "related";
+  return lang === "en"
+    ? `If ${cond} → ${tgt} in ${place} (${lt})`
+    : `若 ${cond} → 新建 ${tgt} 至 ${place}（${lt}）`;
+}
 
 type NoteSettingsModalProps = {
   open: boolean;
@@ -28,6 +206,12 @@ type NoteSettingsModalProps = {
   onOpenFlomoImport?: () => void;
   onOpenEvernoteImport?: () => void;
   onOpenYuqueImport?: () => void;
+  /** 传入时，对象类型面板变为可交互（启用/禁用预设类型） */
+  collections?: Collection[];
+  /** 刷新合集树（启用/禁用类型后调用）；启用时可传入新合集 id 与 presetTypeId 以同步展开侧栏 */
+  onCollectionsChange?: (
+    ctx?: { enabledCollectionId?: string; presetTypeId?: string }
+  ) => void | Promise<void>;
 };
 
 function PresetTypeCard({
@@ -37,25 +221,20 @@ function PresetTypeCard({
   item: PresetObjectTypeItem;
   label: string;
 }) {
-  const c = useAppChrome();
   return (
-    <div
-      className="note-settings-modal__preset-card"
-      role="presentation"
-      title={label}
-    >
-      <div
+    <div className="note-settings-modal__preset-card" role="presentation" title={label}>
+      <span
         className="note-settings-modal__preset-icon"
         style={{ background: item.tint }}
         aria-hidden
       >
         <span className="note-settings-modal__preset-emoji">{item.emoji}</span>
-      </div>
+      </span>
       <span className="note-settings-modal__preset-name">{label}</span>
-      <span className="note-settings-modal__preset-badge">{c.noteSettingsPresetComingSoon}</span>
     </div>
   );
 }
+
 
 export function NoteSettingsModal({
   open,
@@ -72,12 +251,392 @@ export function NoteSettingsModal({
   onOpenFlomoImport,
   onOpenEvernoteImport,
   onOpenYuqueImport,
+  collections,
+  onCollectionsChange,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   const { lang } = useAppUiLang();
   const [importSource, setImportSource] = useState<
     "" | "apple" | "flomo" | "evernote" | "yuque"
   >("");
+  const [typeActionLoading, setTypeActionLoading] = useState<string | null>(null);
+  const [migrateResult, setMigrateResult] = useState<{
+    processed: number; created: number; skipped: number;
+  } | null>(null);
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  const [relatedRefsMigrateResult, setRelatedRefsMigrateResult] = useState<{
+    withJson: number;
+    migrated: number;
+  } | null>(null);
+  const [relatedRefsMigrateLoading, setRelatedRefsMigrateLoading] =
+    useState(false);
+  const [clipTaggedMigrateResult, setClipTaggedMigrateResult] = useState<{
+    scanned: number;
+    migrated: number;
+    skippedNoPreset: number;
+    skippedNoKind: number;
+    errors: number;
+    backfillTitles?: number;
+  } | null>(null);
+  const [clipTaggedMigrateLoading, setClipTaggedMigrateLoading] =
+    useState(false);
+  const [notePrefs, setNotePrefs] = useState<UserNotePrefs>(() =>
+    loadLocalNotePrefs()
+  );
+  const [notePrefsSyncErr, setNotePrefsSyncErr] = useState(false);
+  const autoLinkCatalog = useMemo(
+    () => listPresetAutoLinkRulesForSettings(),
+    []
+  );
+  const collectionPickerOptions = useMemo(
+    () => flattenCollectionsForPicker(collections),
+    [collections]
+  );
+  const [autoLinkDraft, setAutoLinkDraft] = useState({
+    sourceCollectionId: "",
+    sourceFieldId: "",
+    targetCollectionId: "",
+    targetFieldId: "",
+  });
+  const sourceColLinkFields = useMemo(
+    () =>
+      mergedCardLinkFieldsForCollection(
+        autoLinkDraft.sourceCollectionId,
+        collections
+      ),
+    [autoLinkDraft.sourceCollectionId, collections]
+  );
+  const targetColLinkFields = useMemo(
+    () =>
+      mergedCardLinkFieldsForCollection(
+        autoLinkDraft.targetCollectionId,
+        collections
+      ),
+    [autoLinkDraft.targetCollectionId, collections]
+  );
+
+  useEffect(() => {
+    setAutoLinkDraft((d) => {
+      if (!d.sourceFieldId) return d;
+      if (sourceColLinkFields.some((f) => f.id === d.sourceFieldId)) return d;
+      return { ...d, sourceFieldId: "" };
+    });
+  }, [sourceColLinkFields]);
+  useEffect(() => {
+    setAutoLinkDraft((d) => {
+      if (!d.targetFieldId) return d;
+      if (targetColLinkFields.some((f) => f.id === d.targetFieldId)) return d;
+      return { ...d, targetFieldId: "" };
+    });
+  }, [targetColLinkFields]);
+  const [customRuleErr, setCustomRuleErr] = useState<string | null>(null);
+  const [customTypeModal, setCustomTypeModal] = useState<
+    null | { mode: "create" } | { mode: "edit"; collection: Collection }
+  >(null);
+  const [customTypeDraft, setCustomTypeDraft] = useState<{
+    name: string;
+    parentId: string;
+    fields: { id?: string; name: string; type: SchemaField["type"] }[];
+  }>({ name: "", parentId: "", fields: [] });
+  const [customTypeFormErr, setCustomTypeFormErr] = useState<string | null>(
+    null
+  );
+  const [customTypeSaving, setCustomTypeSaving] = useState(false);
+
+  const customObjectTypeLayout = useMemo(() => {
+    if (!collections?.length) {
+      return {
+        rootCustoms: [] as Collection[],
+        extrasByBaseId: new Map<string, Collection[]>(),
+        nestedCustomRows: [] as { parent: Collection; children: Collection[] }[],
+      };
+    }
+    const flat: Collection[] = [];
+    walkCollections(collections, (c) => flat.push(c));
+    const customCols = flat.filter(
+      (c) =>
+        Boolean(
+          c.isCategory &&
+            c.presetTypeId &&
+            !CATALOG_PRESET_IDS.has(c.presetTypeId)
+        )
+    );
+    const extrasByBaseId = new Map<string, Collection[]>();
+    const nestedCustomRowsMap = new Map<
+      string,
+      { parent: Collection; children: Collection[] }
+    >();
+    const rootCustoms: Collection[] = [];
+    for (const col of customCols) {
+      const parent = findParentOfCollectionId(collections, col.id);
+      if (!parent) {
+        rootCustoms.push(col);
+        continue;
+      }
+      const base = parent.presetTypeId
+        ? catalogGroupBaseForPresetId(parent.presetTypeId)
+        : null;
+      if (base) {
+        const arr = extrasByBaseId.get(base) ?? [];
+        arr.push(col);
+        extrasByBaseId.set(base, arr);
+        continue;
+      }
+      if (
+        parent.presetTypeId &&
+        !CATALOG_PRESET_IDS.has(parent.presetTypeId)
+      ) {
+        let row = nestedCustomRowsMap.get(parent.id);
+        if (!row) {
+          row = { parent, children: [] };
+          nestedCustomRowsMap.set(parent.id, row);
+        }
+        row.children.push(col);
+      } else {
+        rootCustoms.push(col);
+      }
+    }
+    return {
+      rootCustoms,
+      extrasByBaseId,
+      nestedCustomRows: [...nestedCustomRowsMap.values()],
+    };
+  }, [collections]);
+
+  const categoryObjectContainers = useMemo(() => {
+    if (!collections?.length) return [];
+    return walkCollectionsWithPath(collections, [])
+      .filter((x) => x.col.isCategory && x.col.presetTypeId)
+      .map((x) => ({ id: x.col.id, label: x.path }));
+  }, [collections]);
+
+  useEffect(() => {
+    if (!customTypeModal) return;
+    if (customTypeModal.mode === "create") {
+      setCustomTypeDraft({
+        name: "",
+        parentId: "",
+        fields: [{ name: lang === "en" ? "Title" : "标题", type: "text" }],
+      });
+    } else {
+      const col = customTypeModal.collection;
+      const fs = col.cardSchema?.fields ?? [];
+      setCustomTypeDraft({
+        name: col.name,
+        parentId: "",
+        fields:
+          fs.length > 0
+            ? fs.map((f) => ({
+                id: f.id,
+                name: f.name,
+                type: f.type,
+              }))
+            : [{ name: lang === "en" ? "Title" : "标题", type: "text" }],
+      });
+    }
+    setCustomTypeFormErr(null);
+  }, [customTypeModal, lang]);
+
+  // 从 collections 树中找出已启用的预设类型（preset_type_id → Collection）
+  const enabledByPresetTypeId = new Map<string, Collection>();
+  if (collections) {
+    walkCollections(collections, (col) => {
+      if (col.presetTypeId) enabledByPresetTypeId.set(col.presetTypeId, col);
+    });
+  }
+
+  async function handleEnablePresetType(group: PresetTypeGroup, child?: PresetObjectTypeItem) {
+    const presetTypeId = child ? child.id : group.baseId;
+    const name = lang === "en"
+      ? (child ? child.nameEn : group.baseLabelEn)
+      : (child ? child.nameZh : group.baseLabelZh);
+    const dotColor = child ? child.tint : group.baseTint;
+    const cardSchema = buildSchemaFromPreset(group, child);
+    const collectionId = `preset-${presetTypeId}-${Date.now()}`;
+    setTypeActionLoading(presetTypeId);
+    try {
+      let parentId: string | undefined;
+      if (child) {
+        const existingParent = enabledByPresetTypeId.get(group.baseId);
+        if (existingParent) {
+          parentId = existingParent.id;
+        } else {
+          const parentCollectionId = `preset-${group.baseId}-${Date.now()}`;
+          const pRes = await enablePresetTypeApi({
+            presetTypeId: group.baseId,
+            collectionId: parentCollectionId,
+            name: lang === "en" ? group.baseLabelEn : group.baseLabelZh,
+            dotColor: group.baseTint,
+            cardSchema: buildSchemaFromPreset(group),
+          });
+          if (!pRes) return;
+          parentId = pRes.id;
+        }
+      }
+
+      const res = await enablePresetTypeApi({
+        presetTypeId,
+        collectionId,
+        name,
+        dotColor,
+        cardSchema,
+        ...(parentId ? { parentId } : {}),
+      });
+      if (!res || !("id" in res) || !res.id) return;
+      await onCollectionsChange?.({
+        enabledCollectionId: res.id,
+        presetTypeId,
+      });
+    } finally {
+      setTypeActionLoading(null);
+    }
+  }
+
+  async function handleDisablePresetType(col: Collection) {
+    setTypeActionLoading(col.presetTypeId ?? col.id);
+    try {
+      await deleteCollectionApi(col.id);
+      await onCollectionsChange?.();
+    } finally {
+      setTypeActionLoading(null);
+    }
+  }
+
+  /** 按目录顺序启用全部内置预设（云端）；「文件」仅建父级，子类随 UI 视为已包含 */
+  async function handleEnableAllPresetTypes() {
+    if (collections == null || dataMode !== "remote") return;
+
+    const presetIdToColId = new Map<string, string>();
+    for (const [pid, col] of enabledByPresetTypeId) {
+      presetIdToColId.set(pid, col.id);
+    }
+
+    setTypeActionLoading("__all__");
+    try {
+      for (const group of PRESET_OBJECT_TYPES_GROUPS) {
+        const nameBase =
+          lang === "en" ? group.baseLabelEn : group.baseLabelZh;
+
+        if (group.baseId === "file") {
+          if (!presetIdToColId.has("file")) {
+            const res = await enablePresetTypeApi({
+              presetTypeId: "file",
+              collectionId: `preset-file-${Date.now()}`,
+              name: nameBase,
+              dotColor: group.baseTint,
+              cardSchema: buildSchemaFromPreset(group),
+            });
+            const id = collectionIdFromEnablePresetResponse(res);
+            if (id) {
+              presetIdToColId.set("file", id);
+              await onCollectionsChange?.({
+                enabledCollectionId: id,
+                presetTypeId: "file",
+              });
+            }
+          }
+          continue;
+        }
+
+        if (group.children.length === 0) {
+          if (!presetIdToColId.has(group.baseId)) {
+            const res = await enablePresetTypeApi({
+              presetTypeId: group.baseId,
+              collectionId: `preset-${group.baseId}-${Date.now()}`,
+              name: nameBase,
+              dotColor: group.baseTint,
+              cardSchema: buildSchemaFromPreset(group),
+            });
+            const id = collectionIdFromEnablePresetResponse(res);
+            if (id) {
+              presetIdToColId.set(group.baseId, id);
+              await onCollectionsChange?.({
+                enabledCollectionId: id,
+                presetTypeId: group.baseId,
+              });
+            }
+          }
+          continue;
+        }
+
+        for (const child of group.children) {
+          if (presetIdToColId.has(child.id)) continue;
+
+          if (!presetIdToColId.has(group.baseId)) {
+            const pRes = await enablePresetTypeApi({
+              presetTypeId: group.baseId,
+              collectionId: `preset-${group.baseId}-${Date.now()}`,
+              name: nameBase,
+              dotColor: group.baseTint,
+              cardSchema: buildSchemaFromPreset(group),
+            });
+            const pid = collectionIdFromEnablePresetResponse(pRes);
+            if (!pid) continue;
+            presetIdToColId.set(group.baseId, pid);
+          }
+
+          const parentId = presetIdToColId.get(group.baseId);
+          if (!parentId) continue;
+
+          const chRes = await enablePresetTypeApi({
+            presetTypeId: child.id,
+            collectionId: `preset-${child.id}-${Date.now()}`,
+            name: lang === "en" ? child.nameEn : child.nameZh,
+            dotColor: child.tint,
+            cardSchema: buildSchemaFromPreset(group, child),
+            parentId,
+          });
+          const cid = collectionIdFromEnablePresetResponse(chRes);
+          if (cid) {
+            presetIdToColId.set(child.id, cid);
+            await onCollectionsChange?.({
+              enabledCollectionId: cid,
+              presetTypeId: child.id,
+            });
+          }
+        }
+      }
+    } finally {
+      setTypeActionLoading(null);
+    }
+  }
+
+  async function handleMigrateAttachments() {
+    const fileCol = enabledByPresetTypeId.get("file");
+    if (!fileCol) return;
+    setMigrateLoading(true);
+    try {
+      const res = await migrateAttachmentsApi({ fileCollectionId: fileCol.id, clearOriginalMedia: false });
+      setMigrateResult(res);
+      await onCollectionsChange?.();
+    } finally {
+      setMigrateLoading(false);
+    }
+  }
+
+  async function handleMigrateRelatedRefsJson() {
+    if (dataMode !== "remote") return;
+    setRelatedRefsMigrateLoading(true);
+    try {
+      const res = await migrateRelatedRefsJsonApi();
+      setRelatedRefsMigrateResult(res);
+      await onCollectionsChange?.();
+    } finally {
+      setRelatedRefsMigrateLoading(false);
+    }
+  }
+
+  async function handleMigrateClipTaggedNotes() {
+    if (dataMode !== "remote") return;
+    setClipTaggedMigrateLoading(true);
+    try {
+      const res = await migrateClipTaggedNotesApi();
+      setClipTaggedMigrateResult(res);
+      await onCollectionsChange?.();
+    } finally {
+      setClipTaggedMigrateLoading(false);
+    }
+  }
   const [settingsPanel, setSettingsPanel] = useState<NoteSettingsPanel>(
     "general"
   );
@@ -99,10 +658,432 @@ export function NoteSettingsModal({
     if (open) setSettingsPanel("general");
   }, [open]);
 
+  useEffect(() => {
+    if (settingsPanel === "autoLink") setCustomRuleErr(null);
+  }, [settingsPanel]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setNotePrefsSyncErr(false);
+    (async () => {
+      const local = loadLocalNotePrefs();
+      if (!cancelled) setNotePrefs(local);
+      if (dataMode !== "remote") return;
+      const remote = await fetchMeNotePrefs();
+      if (cancelled || !remote) return;
+      setNotePrefs(remote);
+      saveLocalNotePrefs(remote);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, dataMode]);
+
+  async function persistNotePrefs(next: UserNotePrefs) {
+    saveLocalNotePrefs(next);
+    setNotePrefs(next);
+    setNotePrefsSyncErr(false);
+    if (dataMode !== "remote") return;
+    const saved = await putMeNotePrefs(next);
+    if (saved) {
+      setNotePrefs(saved);
+      saveLocalNotePrefs(saved);
+    } else {
+      setNotePrefsSyncErr(true);
+    }
+  }
+
+  async function saveCustomTypeForm() {
+    if (!customTypeModal) return;
+    if (dataMode !== "remote") {
+      setCustomTypeFormErr(c.noteSettingsCustomTypeErrRemote);
+      return;
+    }
+    const name = customTypeDraft.name.trim();
+    if (!name) {
+      setCustomTypeFormErr(c.noteSettingsCustomTypeErrName);
+      return;
+    }
+    setCustomTypeSaving(true);
+    setCustomTypeFormErr(null);
+    try {
+      const builtFields: SchemaField[] = [];
+      let ord = 0;
+      for (const f of customTypeDraft.fields) {
+        const nm = f.name.trim();
+        if (!nm) continue;
+        builtFields.push({
+          id:
+            f.id?.trim() ||
+            `sf-u-${Date.now()}-${ord}-${Math.random().toString(36).slice(2, 5)}`,
+          name: nm,
+          type: f.type,
+          order: ord++,
+        });
+      }
+      if (builtFields.length === 0) {
+        builtFields.push({
+          id: `sf-u-${Date.now()}-0`,
+          name: lang === "en" ? "Title" : "标题",
+          type: "text",
+          order: 0,
+        });
+      }
+      const cardSchema: CollectionCardSchema = {
+        version: 1,
+        fields: builtFields,
+      };
+      if (customTypeModal.mode === "create") {
+        const presetTypeId = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const collectionId = `preset-${presetTypeId}`;
+        const parentId = customTypeDraft.parentId.trim() || undefined;
+        const res = await enablePresetTypeApi({
+          presetTypeId,
+          collectionId,
+          name,
+          dotColor: dotColorFromName(name),
+          cardSchema,
+          ...(parentId ? { parentId } : {}),
+        });
+        if (!res || !("id" in res) || !res.id) {
+          setCustomTypeFormErr(
+            lang === "en" ? "Could not save. Try again." : "保存失败，请重试。"
+          );
+          return;
+        }
+        await onCollectionsChange?.({
+          enabledCollectionId: res.id,
+          presetTypeId,
+        });
+      } else {
+        const col = customTypeModal.collection;
+        const ok = await updateCollectionApi(col.id, { name, cardSchema });
+        if (!ok) {
+          setCustomTypeFormErr(
+            lang === "en" ? "Could not save. Try again." : "保存失败，请重试。"
+          );
+          return;
+        }
+        await onCollectionsChange?.();
+      }
+      setCustomTypeModal(null);
+    } finally {
+      setCustomTypeSaving(false);
+    }
+  }
+
   if (!open) return null;
+
+  const presetObjectTypesLocked = Boolean(typeActionLoading);
 
   const presetLabel = (item: PresetObjectTypeItem) =>
     lang === "en" ? item.nameEn : item.nameZh;
+
+  const autoLinkPanelContent = (
+    <div className="note-settings-modal__panel-scroll">
+      <p className="note-settings-modal__auto-link-lead">
+        {c.noteSettingsAutoLinkPanelLead}
+      </p>
+      {dataMode === "local" ? (
+        <p className="note-settings-modal__auto-link-hint">
+          {c.noteSettingsAutoLinkLocalHint}
+        </p>
+      ) : null}
+      {notePrefsSyncErr ? (
+        <p className="note-settings-modal__auto-link-hint note-settings-modal__auto-link-hint--warn">
+          {c.noteSettingsAutoLinkSyncErr}
+        </p>
+      ) : null}
+
+      {autoLinkCatalog.length > 0 ? (
+        <>
+          <p className="note-settings-modal__label note-settings-modal__auto-link-section-label">
+            {c.noteSettingsAutoLinkSectionBuiltin}
+          </p>
+          <div
+            className="note-settings-modal__auto-link-list"
+            role="list"
+            aria-label={c.noteSettingsAutoLinkSectionBuiltin}
+          >
+            {autoLinkCatalog.map((item) => {
+              const enabled = !notePrefs.disabledAutoLinkRuleIds.includes(
+                item.ruleId
+              );
+              const line =
+                lang === "en" ? item.summaryEn : item.summaryZh;
+              const detailTitle =
+                lang === "en"
+                  ? `${item.contextEn} · ${item.labelEn}`
+                  : `${item.contextZh} · ${item.labelZh}`;
+              return (
+                <div
+                  key={item.ruleId}
+                  className="note-settings-modal__auto-link-row note-settings-modal__auto-link-row--custom"
+                  role="listitem"
+                >
+                  <span
+                    className="note-settings-modal__auto-link-row-text"
+                    title={detailTitle}
+                  >
+                    {line}
+                  </span>
+                  <button
+                    type="button"
+                    className={
+                      "note-settings-modal__type-toggle" +
+                      (enabled ? " note-settings-modal__type-toggle--on" : "")
+                    }
+                    aria-label={`${c.noteSettingsAutoLinkRuleAria}: ${line}`}
+                    aria-pressed={enabled}
+                    onClick={() => {
+                      const dis = new Set(notePrefs.disabledAutoLinkRuleIds);
+                      if (enabled) dis.add(item.ruleId);
+                      else dis.delete(item.ruleId);
+                      void persistNotePrefs({
+                        ...notePrefs,
+                        disabledAutoLinkRuleIds: [...dis],
+                      });
+                    }}
+                  >
+                    {enabled
+                      ? lang === "en"
+                        ? "On"
+                        : "已启用"
+                      : lang === "en"
+                        ? "Off"
+                        : "已关闭"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+
+      <p className="note-settings-modal__label note-settings-modal__auto-link-section-label">
+        {c.noteSettingsAutoLinkSectionCustom}
+      </p>
+      {(notePrefs.extraAutoLinkRules ?? []).length === 0 ? (
+        <p className="note-settings-modal__auto-link-hint">
+          {lang === "en" ? "No custom rules yet." : "暂无自定义规则。"}
+        </p>
+      ) : null}
+      {(notePrefs.extraAutoLinkRules ?? []).map((rule) => (
+        <div
+          key={rule.ruleId}
+          className="note-settings-modal__auto-link-row note-settings-modal__auto-link-row--custom"
+        >
+          <span className="note-settings-modal__auto-link-row-text">
+            {rule.labelZh || rule.labelEn
+              ? lang === "en"
+                ? rule.labelEn ?? rule.labelZh ?? rule.ruleId
+                : rule.labelZh ?? rule.labelEn ?? rule.ruleId
+              : summarizeCustomAutoLinkRule(rule, lang === "en" ? "en" : "zh")}
+          </span>
+          <button
+            type="button"
+            className="note-settings-modal__type-toggle"
+            onClick={() => {
+              const extras = (notePrefs.extraAutoLinkRules ?? []).filter(
+                (r) => r.ruleId !== rule.ruleId
+              );
+              void persistNotePrefs({
+                ...notePrefs,
+                extraAutoLinkRules: extras,
+              });
+            }}
+          >
+            {c.noteSettingsAutoLinkDelete}
+          </button>
+        </div>
+      ))}
+
+      {customRuleErr ? (
+        <p className="note-settings-modal__auto-link-hint note-settings-modal__auto-link-hint--warn">
+          {customRuleErr}
+        </p>
+      ) : null}
+
+      <div className="note-settings-modal__auto-link-form">
+        <p className="note-settings-modal__auto-link-hint note-settings-modal__auto-link-hint--steps">
+          {c.noteSettingsAutoLinkFourStepsHint}
+        </p>
+
+        <label className="note-settings-modal__label" htmlFor="auto-link-src-col">
+          {c.noteSettingsAutoLinkStep1}
+        </label>
+        {collectionPickerOptions.length === 0 ? (
+          <p className="note-settings-modal__auto-link-hint">
+            {c.noteSettingsAutoLinkCollectionsHint}
+          </p>
+        ) : null}
+        <select
+          id="auto-link-src-col"
+          className="auth-modal__input"
+          value={autoLinkDraft.sourceCollectionId}
+          onChange={(e) =>
+            setAutoLinkDraft((d) => ({
+              ...d,
+              sourceCollectionId: e.target.value,
+            }))
+          }
+        >
+          <option value="">
+            {lang === "en" ? "Choose source collection…" : "选择源合集…"}
+          </option>
+          {collectionPickerOptions.map((row) => (
+            <option key={`src-${row.id}`} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+
+        <label className="note-settings-modal__label" htmlFor="auto-link-src-field">
+          {c.noteSettingsAutoLinkStep2}
+        </label>
+        {!autoLinkDraft.sourceCollectionId.trim() ? (
+          <p className="note-settings-modal__auto-link-hint">
+            {c.noteSettingsAutoLinkPickSourceColFirst}
+          </p>
+        ) : sourceColLinkFields.length === 0 ? (
+          <p className="note-settings-modal__auto-link-hint">
+            {c.noteSettingsAutoLinkSyncFieldNoCardLink}
+          </p>
+        ) : (
+          <select
+            id="auto-link-src-field"
+            className="auth-modal__input"
+            value={autoLinkDraft.sourceFieldId}
+            onChange={(e) =>
+              setAutoLinkDraft((d) => ({
+                ...d,
+                sourceFieldId: e.target.value,
+              }))
+            }
+          >
+            <option value="">
+              {lang === "en" ? "Choose field…" : "选择属性…"}
+            </option>
+            {sourceColLinkFields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <label className="note-settings-modal__label" htmlFor="auto-link-tgt-col">
+          {c.noteSettingsAutoLinkStep3}
+        </label>
+        <select
+          id="auto-link-tgt-col"
+          className="auth-modal__input"
+          value={autoLinkDraft.targetCollectionId}
+          onChange={(e) =>
+            setAutoLinkDraft((d) => ({
+              ...d,
+              targetCollectionId: e.target.value,
+            }))
+          }
+        >
+          <option value="">
+            {lang === "en" ? "Choose target collection…" : "选择目标合集…"}
+          </option>
+          {collectionPickerOptions.map((row) => (
+            <option key={`tgt-${row.id}`} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+
+        <label className="note-settings-modal__label" htmlFor="auto-link-tgt-field">
+          {c.noteSettingsAutoLinkStep4}
+        </label>
+        {!autoLinkDraft.targetCollectionId.trim() ? (
+          <p className="note-settings-modal__auto-link-hint">
+            {c.noteSettingsAutoLinkPickTargetColFirst}
+          </p>
+        ) : targetColLinkFields.length === 0 ? (
+          <p className="note-settings-modal__auto-link-hint">
+            {c.noteSettingsAutoLinkSyncFieldNoCardLink}
+          </p>
+        ) : (
+          <select
+            id="auto-link-tgt-field"
+            className="auth-modal__input"
+            value={autoLinkDraft.targetFieldId}
+            onChange={(e) =>
+              setAutoLinkDraft((d) => ({
+                ...d,
+                targetFieldId: e.target.value,
+              }))
+            }
+          >
+            <option value="">
+              {lang === "en" ? "Choose field…" : "选择属性…"}
+            </option>
+            {targetColLinkFields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <button
+          type="button"
+          className="auth-modal__btn auth-modal__btn--primary note-settings-modal__auto-link-add-btn"
+          onClick={() => {
+            const srcCol = autoLinkDraft.sourceCollectionId.trim();
+            const srcField = autoLinkDraft.sourceFieldId.trim();
+            const tgtCol = autoLinkDraft.targetCollectionId.trim();
+            const tgtField = autoLinkDraft.targetFieldId.trim();
+            if (!srcCol || !srcField || !tgtCol || !tgtField) {
+              setCustomRuleErr(c.noteSettingsAutoLinkErrFourSteps);
+              return;
+            }
+            if (srcCol === tgtCol) {
+              setCustomRuleErr(c.noteSettingsAutoLinkErrSameCollection);
+              return;
+            }
+            setCustomRuleErr(null);
+            const tgtNode = findCollectionById(collections, tgtCol);
+            const targetObjectKind = tgtNode?.presetTypeId?.trim() || "note";
+            const ruleId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            const srcLabel =
+              collectionPickerOptions.find((x) => x.id === srcCol)?.label ?? srcCol;
+            const tgtLabel =
+              collectionPickerOptions.find((x) => x.id === tgtCol)?.label ?? tgtCol;
+            const srcFieldName =
+              sourceColLinkFields.find((f) => f.id === srcField)?.name ?? srcField;
+            const tgtFieldName =
+              targetColLinkFields.find((f) => f.id === tgtField)?.name ?? tgtField;
+            const labelZh = `「${srcLabel}」的「${srcFieldName}」 ↔ 「${tgtLabel}」的「${tgtFieldName}」（保存时自动建卡并互链）`;
+            const labelEn = `${srcLabel} · ${srcFieldName} ↔ ${tgtLabel} · ${tgtFieldName} (auto-link on save)`;
+            const rule: AutoLinkRule = {
+              ruleId,
+              trigger: "on_save",
+              sourceCollectionId: srcCol,
+              syncSchemaFieldId: srcField,
+              targetCollectionId: tgtCol,
+              targetSyncSchemaFieldId: tgtField,
+              targetObjectKind,
+              linkType: "related",
+              labelZh,
+              labelEn,
+            };
+            void persistNotePrefs({
+              ...notePrefs,
+              extraAutoLinkRules: [...(notePrefs.extraAutoLinkRules ?? []), rule],
+            });
+          }}
+        >
+          {c.noteSettingsAutoLinkAdd}
+        </button>
+      </div>
+    </div>
+  );
 
   const panelContent =
     settingsPanel === "general" ? (
@@ -288,101 +1269,412 @@ export function NoteSettingsModal({
           </>
         ) : null}
       </div>
+    ) : settingsPanel === "autoLink" ? (
+      autoLinkPanelContent
     ) : (
       <div className="note-settings-modal__panel-scroll">
         <p className="note-settings-modal__object-types-lead">
           {c.noteSettingsObjectTypesLead}
         </p>
 
-        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
-          {c.noteSettingsObjectTypesSectionTypes}
-        </p>
-        <div
-          className="note-settings-modal__preset-grid note-settings-modal__type-root-grid"
-          role="list"
-          aria-label={c.noteSettingsObjectTypesSectionTypes}
-        >
-          {PRESET_OBJECT_TYPES_GROUPS.map((group) => {
-            const parent = presetTypeParentCard(group);
-            return (
-              <div key={group.baseId} role="listitem">
-                <PresetTypeCard item={parent} label={presetLabel(parent)} />
-              </div>
-            );
-          })}
-        </div>
+        {collections != null && dataMode === "remote" ? (
+          <div className="note-settings-modal__choice-row note-settings-modal__choice-row--stack">
+            <button
+              type="button"
+              className="note-settings-modal__choice note-settings-modal__choice--block"
+              disabled={presetObjectTypesLocked}
+              onClick={() => void handleEnableAllPresetTypes()}
+            >
+              {typeActionLoading === "__all__"
+                ? c.noteSettingsEnableAllPresetsBusy
+                : c.noteSettingsEnableAllPresets}
+            </button>
+          </div>
+        ) : null}
 
-        <div
-          className="note-settings-modal__subtype-stack"
-          aria-label={
-            lang === "en" ? "Subtypes by type" : "各类子类型"
-          }
-        >
-          {PRESET_OBJECT_TYPES_GROUPS.map((group) => {
-            if (group.children.length === 0) return null;
-            const parent = presetTypeParentCard(group);
-            return (
-              <section
-                key={group.baseId}
-                className="note-settings-modal__type-group"
-                aria-labelledby={`note-settings-type-${group.baseId}`}
-              >
-                <div
-                  id={`note-settings-type-${group.baseId}`}
-                  className="note-settings-modal__type-parent-display"
-                >
-                  <PresetTypeCard
-                    item={parent}
-                    label={presetLabel(parent)}
-                  />
-                </div>
-                <div
-                  className="note-settings-modal__preset-grid note-settings-modal__subtype-grid"
-                  role="list"
-                  aria-label={
-                    lang === "en"
-                      ? `${group.baseLabelEn} — subtypes`
-                      : `${group.baseLabelZh} — 子类型`
-                  }
-                >
-                  {group.children.map((item) => (
-                    <div key={item.id} role="listitem">
-                      <PresetTypeCard item={item} label={presetLabel(item)} />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-
-        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
-          {c.noteSettingsObjectTypesTierRecommended}
-        </p>
-        <div
-          className="note-settings-modal__preset-grid"
-          role="list"
-          aria-label={c.noteSettingsObjectTypesTierRecommended}
-        >
-          {PRESET_OBJECT_TYPES_RECOMMENDED.map((row) => {
-            if (row.kind === "subhead") {
+        <div className="note-settings-modal__type-root-grid">
+          <div className="note-settings-modal__preset-grid" role="list">
+            {PRESET_OBJECT_TYPES_GROUPS.map((group) => {
+              const parent = presetTypeParentCard(group);
+              const parentEnabled = enabledByPresetTypeId.get(group.baseId);
               return (
-                <p
-                  key={`sub-${row.id}`}
-                  className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--span"
+                <div
+                  key={group.baseId}
+                  className="note-settings-modal__preset-grid-cell"
+                  role="listitem"
                 >
-                  {lang === "en" ? row.nameEn : row.nameZh}
-                </p>
+                  <PresetTypeCard item={parent} label={presetLabel(parent)} />
+                  {collections != null && (
+                    <button
+                      type="button"
+                      className={
+                        "note-settings-modal__type-toggle" +
+                        (parentEnabled
+                          ? " note-settings-modal__type-toggle--on"
+                          : "")
+                      }
+                      disabled={presetObjectTypesLocked}
+                      onClick={() =>
+                        parentEnabled
+                          ? handleDisablePresetType(parentEnabled)
+                          : handleEnablePresetType(group)
+                      }
+                    >
+                      {typeActionLoading === group.baseId
+                        ? "…"
+                        : parentEnabled
+                          ? lang === "en"
+                            ? "Enabled"
+                            : "已启用"
+                          : lang === "en"
+                            ? "Enable"
+                            : "启用"}
+                    </button>
+                  )}
+                </div>
               );
-            }
-            const { kind: _k, ...item } = row;
+            })}
+
+            {customObjectTypeLayout.rootCustoms.length > 0
+              ? customObjectTypeLayout.rootCustoms.map((col) => {
+                  const item: PresetObjectTypeItem = {
+                    id: col.presetTypeId ?? col.id,
+                    nameZh: col.name,
+                    nameEn: col.name,
+                    emoji: "📦",
+                    tint: col.dotColor || "rgba(55, 53, 47, 0.08)",
+                  };
+                  const isLoading = typeActionLoading === (col.presetTypeId ?? col.id);
+                  return (
+                    <div
+                      key={col.id}
+                      className="note-settings-modal__preset-grid-cell"
+                      role="listitem"
+                    >
+                      <PresetTypeCard item={item} label={col.name} />
+                      {collections != null && dataMode === "remote" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="note-settings-modal__type-toggle note-settings-modal__type-toggle--on note-settings-modal__type-toggle--compact"
+                            disabled={presetObjectTypesLocked || isLoading}
+                            onClick={() =>
+                              setCustomTypeModal({ mode: "edit", collection: col })
+                            }
+                          >
+                            {c.noteSettingsCustomTypeEditSchema}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              "note-settings-modal__type-toggle" +
+                              " note-settings-modal__type-toggle--on"
+                            }
+                            disabled={presetObjectTypesLocked || isLoading}
+                            onClick={() => handleDisablePresetType(col)}
+                          >
+                            {isLoading
+                              ? "…"
+                              : lang === "en"
+                                ? "Remove"
+                                : "移除"}
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })
+              : null}
+          </div>
+        </div>
+
+        <div className="note-settings-modal__subtype-stack">
+          {PRESET_OBJECT_TYPES_GROUPS.map((group) => {
+            const extras =
+              customObjectTypeLayout.extrasByBaseId.get(group.baseId) ?? [];
+            if (group.children.length === 0 && extras.length === 0) return null;
+            const parent = presetTypeParentCard(group);
+            const parentEnabled = enabledByPresetTypeId.get(group.baseId);
             return (
-              <div key={item.id} role="listitem">
-                <PresetTypeCard item={item} label={presetLabel(item)} />
+              <div key={group.baseId} className="note-settings-modal__type-group">
+                <p className="note-settings-modal__type-section-title">
+                  {presetLabel(parent)}
+                </p>
+                <div
+                  className="note-settings-modal__subtype-row note-settings-modal__preset-grid"
+                  role="list"
+                >
+                  {group.children.map((child) => {
+                    const childCollection = enabledByPresetTypeId.get(child.id);
+                    const childInheritsParent =
+                      group.baseId === "file" && Boolean(parentEnabled);
+                    const childShownOn = Boolean(
+                      childCollection || childInheritsParent
+                    );
+                    const childToggleInherited =
+                      childInheritsParent && !childCollection;
+                    return (
+                      <div
+                        key={child.id}
+                        className="note-settings-modal__preset-grid-cell"
+                        role="listitem"
+                      >
+                        <PresetTypeCard
+                          item={child}
+                          label={presetLabel(child)}
+                        />
+                        {collections != null && (
+                          <button
+                            type="button"
+                            className={
+                              "note-settings-modal__type-toggle" +
+                              (childShownOn
+                                ? " note-settings-modal__type-toggle--on"
+                                : "")
+                            }
+                            disabled={
+                              presetObjectTypesLocked || childToggleInherited
+                            }
+                            title={
+                              childToggleInherited
+                                ? lang === "en"
+                                  ? "Included when File above is enabled."
+                                  : "已启用「文件」时已包含此项。"
+                                : undefined
+                            }
+                            onClick={() => {
+                              if (childCollection) {
+                                handleDisablePresetType(childCollection);
+                              } else if (!childToggleInherited) {
+                                handleEnablePresetType(group, child);
+                              }
+                            }}
+                          >
+                            {typeActionLoading === child.id
+                              ? "…"
+                              : childShownOn
+                                ? lang === "en"
+                                  ? "Enabled"
+                                  : "已启用"
+                                : lang === "en"
+                                  ? "Enable"
+                                  : "启用"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {extras.map((col) => {
+                    const item: PresetObjectTypeItem = {
+                      id: col.presetTypeId ?? col.id,
+                      nameZh: col.name,
+                      nameEn: col.name,
+                      emoji: "📦",
+                      tint: col.dotColor || "rgba(55, 53, 47, 0.08)",
+                    };
+                    const isLoading =
+                      typeActionLoading === (col.presetTypeId ?? col.id);
+                    return (
+                      <div
+                        key={col.id}
+                        className="note-settings-modal__preset-grid-cell"
+                        role="listitem"
+                      >
+                        <PresetTypeCard item={item} label={col.name} />
+                        {collections != null && dataMode === "remote" ? (
+                          <>
+                            <button
+                              type="button"
+                              className="note-settings-modal__type-toggle note-settings-modal__type-toggle--on note-settings-modal__type-toggle--compact"
+                              disabled={presetObjectTypesLocked || isLoading}
+                              onClick={() =>
+                                setCustomTypeModal({
+                                  mode: "edit",
+                                  collection: col,
+                                })
+                              }
+                            >
+                              {c.noteSettingsCustomTypeEditSchema}
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                "note-settings-modal__type-toggle" +
+                                " note-settings-modal__type-toggle--on"
+                              }
+                              disabled={presetObjectTypesLocked || isLoading}
+                              onClick={() => handleDisablePresetType(col)}
+                            >
+                              {isLoading
+                                ? "…"
+                                : lang === "en"
+                                  ? "Remove"
+                                  : "移除"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
+
+          {customObjectTypeLayout.nestedCustomRows.map((row) => (
+            <div key={row.parent.id} className="note-settings-modal__type-group">
+              <p className="note-settings-modal__type-section-title">
+                {row.parent.name}
+              </p>
+              <div
+                className="note-settings-modal__subtype-row note-settings-modal__preset-grid"
+                role="list"
+              >
+                {row.children.map((col) => {
+                  const item: PresetObjectTypeItem = {
+                    id: col.presetTypeId ?? col.id,
+                    nameZh: col.name,
+                    nameEn: col.name,
+                    emoji: "📦",
+                    tint: col.dotColor || "rgba(55, 53, 47, 0.08)",
+                  };
+                  const isLoading =
+                    typeActionLoading === (col.presetTypeId ?? col.id);
+                  return (
+                    <div
+                      key={col.id}
+                      className="note-settings-modal__preset-grid-cell"
+                      role="listitem"
+                    >
+                      <PresetTypeCard item={item} label={col.name} />
+                      {collections != null && dataMode === "remote" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="note-settings-modal__type-toggle note-settings-modal__type-toggle--on note-settings-modal__type-toggle--compact"
+                            disabled={presetObjectTypesLocked || isLoading}
+                            onClick={() =>
+                              setCustomTypeModal({ mode: "edit", collection: col })
+                            }
+                          >
+                            {c.noteSettingsCustomTypeEditSchema}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              "note-settings-modal__type-toggle" +
+                              " note-settings-modal__type-toggle--on"
+                            }
+                            disabled={presetObjectTypesLocked || isLoading}
+                            onClick={() => handleDisablePresetType(col)}
+                          >
+                            {isLoading
+                              ? "…"
+                              : lang === "en"
+                                ? "Remove"
+                                : "移除"}
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
+
+        {collections != null && dataMode === "remote" && (
+          <div className="note-settings-modal__migrate-section">
+            <p className="note-settings-modal__label">
+              {c.noteSettingsMigrateRelatedRefsTitle}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {c.noteSettingsMigrateRelatedRefsDesc}
+            </p>
+            {relatedRefsMigrateResult && (
+              <p className="note-settings-modal__migrate-result">
+                {c.noteSettingsMigrateRelatedRefsResult(
+                  relatedRefsMigrateResult.withJson,
+                  relatedRefsMigrateResult.migrated
+                )}
+              </p>
+            )}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={relatedRefsMigrateLoading}
+              onClick={handleMigrateRelatedRefsJson}
+            >
+              {relatedRefsMigrateLoading
+                ? c.noteSettingsMigrateRelatedRefsBusy
+                : c.noteSettingsMigrateRelatedRefsBtn}
+            </button>
+          </div>
+        )}
+
+        {collections != null && dataMode === "remote" && (
+          <div className="note-settings-modal__migrate-section">
+            <p className="note-settings-modal__label">
+              {c.noteSettingsMigrateClipTaggedTitle}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {c.noteSettingsMigrateClipTaggedDesc}
+            </p>
+            {clipTaggedMigrateResult && (
+              <p className="note-settings-modal__migrate-result">
+                {c.noteSettingsMigrateClipTaggedResult(
+                  clipTaggedMigrateResult.scanned,
+                  clipTaggedMigrateResult.migrated,
+                  clipTaggedMigrateResult.skippedNoPreset,
+                  clipTaggedMigrateResult.skippedNoKind,
+                  clipTaggedMigrateResult.errors,
+                  clipTaggedMigrateResult.backfillTitles ?? 0
+                )}
+              </p>
+            )}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={clipTaggedMigrateLoading}
+              onClick={handleMigrateClipTaggedNotes}
+            >
+              {clipTaggedMigrateLoading
+                ? c.noteSettingsMigrateClipTaggedBusy
+                : c.noteSettingsMigrateClipTaggedBtn}
+            </button>
+          </div>
+        )}
+
+        {collections != null && enabledByPresetTypeId.has("file") && (
+          <div className="note-settings-modal__migrate-section">
+            <p className="note-settings-modal__label">
+              {lang === "en" ? "Migrate attachments to File cards" : "将附件迁移为文件卡片"}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {lang === "en"
+                ? "Existing inline attachments will become independent File-type cards with bidirectional links."
+                : "现有内嵌附件将变为独立文件卡片，并与原卡片建立双向连接。"}
+            </p>
+            {migrateResult && (
+              <p className="note-settings-modal__migrate-result">
+                {lang === "en"
+                  ? `Done: ${migrateResult.processed} scanned, ${migrateResult.created} created, ${migrateResult.skipped} skipped.`
+                  : `完成：扫描 ${migrateResult.processed} 张卡片，创建 ${migrateResult.created} 个文件卡，跳过 ${migrateResult.skipped} 个。`}
+              </p>
+            )}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={migrateLoading}
+              onClick={handleMigrateAttachments}
+            >
+              {migrateLoading
+                ? (lang === "en" ? "Migrating…" : "迁移中…")
+                : (lang === "en" ? "Start Migration" : "开始迁移")}
+            </button>
+          </div>
+        )}
       </div>
     );
 
@@ -431,14 +1723,227 @@ export function NoteSettingsModal({
             >
               {c.noteSettingsNavObjectTypes}
             </button>
+            <button
+              type="button"
+              className={
+                "note-settings-modal__nav-item" +
+                (settingsPanel === "autoLink" ? " is-active" : "")
+              }
+              aria-current={settingsPanel === "autoLink" ? "page" : undefined}
+              onClick={() => setSettingsPanel("autoLink")}
+            >
+              {c.noteSettingsNavAutoLink}
+            </button>
           </nav>
           <div className="note-settings-modal__main">
             {settingsPanel === "objectTypes" ? (
-              <h3 className="note-settings-modal__content-title">
-                {c.noteSettingsObjectTypesTitle}
-              </h3>
+              <div className="note-settings-modal__content-head">
+                <h3
+                  className="note-settings-modal__content-title"
+                  id="note-settings-object-types-heading"
+                >
+                  {c.noteSettingsObjectTypesTitle}
+                </h3>
+                <button
+                  type="button"
+                  className="note-settings-modal__add-type-btn"
+                  title={c.noteSettingsAddCustomType}
+                  aria-label={c.noteSettingsAddCustomType}
+                  disabled={
+                    collections == null ||
+                    dataMode !== "remote" ||
+                    presetObjectTypesLocked
+                  }
+                  onClick={() => {
+                    if (collections == null || dataMode !== "remote") return;
+                    setCustomTypeModal({ mode: "create" });
+                  }}
+                >
+                  <span aria-hidden className="note-settings-modal__add-type-btn-icon">
+                    +
+                  </span>
+                </button>
+              </div>
+            ) : settingsPanel === "autoLink" ? (
+              <div className="note-settings-modal__content-head">
+                <h3
+                  className="note-settings-modal__content-title"
+                  id="note-settings-auto-link-heading"
+                >
+                  {c.noteSettingsAutoLinkPanelTitle}
+                </h3>
+              </div>
             ) : null}
             {panelContent}
+            {customTypeModal ? (
+              <div
+                className="note-settings-modal__custom-type-overlay"
+                role="presentation"
+                onClick={() => {
+                  if (!customTypeSaving) setCustomTypeModal(null);
+                }}
+              >
+                <div
+                  className="note-settings-modal__custom-type-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="note-settings-custom-type-title"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h4
+                    className="note-settings-modal__custom-type-title"
+                    id="note-settings-custom-type-title"
+                  >
+                    {customTypeModal.mode === "create"
+                      ? c.noteSettingsCustomTypeTitleCreate
+                      : c.noteSettingsCustomTypeTitleEdit}
+                  </h4>
+                  {customTypeFormErr ? (
+                    <p className="note-settings-modal__custom-type-err">
+                      {customTypeFormErr}
+                    </p>
+                  ) : null}
+                  <label
+                    className="note-settings-modal__label"
+                    htmlFor="custom-type-name"
+                  >
+                    {c.noteSettingsCustomTypeName}
+                  </label>
+                  <input
+                    id="custom-type-name"
+                    className="auth-modal__input"
+                    value={customTypeDraft.name}
+                    onChange={(e) =>
+                      setCustomTypeDraft((d) => ({
+                        ...d,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder={c.noteSettingsCustomTypeNamePh}
+                  />
+                  {customTypeModal.mode === "create" ? (
+                    <>
+                      <label
+                        className="note-settings-modal__label"
+                        htmlFor="custom-type-parent"
+                      >
+                        {c.noteSettingsCustomTypeParent}
+                      </label>
+                      <select
+                        id="custom-type-parent"
+                        className="auth-modal__input"
+                        value={customTypeDraft.parentId}
+                        onChange={(e) =>
+                          setCustomTypeDraft((d) => ({
+                            ...d,
+                            parentId: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">
+                          {c.noteSettingsCustomTypeParentTop}
+                        </option>
+                        {categoryObjectContainers.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : null}
+                  <p className="note-settings-modal__label">
+                    {c.noteSettingsCustomTypeFields}
+                  </p>
+                  <div className="note-settings-modal__custom-type-fields">
+                    {customTypeDraft.fields.map((f, idx) => (
+                      <div
+                        key={`${f.id ?? "n"}-${idx}`}
+                        className="note-settings-modal__custom-type-field-row"
+                      >
+                        <input
+                          className="auth-modal__input"
+                          aria-label={c.noteSettingsCustomTypeFieldName}
+                          value={f.name}
+                          onChange={(e) =>
+                            setCustomTypeDraft((d) => {
+                              const next = [...d.fields];
+                              next[idx] = { ...next[idx], name: e.target.value };
+                              return { ...d, fields: next };
+                            })
+                          }
+                        />
+                        <select
+                          className="auth-modal__input"
+                          aria-label={c.noteSettingsCustomTypeFieldType}
+                          value={f.type}
+                          onChange={(e) =>
+                            setCustomTypeDraft((d) => {
+                              const next = [...d.fields];
+                              next[idx] = {
+                                ...next[idx],
+                                type: e.target.value as SchemaField["type"],
+                              };
+                              return { ...d, fields: next };
+                            })
+                          }
+                        >
+                          {CUSTOM_SCHEMA_TYPE_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        {customTypeDraft.fields.length > 1 ? (
+                          <button
+                            type="button"
+                            className="note-settings-modal__custom-type-remove-field"
+                            aria-label={lang === "en" ? "Remove field" : "删除此属性"}
+                            onClick={() =>
+                              setCustomTypeDraft((d) => ({
+                                ...d,
+                                fields: d.fields.filter((_, i) => i !== idx),
+                              }))
+                            }
+                          >
+                            −
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="auth-modal__btn note-settings-modal__custom-type-add-field"
+                    onClick={() =>
+                      setCustomTypeDraft((d) => ({
+                        ...d,
+                        fields: [...d.fields, { name: "", type: "text" }],
+                      }))
+                    }
+                  >
+                    {c.noteSettingsCustomTypeAddField}
+                  </button>
+                  <div className="note-settings-modal__custom-type-actions">
+                    <button
+                      type="button"
+                      className="auth-modal__btn"
+                      disabled={customTypeSaving}
+                      onClick={() => setCustomTypeModal(null)}
+                    >
+                      {c.noteSettingsCustomTypeCancel}
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-modal__btn auth-modal__btn--primary"
+                      disabled={customTypeSaving}
+                      onClick={() => void saveCustomTypeForm()}
+                    >
+                      {customTypeSaving ? "…" : c.noteSettingsCustomTypeSave}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className="note-settings-modal__footer-actions">
               <button
                 type="button"

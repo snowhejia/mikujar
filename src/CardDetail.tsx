@@ -141,6 +141,8 @@ export interface CardDetailProps {
   /** 云端：附件右键创建文件卡 */
   onCreateFileCardFromAttachment?: (item: NoteMediaItem) => void;
   attachmentHasLinkedFileCard?: (item: NoteMediaItem) => boolean;
+  /** 附件已有文件卡时，点击直接打开卡片页 */
+  onOpenFileCard?: (item: NoteMediaItem) => void;
 }
 
 /** 详情覆层：与主时间线相同的 card / card__paper / 轮播结构；音视频在侧栏内直接播放 */
@@ -165,6 +167,7 @@ export function CardDetail({
   onSetGalleryCoverItem,
   onCreateFileCardFromAttachment,
   attachmentHasLinkedFileCard,
+  onOpenFileCard,
 }: CardDetailProps) {
   const { lang } = useAppUiLang();
   const c = useAppChrome();
@@ -466,6 +469,7 @@ export function CardDetail({
                 onSetCoverItem={onSetGalleryCoverItem}
                 onCreateFileCard={onCreateFileCardFromAttachment}
                 attachmentHasLinkedFileCard={attachmentHasLinkedFileCard}
+                onOpenFileCard={onOpenFileCard}
                 uploadPending={uploadBusy}
                 uploadProgress={uploadBusy ? uploadProgress : null}
               />

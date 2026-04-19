@@ -81,12 +81,20 @@ import {
   attachmentStorageBytesByUserId,
   queryCardGraph,
   createFileCardForNoteMedia,
+  runAutoLinkRulesForCard,
+  getEffectiveSchemaForCard,
+  batchMigrateAttachmentsToFileCards,
+  migrateRelatedRefsJsonToCardLinks,
+  getPresetCollectionId,
+  migrateClipTaggedNotesToPresetCards,
+  getNotePrefsForOwnerKey,
+  replaceNotePrefsForOwnerKey,
 } from "./storage-pg.js";
 import {
   broadcastCollectionsChanged,
   subscribeCollectionsSync,
 } from "./syncFanout.js";
-import { pingDb, closePool } from "./db.js";
+import { pingDb, closePool, query as dbQuery } from "./db.js";
 import {
   completeRegistration,
   sendRegistrationCode,
@@ -957,6 +965,35 @@ app.get(
   }
 );
 
+/** GET /api/preset-collection/:presetTypeId — 按 preset_type_id 查类别合集 id（扩展剪藏保存用） */
+app.get(
+  "/api/preset-collection/:presetTypeId",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const pid =
+        typeof req.params.presetTypeId === "string"
+          ? req.params.presetTypeId.trim()
+          : "";
+      if (!pid) {
+        return res.status(400).json({ error: "缺少 presetTypeId" });
+      }
+      const id = await getPresetCollectionId(userId, pid);
+      if (!id) {
+        return res.status(404).json({ error: "未找到该预设类型合集" });
+      }
+      res.json({ id });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Query failed" });
+    }
+  }
+);
+
 /** GET /api/cards/:id/graph — 基础图谱查询（深度、边类型） */
 app.get(
   "/api/cards/:id/graph",
@@ -987,6 +1024,113 @@ app.get(
     }
   }
 );
+
+/** GET /api/cards/:id/effective-schema — 返回卡片在所有合集（含父链）上的合并有效 Schema */
+app.get(
+  "/api/cards/:id/effective-schema",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const schema = await getEffectiveSchemaForCard(userId, req.params.id);
+      res.json(schema);
+    } catch (e) {
+      console.error(e);
+      res.status(400).json({ error: e.message || "查询失败" });
+    }
+  }
+);
+
+/** POST /api/admin/migrate-attachments — 批量将卡片附件迁移为独立文件卡片 */
+app.post("/api/admin/migrate-attachments", collectionsWriterMw, async (req, res) => {
+  try {
+    const { fileCollectionId, clearOriginalMedia = false } = req.body ?? {};
+    if (!fileCollectionId) {
+      return res.status(400).json({ error: "缺少 fileCollectionId" });
+    }
+    const result = await batchMigrateAttachmentsToFileCards(getUserId(req), {
+      fileCollectionId,
+      clearOriginalMedia: clearOriginalMedia === true,
+    });
+    notifyCollectionsSync(req);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ error: e.message || "迁移失败" });
+  }
+});
+
+/** POST /api/admin/migrate-related-refs-json — related_refs JSON → card_links（图谱边表为唯一来源） */
+app.post("/api/admin/migrate-related-refs-json", collectionsWriterMw, async (req, res) => {
+  try {
+    const result = await migrateRelatedRefsJsonToCardLinks(getUserId(req));
+    notifyCollectionsSync(req);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ error: e.message || "迁移失败" });
+  }
+});
+
+/** POST /api/admin/migrate-clip-tagged-notes — 小红书 / bilibili 标签笔记迁入剪藏预设子类 */
+app.post("/api/admin/migrate-clip-tagged-notes", collectionsWriterMw, async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const result = await migrateClipTaggedNotesToPresetCards(getUserId(req), {
+      dryRun,
+    });
+    notifyCollectionsSync(req);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ error: e.message || "迁移失败" });
+  }
+});
+
+/** POST /api/admin/enable-preset-type — 创建预设类型合集（is_category=true，幂等） */
+app.post("/api/admin/enable-preset-type", collectionsWriterMw, async (req, res) => {
+  try {
+    const { presetTypeId, collectionId, name, dotColor = "", cardSchema, parentId } = req.body ?? {};
+    if (!presetTypeId || !collectionId || !name) {
+      return res.status(400).json({ error: "缺少必填字段 presetTypeId / collectionId / name" });
+    }
+    const uid = getUserId(req);
+    const { sql: uidSql, params: uidParams } =
+      uid === null || uid === undefined
+        ? { sql: "user_id IS NULL", params: [] }
+        : { sql: "user_id = $2", params: [uid] };
+    // 幂等：检查是否已有该 preset_type_id 的合集
+    const existing = await dbQuery(
+      `SELECT id FROM collections WHERE preset_type_id = $1 AND ${uidSql}`,
+      [presetTypeId, ...uidParams]
+    );
+    if (existing.rowCount > 0) {
+      return res.json({ alreadyExists: true, id: existing.rows[0].id });
+    }
+    // 创建合集
+    const col = await createCollection(uid, {
+      id: collectionId,
+      name,
+      dotColor,
+      hint: "",
+      parentId: parentId ?? null,
+    });
+    // 设置 is_category + preset_type_id + card_schema
+    const updated = await updateCollection(uid, collectionId, {
+      isCategory: true,
+      presetTypeId,
+      cardSchema: cardSchema ?? {},
+    });
+    notifyCollectionsSync(req);
+    res.status(201).json(updated);
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ error: e.message || "创建失败" });
+  }
+});
 
 /**
  * GET /api/me/sync/events — SSE：笔记数据变更时推送，客户端防抖后拉取 GET /api/collections。
@@ -1126,6 +1270,10 @@ app.delete("/api/collections/:id", collectionsWriterMw, async (req, res) => {
 app.post("/api/collections/:collectionId/cards", collectionsWriterMw, async (req, res) => {
   try {
     const card = await createCard(getUserId(req), req.params.collectionId, req.body ?? {});
+    // fire-and-forget 自动关联规则
+    runAutoLinkRulesForCard(getUserId(req), card.id).catch((e) =>
+      console.error("[auto-link] POST create trigger:", e.message)
+    );
     notifyCollectionsSync(req);
     res.status(201).json(card);
   } catch (e) {
@@ -1193,6 +1341,10 @@ app.post(
 app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
   try {
     await updateCard(getUserId(req), req.params.id, req.body ?? {});
+    // fire-and-forget：不阻断响应，异常仅记录日志
+    runAutoLinkRulesForCard(getUserId(req), req.params.id).catch((e) =>
+      console.error("[auto-link] PATCH trigger:", e.message)
+    );
     notifyCollectionsSync(req);
     res.json({ ok: true });
   } catch (e) {
@@ -1298,6 +1450,35 @@ app.put("/api/me/favorites", preferencesWriterMw, async (req, res) => {
     await replaceFavoriteCollectionIds(key, collectionIds, getUserId(req));
     notifyCollectionsSync(req);
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "保存失败" });
+  }
+});
+
+/** GET / PUT：笔记偏好（如自动建卡规则开关），owner_key 与星标/回收站一致 */
+app.get("/api/me/note-prefs", preferencesReaderMw, async (req, res) => {
+  try {
+    const key = preferencesOwnerKey(req);
+    if (adminGateEnabled && !key) {
+      return res.status(401).json({ error: "未授权", code: "AUTH" });
+    }
+    const prefs = await getNotePrefsForOwnerKey(key);
+    res.json(prefs);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "读取失败" });
+  }
+});
+
+app.put("/api/me/note-prefs", preferencesWriterMw, async (req, res) => {
+  try {
+    const key = preferencesOwnerKey(req);
+    if (adminGateEnabled && !key) {
+      return res.status(401).json({ error: "未授权", code: "PUT_AUTH" });
+    }
+    const saved = await replaceNotePrefsForOwnerKey(key, req.body ?? {});
+    res.json(saved);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "保存失败" });

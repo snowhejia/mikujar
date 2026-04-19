@@ -3,6 +3,9 @@ import type {
   CollectionCardSchema,
   NoteCard,
   NoteMediaItem,
+  SchemaField,
+  AutoLinkRule,
+  UserNotePrefs,
 } from "../types";
 import { getAdminToken } from "../auth/token";
 import { apiBase, apiFetchInit } from "./apiBase";
@@ -104,13 +107,12 @@ export async function createCollectionApi(data: {
 export async function updateCollectionApi(
   id: string,
   patch: Partial<
-    Pick<
-      Collection,
-      "name" | "dotColor" | "hint" | "isCategory" | "presetTypeId"
-    >
+    Pick<Collection, "name" | "dotColor" | "hint" | "isCategory">
   > & {
     parentId?: string | null;
     sortOrder?: number;
+    /** 传 null 可清空服务端 preset_type_id */
+    presetTypeId?: string | null;
     /** 传 null 可清空为 {} */
     cardSchema?: CollectionCardSchema | null;
   }
@@ -224,7 +226,10 @@ export type CardGraphResult = {
   edges: CardGraphEdge[];
 };
 
-/** 基础图谱查询（深度 ≤4、边类型默认可为 related） */
+/**
+ * 服务端 GET /api/cards/:id/graph（深度 ≤4）。
+ * 默认边类型含 related、attachment、creator、source 等；可用 linkTypes 收窄。
+ */
 export async function fetchCardGraphFromApi(
   cardId: string,
   opts?: { depth?: number; linkTypes?: string[] }
@@ -372,5 +377,164 @@ export async function removeCardFromCollectionApi(
     return r.ok;
   } catch {
     return false;
+  }
+}
+
+// ─── 对象类型 Schema / 管理 API ───────────────────────────────────────────────
+
+/** GET /api/cards/:id/effective-schema — 卡片在所有合集（含父链）上的合并有效 Schema */
+export async function fetchCardEffectiveSchema(cardId: string): Promise<{
+  fields: SchemaField[];
+  autoLinkRules: AutoLinkRule[];
+} | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/cards/${encodeURIComponent(cardId)}/effective-schema`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as { fields: SchemaField[]; autoLinkRules: AutoLinkRule[] };
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/admin/enable-preset-type — 启用预设类型合集（幂等） */
+export async function enablePresetTypeApi(data: {
+  presetTypeId: string;
+  collectionId: string;
+  name: string;
+  dotColor?: string;
+  cardSchema?: CollectionCardSchema;
+  parentId?: string;
+}): Promise<Collection | { alreadyExists: true; id: string } | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/admin/enable-preset-type`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify(data),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as Collection | { alreadyExists: true; id: string };
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/admin/migrate-attachments — 批量将卡片附件迁移为独立文件卡片 */
+export async function migrateAttachmentsApi(opts: {
+  fileCollectionId: string;
+  clearOriginalMedia?: boolean;
+}): Promise<{ processed: number; created: number; skipped: number } | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/admin/migrate-attachments`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify(opts),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as { processed: number; created: number; skipped: number };
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/admin/migrate-related-refs-json — 旧 JSON 关联写入 card_links */
+export async function migrateRelatedRefsJsonApi(): Promise<{
+  withJson: number;
+  migrated: number;
+} | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/admin/migrate-related-refs-json`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as { withJson: number; migrated: number };
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/admin/migrate-clip-tagged-notes — 小红书/bilibili 标签 → 剪藏预设卡 */
+export async function migrateClipTaggedNotesApi(): Promise<{
+  scanned: number;
+  migrated: number;
+  skippedNoPreset: number;
+  skippedNoKind: number;
+  errors: number;
+  backfillTitles?: number;
+} | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/admin/migrate-clip-tagged-notes`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as {
+      scanned: number;
+      migrated: number;
+      skippedNoPreset: number;
+      skippedNoKind: number;
+      errors: number;
+      backfillTitles?: number;
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** GET /api/me/note-prefs — 自动建卡规则等笔记偏好 */
+export async function fetchMeNotePrefs(): Promise<UserNotePrefs | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/me/note-prefs`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as UserNotePrefs;
+  } catch {
+    return null;
+  }
+}
+
+/** PUT /api/me/note-prefs */
+export async function putMeNotePrefs(
+  prefs: UserNotePrefs
+): Promise<UserNotePrefs | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/me/note-prefs`,
+      apiFetchInit({
+        method: "PUT",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify(prefs),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as UserNotePrefs;
+  } catch {
+    return null;
   }
 }

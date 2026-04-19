@@ -639,6 +639,31 @@ ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING;
 UPDATE cards SET related_refs = '[]'::jsonb WHERE trashed_at IS NULL;
 `,
   },
+  {
+    label: "OO 图谱索引 + custom_props GIN",
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_collections_is_category
+  ON collections (user_id, is_category)
+  WHERE is_category = true;
+CREATE INDEX IF NOT EXISTS idx_card_links_type
+  ON card_links (link_type);
+CREATE INDEX IF NOT EXISTS idx_cards_object_kind
+  ON cards (user_id, object_kind)
+  WHERE trashed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_cards_custom_props_gin
+  ON cards USING GIN (custom_props jsonb_path_ops);
+`,
+  },
+  {
+    label: "user_note_prefs（笔记偏好：自动建卡规则等，owner_key 与回收站一致）",
+    sql: `
+CREATE TABLE IF NOT EXISTS user_note_prefs (
+  owner_key  TEXT PRIMARY KEY,
+  prefs      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+`,
+  },
 ];
 
 async function main() {

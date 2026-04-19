@@ -1,4 +1,5 @@
 import type { NoteCard } from "./types";
+import { isClipPresetObjectKind } from "./notePresetTypesCatalog";
 
 /** 从笔记 HTML 正文得到纯文本（供 AI、摘要等） */
 export function plainTextFromNoteHtml(html: string): string {
@@ -11,7 +12,37 @@ export function plainTextFromNoteHtml(html: string): string {
   return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim();
 }
 
+/** 人物卡「名称」属性（sf-person-name），无则空串 */
+export function readPersonNameFromCustomProps(card: NoteCard): string {
+  for (const p of card.customProps ?? []) {
+    if (p.id === "sf-person-name" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+/** 剪藏父级「标题」字段（sf-clip-title），无则空串 */
+export function readClipTitleFromCustomProps(card: NoteCard): string {
+  for (const p of card.customProps ?? []) {
+    if (p.id === "sf-clip-title" && p.type === "text") {
+      const v = p.value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
 export function cardHeadlinePlain(card: NoteCard): string {
+  if ((card.objectKind ?? "note") === "person") {
+    const n = readPersonNameFromCustomProps(card);
+    if (n) return n.slice(0, 160);
+  }
+  if (isClipPresetObjectKind(card.objectKind)) {
+    const t = readClipTitleFromCustomProps(card);
+    if (t) return t.slice(0, 160);
+  }
   const plain = plainTextFromNoteHtml(card.text || "");
   const line = plain.split(/\n/)[0]?.trim() || "";
   return line.slice(0, 160);

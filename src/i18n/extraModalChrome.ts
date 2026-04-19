@@ -73,6 +73,47 @@ export type ExtraModalChrome = {
   noteSettingsSidebarDotsHide: string;
   noteSettingsSidebarDotsAria: string;
   noteSettingsStorageAria: string;
+  /** 保存笔记时按预设自动创建关联卡片的规则 */
+  noteSettingsAutoLinkTitle: string;
+  noteSettingsAutoLinkLead: string;
+  noteSettingsAutoLinkLocalHint: string;
+  /** 自动建卡规则行：无障碍名称前缀 */
+  noteSettingsAutoLinkRuleAria: string;
+  /** 云端同步偏好失败（仍保留在本浏览器） */
+  noteSettingsAutoLinkSyncErr: string;
+  /** 侧栏：自动建卡 */
+  noteSettingsNavAutoLink: string;
+  noteSettingsAutoLinkPanelTitle: string;
+  noteSettingsAutoLinkPanelLead: string;
+  noteSettingsAutoLinkSectionBuiltin: string;
+  noteSettingsAutoLinkSectionCustom: string;
+  noteSettingsAutoLinkSourceKind: string;
+  noteSettingsAutoLinkSourcePreset: string;
+  noteSettingsAutoLinkAnyPreset: string;
+  noteSettingsAutoLinkTargetKind: string;
+  noteSettingsAutoLinkTargetPreset: string;
+  noteSettingsAutoLinkTargetCollection: string;
+  noteSettingsAutoLinkLinkType: string;
+  noteSettingsAutoLinkAdd: string;
+  noteSettingsAutoLinkDelete: string;
+  noteSettingsAutoLinkErrSource: string;
+  noteSettingsAutoLinkErrTarget: string;
+  noteSettingsAutoLinkCollectionsHint: string;
+  /** 自动建卡：将新卡写回源卡上的 cardLink 属性 */
+  noteSettingsAutoLinkSyncField: string;
+  noteSettingsAutoLinkSyncFieldNone: string;
+  noteSettingsAutoLinkSyncFieldEmpty: string;
+  noteSettingsAutoLinkSyncFieldNoCardLink: string;
+  /** 自定义规则：四步说明与步骤标题 */
+  noteSettingsAutoLinkFourStepsHint: string;
+  noteSettingsAutoLinkStep1: string;
+  noteSettingsAutoLinkStep2: string;
+  noteSettingsAutoLinkStep3: string;
+  noteSettingsAutoLinkStep4: string;
+  noteSettingsAutoLinkPickSourceColFirst: string;
+  noteSettingsAutoLinkPickTargetColFirst: string;
+  noteSettingsAutoLinkErrFourSteps: string;
+  noteSettingsAutoLinkErrSameCollection: string;
   /** 笔记设置内「导入笔记」区块标题 */
   noteSettingsImportSectionLabel: string;
   noteSettingsImportSourceAria: string;
@@ -87,11 +128,49 @@ export type ExtraModalChrome = {
   noteSettingsNavObjectTypes: string;
   noteSettingsObjectTypesTitle: string;
   noteSettingsObjectTypesLead: string;
+  /** 对象类型：一键启用目录内全部预设（云端） */
+  noteSettingsEnableAllPresets: string;
+  noteSettingsEnableAllPresetsBusy: string;
   /** 对象类型 · 第一层：类型（笔记/文件/主题/任务/网页/其他） */
   noteSettingsObjectTypesSectionTypes: string;
-  /** 对象类型 · 第二层：推荐预设 */
-  noteSettingsObjectTypesTierRecommended: string;
-  noteSettingsPresetComingSoon: string;
+  /** 将 related_refs JSON 迁入 card_links */
+  noteSettingsMigrateRelatedRefsTitle: string;
+  noteSettingsMigrateRelatedRefsDesc: string;
+  noteSettingsMigrateRelatedRefsBtn: string;
+  noteSettingsMigrateRelatedRefsBusy: string;
+  noteSettingsMigrateRelatedRefsResult: (withJson: number, migrated: number) => string;
+  /** 扩展写入的「小红书」「bilibili」标签笔记 → 剪藏预设卡 */
+  noteSettingsMigrateClipTaggedTitle: string;
+  noteSettingsMigrateClipTaggedDesc: string;
+  noteSettingsMigrateClipTaggedBtn: string;
+  noteSettingsMigrateClipTaggedBusy: string;
+  noteSettingsMigrateClipTaggedResult: (
+    scanned: number,
+    migrated: number,
+    skippedNoPreset: number,
+    skippedNoKind: number,
+    errors: number,
+    backfillTitles: number
+  ) => string;
+  /** 对象类型页标题栏右侧：添加自定义类型 */
+  noteSettingsAddCustomType: string;
+  /** 自定义对象类型弹窗 */
+  noteSettingsCustomTypeTitleCreate: string;
+  noteSettingsCustomTypeTitleEdit: string;
+  noteSettingsCustomTypeName: string;
+  noteSettingsCustomTypeNamePh: string;
+  noteSettingsCustomTypeParent: string;
+  noteSettingsCustomTypeParentTop: string;
+  noteSettingsCustomTypeFields: string;
+  noteSettingsCustomTypeAddField: string;
+  noteSettingsCustomTypeFieldName: string;
+  noteSettingsCustomTypeFieldType: string;
+  noteSettingsCustomTypeSave: string;
+  noteSettingsCustomTypeCancel: string;
+  noteSettingsCustomTypeErrName: string;
+  noteSettingsCustomTypeErrRemote: string;
+  noteSettingsCustomTypeSectionCustom: string;
+  noteSettingsCustomTypeEditSchema: string;
   dataStatsTitle: string;
   dataStatsHint: string;
   dataStatsCollections: string;
@@ -206,6 +285,45 @@ const zh: ExtraModalChrome = {
   noteSettingsSidebarDotsHide: "隐藏",
   noteSettingsSidebarDotsAria: "侧栏合集名称前的彩色圆点",
   noteSettingsStorageAria: "数据存储位置",
+  noteSettingsAutoLinkTitle: "自动建卡规则",
+  noteSettingsAutoLinkLead:
+    "保存卡片时，可按已启用类型的预设自动创建关联对象（例如剪藏卡关联人物卡与链接对象）。你可单独关闭某条规则；未在列表中的规则来自合集 schema，仍随类型预设生效。",
+  noteSettingsAutoLinkLocalHint:
+    "当前为仅本地数据时，偏好会保存在本浏览器；改用云端后会在保存笔记时由服务器执行相应规则。",
+  noteSettingsAutoLinkRuleAria: "自动建卡规则",
+  noteSettingsAutoLinkSyncErr: "偏好未能同步到云端，已暂存于本机。",
+  noteSettingsNavAutoLink: "自动建卡",
+  noteSettingsAutoLinkPanelTitle: "自动建卡",
+  noteSettingsAutoLinkPanelLead:
+    "保存到云端时，可按下面「自定义规则」自动新建一张关联卡并互链。预设模板自带的规则可在上方单独关闭。",
+  noteSettingsAutoLinkSectionBuiltin: "预设模板中的规则",
+  noteSettingsAutoLinkSectionCustom: "自定义规则",
+  noteSettingsAutoLinkSourceKind: "当源卡形态为",
+  noteSettingsAutoLinkSourcePreset: "且归属预设（可选）",
+  noteSettingsAutoLinkAnyPreset: "不限",
+  noteSettingsAutoLinkTargetKind: "则新建对象形态",
+  noteSettingsAutoLinkTargetPreset: "放入预设类型（按名称解析合集）",
+  noteSettingsAutoLinkTargetCollection: "或指定合集",
+  noteSettingsAutoLinkLinkType: "连接类型",
+  noteSettingsAutoLinkAdd: "添加规则",
+  noteSettingsAutoLinkDelete: "删除",
+  noteSettingsAutoLinkErrSource: "请至少选择源卡形态或归属预设之一。",
+  noteSettingsAutoLinkErrTarget: "请选择新建卡的形态，并选择预设类型或指定合集之一。",
+  noteSettingsAutoLinkCollectionsHint: "启用云端并加载合集树后，可选择具体合集。",
+  noteSettingsAutoLinkSyncField: "写入源卡属性（可选）",
+  noteSettingsAutoLinkSyncFieldNone: "不写入",
+  noteSettingsAutoLinkSyncFieldEmpty: "请先选择源卡形态或归属预设，以加载该类型的属性列表。",
+  noteSettingsAutoLinkSyncFieldNoCardLink: "该类型预设中暂无「关联卡片」类属性，无法写回源卡字段。",
+  noteSettingsAutoLinkFourStepsHint:
+    "按顺序选四项即可：源合集 → 该合集上要关联的属性 → 目标合集 → 目标合集上的属性（仅列出类型里的「关联卡片」字段）。保存源笔记时，若没有对应关联卡会自动在目标合集建卡并双向写入这两个属性。",
+  noteSettingsAutoLinkStep1: "① 源合集（笔记当前所在的文件夹）",
+  noteSettingsAutoLinkStep2: "② 源合集上的属性",
+  noteSettingsAutoLinkStep3: "③ 目标合集（新卡片放在这里）",
+  noteSettingsAutoLinkStep4: "④ 目标合集上的属性",
+  noteSettingsAutoLinkPickSourceColFirst: "请先选择源合集。",
+  noteSettingsAutoLinkPickTargetColFirst: "请先选择目标合集。",
+  noteSettingsAutoLinkErrFourSteps: "请完整选择四个选项。",
+  noteSettingsAutoLinkErrSameCollection: "源合集与目标合集不能是同一个。",
   noteSettingsImportSectionLabel: "导入笔记",
   noteSettingsImportSourceAria: "导入来源",
   noteSettingsImportSourcePlaceholder: "选择导入来源…",
@@ -217,10 +335,49 @@ const zh: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "对象类型",
   noteSettingsObjectTypesTitle: "对象类型",
   noteSettingsObjectTypesLead:
-    "顶层为全部独立类型（平铺可扩展）；有子类型的类型在下方分块展示，块首为与顶层一致的父类型展示，再接子类型栅格。推荐预设可与字段模板、图谱逐步绑定。",
+    "以下为内置对象类型目录（笔记、文件、网页、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；启用「网页」后自动关联可为内容再建链接对象卡与人物卡。未启用的预设不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
+  noteSettingsEnableAllPresets: "启用全部预设类型",
+  noteSettingsEnableAllPresetsBusy: "正在启用…",
   noteSettingsObjectTypesSectionTypes: "类型",
-  noteSettingsObjectTypesTierRecommended: "推荐预设",
-  noteSettingsPresetComingSoon: "即将推出",
+  noteSettingsMigrateRelatedRefsTitle: "迁移「相关笔记」到图谱边表",
+  noteSettingsMigrateRelatedRefsDesc:
+    "若数据库里仍有 cards.related_refs JSON，将一次性写入 card_links 并清空 JSON（面向对象图谱以边表为准）。",
+  noteSettingsMigrateRelatedRefsBtn: "执行迁移",
+  noteSettingsMigrateRelatedRefsBusy: "迁移中…",
+  noteSettingsMigrateRelatedRefsResult: (withJson, migrated) =>
+    `扫描 ${withJson} 张含 JSON 的卡片，完成 ${migrated} 张迁移。`,
+  noteSettingsMigrateClipTaggedTitle: "剪藏标签笔记迁入对象类型",
+  noteSettingsMigrateClipTaggedDesc:
+    "将带「小红书」或「bilibili」标签的笔记（多为浏览器扩展保存）转为剪藏下的对应卡片：写入链接/作者等预设字段、去掉来源标签，并加入「小红书」「B 站」预设合集。需先在上方启用剪藏及对应子类型；其它合集内的归属会保留，仅从「未归类」移除。",
+  noteSettingsMigrateClipTaggedBtn: "执行迁入",
+  noteSettingsMigrateClipTaggedBusy: "迁入中…",
+  noteSettingsMigrateClipTaggedResult: (
+    scanned,
+    migrated,
+    skippedNoPreset,
+    skippedNoKind,
+    errors,
+    backfillTitles
+  ) =>
+    `扫描 ${scanned} 张，已迁入 ${migrated} 张；未启用对应预设 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
+    (backfillTitles > 0 ? ` 已从正文补全剪藏「标题」${backfillTitles} 张。` : ""),
+  noteSettingsAddCustomType: "添加自定义类型",
+  noteSettingsCustomTypeTitleCreate: "新建对象类型",
+  noteSettingsCustomTypeTitleEdit: "编辑对象类型与属性",
+  noteSettingsCustomTypeName: "类型名称",
+  noteSettingsCustomTypeNamePh: "例如：客户、书单…",
+  noteSettingsCustomTypeParent: "归属位置",
+  noteSettingsCustomTypeParentTop: "顶层类型（与笔记、剪藏同级）",
+  noteSettingsCustomTypeFields: "卡片属性（Schema）",
+  noteSettingsCustomTypeAddField: "添加属性",
+  noteSettingsCustomTypeFieldName: "显示名称",
+  noteSettingsCustomTypeFieldType: "类型",
+  noteSettingsCustomTypeSave: "保存",
+  noteSettingsCustomTypeCancel: "取消",
+  noteSettingsCustomTypeErrName: "请填写类型名称。",
+  noteSettingsCustomTypeErrRemote: "请先切换到云端同步后再管理对象类型。",
+  noteSettingsCustomTypeSectionCustom: "自定义类型",
+  noteSettingsCustomTypeEditSchema: "编辑属性",
   dataStatsTitle: "数据统计",
   dataStatsHint:
     "当前工作区内的合集、卡片与附件占用（按本机已记录或可推算的数据汇总）。",
@@ -343,6 +500,47 @@ const en: ExtraModalChrome = {
   noteSettingsSidebarDotsHide: "Hide",
   noteSettingsSidebarDotsAria: "Color dots before collection names in the sidebar",
   noteSettingsStorageAria: "Data storage",
+  noteSettingsAutoLinkTitle: "Auto-create linked cards",
+  noteSettingsAutoLinkLead:
+    "When you save a card, preset rules can silently create linked object cards (for example Clips → person + URL object). Turn off individual rules here. Rules not listed still come from collection schemas for enabled types.",
+  noteSettingsAutoLinkLocalHint:
+    "With local-only data, choices are stored in this browser; after switching to cloud, the server applies them when notes are saved.",
+  noteSettingsAutoLinkRuleAria: "Auto-link rule",
+  noteSettingsAutoLinkSyncErr: "Couldn’t sync preferences to the cloud; kept on this device.",
+  noteSettingsNavAutoLink: "Auto-link",
+  noteSettingsAutoLinkPanelTitle: "Auto-create linked cards",
+  noteSettingsAutoLinkPanelLead:
+    "When a note is saved to the cloud, custom rules below can auto-create a linked card. Turn off built-in preset rules in the section above if needed.",
+  noteSettingsAutoLinkSectionBuiltin: "Rules from presets",
+  noteSettingsAutoLinkSectionCustom: "Custom rules",
+  noteSettingsAutoLinkSourceKind: "When source card kind is",
+  noteSettingsAutoLinkSourcePreset: "and under preset (optional)",
+  noteSettingsAutoLinkAnyPreset: "Any",
+  noteSettingsAutoLinkTargetKind: "create linked card of kind",
+  noteSettingsAutoLinkTargetPreset: "in preset type (resolve collection)",
+  noteSettingsAutoLinkTargetCollection: "or specific collection",
+  noteSettingsAutoLinkLinkType: "Link type",
+  noteSettingsAutoLinkAdd: "Add rule",
+  noteSettingsAutoLinkDelete: "Remove",
+  noteSettingsAutoLinkErrSource: "Pick at least a source card kind or a source preset.",
+  noteSettingsAutoLinkErrTarget: "Pick the new card kind and either a preset type or a collection.",
+  noteSettingsAutoLinkCollectionsHint: "Load the collection tree (cloud) to pick a folder.",
+  noteSettingsAutoLinkSyncField: "Write back to source field (optional)",
+  noteSettingsAutoLinkSyncFieldNone: "Don’t write",
+  noteSettingsAutoLinkSyncFieldEmpty:
+    "Choose a source card kind or preset first to load cardLink fields for that type.",
+  noteSettingsAutoLinkSyncFieldNoCardLink:
+    "This preset type has no cardLink fields in its schema.",
+  noteSettingsAutoLinkFourStepsHint:
+    "Pick four things in order: source collection → a cardLink field on that type → target collection → a cardLink field there. When you save the source card, a missing link creates a new card in the target folder and fills both fields.",
+  noteSettingsAutoLinkStep1: "① Source collection (folder the note is in)",
+  noteSettingsAutoLinkStep2: "② Field on the source type",
+  noteSettingsAutoLinkStep3: "③ Target collection (new card goes here)",
+  noteSettingsAutoLinkStep4: "④ Field on the target type",
+  noteSettingsAutoLinkPickSourceColFirst: "Choose a source collection first.",
+  noteSettingsAutoLinkPickTargetColFirst: "Choose a target collection first.",
+  noteSettingsAutoLinkErrFourSteps: "Please fill in all four choices.",
+  noteSettingsAutoLinkErrSameCollection: "Source and target collection must differ.",
   noteSettingsImportSectionLabel: "Import notes",
   noteSettingsImportSourceAria: "Import source",
   noteSettingsImportSourcePlaceholder: "Choose import source…",
@@ -354,10 +552,51 @@ const en: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "Object types",
   noteSettingsObjectTypesTitle: "Object types",
   noteSettingsObjectTypesLead:
-    "Top row: all types in one flat grid. Where a type has subtypes, a block below repeats the parent card, then the subtype grid. Recommended presets can link to schemas later.",
+    "Below is the built-in catalog of object types (notes, files, web, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; with “Web” enabled, auto-link can add URL object cards and person cards. Disabled presets stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
+  noteSettingsEnableAllPresets: "Enable all preset types",
+  noteSettingsEnableAllPresetsBusy: "Enabling…",
   noteSettingsObjectTypesSectionTypes: "Types",
-  noteSettingsObjectTypesTierRecommended: "Recommended presets",
-  noteSettingsPresetComingSoon: "Coming soon",
+  noteSettingsMigrateRelatedRefsTitle: "Migrate “related notes” JSON to graph edges",
+  noteSettingsMigrateRelatedRefsDesc:
+    "If cards.related_refs still has data, copy it into card_links once and clear the JSON column (the graph uses the edge table).",
+  noteSettingsMigrateRelatedRefsBtn: "Run migration",
+  noteSettingsMigrateRelatedRefsBusy: "Migrating…",
+  noteSettingsMigrateRelatedRefsResult: (withJson, migrated) =>
+    `Scanned ${withJson} card(s) with JSON; migrated ${migrated}.`,
+  noteSettingsMigrateClipTaggedTitle: "Move clip-tagged notes into Clips",
+  noteSettingsMigrateClipTaggedDesc:
+    "Turn notes tagged 小红书 or bilibili (usually saved by the browser extension) into Clip preset cards: preset URL/author fields, remove those tags, and add them to the Xiaohongshu / Bilibili preset collections. Enable Clips and the matching subtypes first. Placements in other folders are kept; only the inbox placement is removed when present.",
+  noteSettingsMigrateClipTaggedBtn: "Run migration",
+  noteSettingsMigrateClipTaggedBusy: "Migrating…",
+  noteSettingsMigrateClipTaggedResult: (
+    scanned,
+    migrated,
+    skippedNoPreset,
+    skippedNoKind,
+    errors,
+    backfillTitles
+  ) =>
+    `Scanned ${scanned}; migrated ${migrated}. Skipped (preset off): ${skippedNoPreset}. Skipped (tags): ${skippedNoKind}. Errors: ${errors}.` +
+    (backfillTitles > 0
+      ? ` Filled missing Clip title from body for ${backfillTitles} card(s).`
+      : ""),
+  noteSettingsAddCustomType: "Add custom type",
+  noteSettingsCustomTypeTitleCreate: "New object type",
+  noteSettingsCustomTypeTitleEdit: "Edit type & schema",
+  noteSettingsCustomTypeName: "Type name",
+  noteSettingsCustomTypeNamePh: "e.g. Customer, Reading list…",
+  noteSettingsCustomTypeParent: "Place under",
+  noteSettingsCustomTypeParentTop: "Top level (alongside Note, Clips, …)",
+  noteSettingsCustomTypeFields: "Card properties (schema)",
+  noteSettingsCustomTypeAddField: "Add property",
+  noteSettingsCustomTypeFieldName: "Label",
+  noteSettingsCustomTypeFieldType: "Type",
+  noteSettingsCustomTypeSave: "Save",
+  noteSettingsCustomTypeCancel: "Cancel",
+  noteSettingsCustomTypeErrName: "Please enter a type name.",
+  noteSettingsCustomTypeErrRemote: "Switch to cloud sync to manage object types.",
+  noteSettingsCustomTypeSectionCustom: "Custom types",
+  noteSettingsCustomTypeEditSchema: "Edit schema",
   dataStatsTitle: "Usage stats",
   dataStatsHint:
     "Collections, cards, and attachment size in this workspace (from local data).",

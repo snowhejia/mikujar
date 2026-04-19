@@ -19,17 +19,24 @@ import { CardPageCollectionTagsPanel } from "./CardPageCollectionTagsPanel";
 import {
   collectAllTagsFromCollections,
   collectionIdsContainingCardId,
+  findCardInTree,
+  isFileCard,
   LOOSE_NOTES_COLLECTION_ID,
 } from "./appkit/collectionModel";
+import { formatByteSize } from "./noteStats";
 import { migrateCustomPropsList } from "./noteCardCustomProps";
 import type {
+  CardLinkRef,
   CardProperty,
   CardPropertyOption,
   CardPropertyType,
   Collection,
   NoteCard,
   NoteMediaItem,
+  SchemaField,
 } from "./types";
+import { cardHeadlinePlain } from "./notePlainText";
+import { fetchCardEffectiveSchema } from "./api/collections";
 import type { ReminderPickerTarget } from "./ReminderPickerModal";
 import { useAppUiLang } from "./appUiLang";
 import { useAppChrome } from "./i18n/useAppChrome";
@@ -97,6 +104,7 @@ const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
   number: "数字",
   choice: "选择",
   collectionLink: "关联",
+  cardLink: "关联卡片",
   date: "日期",
   checkbox: "勾选",
   url: "链接",
@@ -104,6 +112,54 @@ const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
 
 function genId() {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function parseCardLinkRef(v: unknown): CardLinkRef | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const colId = typeof o.colId === "string" ? o.colId.trim() : "";
+  const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
+  if (!colId || !cardId) return null;
+  return { colId, cardId };
+}
+
+/** 将 schema 定义的 cardLink 与已存的 customProps 对齐（兼容旧 text 作者字段） */
+function coerceSchemaPropForEditor(
+  field: SchemaField,
+  matchProp: CardProperty | undefined,
+  card: NoteCard
+): CardProperty | undefined {
+  if (field.type !== "cardLink") return matchProp;
+  if (!matchProp) return undefined;
+  if (matchProp.type === "cardLink") return matchProp;
+  if (matchProp.type === "text") {
+    const edge = field.cardLinkFromEdge
+      ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)
+      : undefined;
+    const ref = edge ? { colId: edge.colId, cardId: edge.cardId } : null;
+    return {
+      id: field.id,
+      name: field.name,
+      type: "cardLink",
+      value: ref,
+    };
+  }
+  return {
+    id: matchProp.id,
+    name: field.name,
+    type: "cardLink",
+    value: null,
+  };
+}
+
+function cardLinkDisplayLabel(
+  collections: Collection[],
+  ref: CardLinkRef
+): string {
+  const hit = findCardInTree(collections, ref.colId, ref.cardId);
+  if (!hit) return "（未能加载卡片）";
+  const h = cardHeadlinePlain(hit.card);
+  return h || "卡片";
 }
 
 /** 与笔记标签一致：按选项名稳定哈希的 pastel，不用 options 里的固定灰 */
@@ -295,6 +351,10 @@ export interface CardPageViewProps {
   /** 云端：附件右键创建文件卡 */
   onCreateFileCardFromAttachment?: (item: NoteMediaItem) => void;
   attachmentHasLinkedFileCard?: (item: NoteMediaItem) => boolean;
+  /** 已有文件卡时点击直接打开卡片页 */
+  onOpenFileCard?: (item: NoteMediaItem) => void;
+  /** 打开属性面板中链到的人物卡（如作者 → person） */
+  onOpenLinkedCard?: (targetColId: string, targetCardId: string) => void;
 }
 
 function PropValueEditor({
@@ -304,6 +364,8 @@ function PropValueEditor({
   onChangeOptions,
   collections,
   hideCollectionDots = false,
+  linkFillRef = null,
+  onOpenLinkedCard,
 }: {
   prop: CardProperty;
   canEdit: boolean;
@@ -311,6 +373,9 @@ function PropValueEditor({
   onChangeOptions: (opts: CardPropertyOption[]) => void;
   collections: Collection[];
   hideCollectionDots?: boolean;
+  /** cardLink：可从图谱边一键填入（如 creator） */
+  linkFillRef?: { colId: string; cardId: string } | null;
+  onOpenLinkedCard?: (colId: string, cardId: string) => void;
 }) {
   const ui = useAppChrome();
 
@@ -364,6 +429,36 @@ function PropValueEditor({
           unknownLabel={ui.propUnknownCollection}
           chipShape="rect"
         />
+      );
+    }
+    if (prop.type === "cardLink") {
+      const ref = parseCardLinkRef(prop.value);
+      if (!ref) {
+        return (
+          <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+              —
+            </span>
+          </div>
+        );
+      }
+      const label = cardLinkDisplayLabel(collections, ref);
+      return (
+        <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+          {onOpenLinkedCard ? (
+            <button
+              type="button"
+              className="card-page__tags-hit-btn card-page__prop-author-link"
+              onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
+            >
+              {label}
+            </button>
+          ) : (
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+              {label}
+            </span>
+          )}
+        </div>
       );
     }
     if (prop.type === "url") {
@@ -496,6 +591,67 @@ function PropValueEditor({
     );
   }
 
+  if (prop.type === "cardLink") {
+    const ref = parseCardLinkRef(prop.value);
+    const label = ref ? cardLinkDisplayLabel(collections, ref) : "";
+    const showFillFromEdge =
+      Boolean(
+        linkFillRef?.colId &&
+          linkFillRef?.cardId &&
+          (!ref ||
+            ref.cardId !== linkFillRef.cardId ||
+            ref.colId !== linkFillRef.colId)
+      );
+    return (
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+        <div className="card-page__prop-cardlink-row">
+          {ref && onOpenLinkedCard ? (
+            <button
+              type="button"
+              className="card-page__tags-hit-btn card-page__prop-author-link card-page__prop-cardlink-main"
+              onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
+            >
+              {label}
+            </button>
+          ) : ref ? (
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+              {label}
+            </span>
+          ) : (
+            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+              —
+            </span>
+          )}
+          {ref ? (
+            <button
+              type="button"
+              className="card-page__prop-cardlink-clear"
+              title="清除关联"
+              aria-label="清除关联"
+              onClick={() => onChangeValue(null)}
+            >
+              ×
+            </button>
+          ) : null}
+          {showFillFromEdge && linkFillRef ? (
+            <button
+              type="button"
+              className="card-page__prop-cardlink-fill"
+              onClick={() =>
+                onChangeValue({
+                  colId: linkFillRef.colId,
+                  cardId: linkFillRef.cardId,
+                })
+              }
+            >
+              填入关联
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   if (prop.type === "date") {
     return (
       <div className="card-page__tags-panel card-page__tags-panel--single-hit">
@@ -599,6 +755,8 @@ export function CardPageView({
   onAddCardPlacement,
   onCreateFileCardFromAttachment,
   attachmentHasLinkedFileCard,
+  onOpenFileCard,
+  onOpenLinkedCard,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
   const ui = useAppChrome();
@@ -608,6 +766,13 @@ export function CardPageView({
     () => matchesMobileChromeMedia(),
     () => false
   );
+  /** 顶栏：对象卡主标题（人物名 / 剪藏标题 / 主题实体首行等），普通笔记不占用避免与正文重复 */
+  const cardPageHeaderTitle = useMemo(() => {
+    if (isFileCard(card)) return "";
+    const kind = card.objectKind ?? "note";
+    if (kind === "note") return "";
+    return cardHeadlinePlain(card).trim();
+  }, [card]);
   /** 小屏：软键盘占位时隐藏底部附件栏（visualViewport 与 layout viewport 高度差） */
   const [compactKeyboardHidesAttachments, setCompactKeyboardHidesAttachments] =
     useState(false);
@@ -630,6 +795,10 @@ export function CardPageView({
   const [showTypePicker, setShowTypePicker] = useState(false);
   const typePickerRef = useRef<HTMLDivElement>(null);
   const [propsPanelOpen, setPropsPanelOpen] = useState(true);
+  const [effectiveSchema, setEffectiveSchema] = useState<{
+    fields: SchemaField[];
+    autoLinkRules: unknown[];
+  } | null>(null);
   const [tocPanelOpen, setTocPanelOpen] = useState(true);
   const [tocActiveIndex, setTocActiveIndex] = useState(0);
 
@@ -1144,6 +1313,15 @@ export function CardPageView({
     setCardCustomProps(card.id, normalized);
   }, [card.id, customPropsKey, setCardCustomProps]);
 
+  // 拉取当前卡片在所有合集（含父链）上的合并有效 Schema
+  useEffect(() => {
+    let cancelled = false;
+    fetchCardEffectiveSchema(card.id).then((s) => {
+      if (!cancelled) setEffectiveSchema(s);
+    });
+    return () => { cancelled = true; };
+  }, [card.id]);
+
   function updateCustomProps(next: CardProperty[]) {
     setCardCustomProps(card.id, migrateCustomPropsList(next));
   }
@@ -1159,9 +1337,83 @@ export function CardPageView({
     setShowTypePicker(false);
   }
 
+  function renderPropertyTypePickerChrome() {
+    if (!canEdit) return null;
+    return (
+      <div className="card-page__prop-type-picker" ref={typePickerRef}>
+        <button
+          type="button"
+          className="sidebar__section-add"
+          onClick={() => setShowTypePicker((v) => !v)}
+          aria-label={lang === "en" ? "Add property" : "添加属性"}
+        >
+          +
+        </button>
+        {showTypePicker ? (
+          <div className="card-page__prop-type-menu">
+            {(Object.keys(PROP_TYPE_LABELS) as CardPropertyType[]).map(
+              (type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className="card-page__prop-type-option"
+                  onClick={() => addProperty(type)}
+                >
+                  {PROP_TYPE_LABELS[type]}
+                </button>
+              )
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderFileMetaBlock() {
+    const m = card.media?.[0];
+    if (!m) return null;
+
+    function metaRow(label: string, value: string) {
+      return (
+        <div className="card-page__prop-row card-page__file-meta-row" key={label}>
+          <span className="card-page__prop-label">{label}</span>
+          <div className="card-page__prop-content">
+            <span className="card-page__file-meta-val">{value}</span>
+          </div>
+        </div>
+      );
+    }
+
+    const ext = (() => {
+      const name = m.name?.trim() || m.url;
+      const dot = name.lastIndexOf(".");
+      return dot > 0 ? name.slice(dot + 1).toUpperCase() : "—";
+    })();
+
+    const rows: JSX.Element[] = [];
+    rows.push(metaRow(lang === "en" ? "Format" : "格式", ext));
+    if (m.sizeBytes != null && m.sizeBytes > 0) {
+      rows.push(metaRow(lang === "en" ? "Size" : "大小", formatByteSize(m.sizeBytes)));
+    }
+    if (m.durationSec != null && m.durationSec >= 0) {
+      const s = Math.floor(m.durationSec % 60);
+      const mins = Math.floor(m.durationSec / 60);
+      const h = Math.floor(mins / 60);
+      const mm = mins % 60;
+      const t = h > 0
+        ? `${h}:${String(mm).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+        : `${mm}:${String(s).padStart(2, "0")}`;
+      rows.push(metaRow(lang === "en" ? "Duration" : "时长", t));
+    }
+
+    return <>{rows}</>;
+  }
+
   function renderPropsFieldsBlock() {
+    const isFile = isFileCard(card);
     return (
       <>
+        {isFile ? renderFileMetaBlock() : (
           <div className="card-page__prop-row card-page__prop-row--tags">
             <span className="card-page__prop-label">标签</span>
             <div className="card-page__prop-content">
@@ -1174,8 +1426,9 @@ export function CardPageView({
               />
             </div>
           </div>
+        )}
 
-          <div className="card-page__prop-row card-page__prop-row--tags">
+        {!isFile && (<><div className="card-page__prop-row card-page__prop-row--tags">
             <span className="card-page__prop-label">提醒</span>
             <div className="card-page__prop-content">
               <div className="card-page__tags-panel card-page__tags-panel--single-hit">
@@ -1267,7 +1520,107 @@ export function CardPageView({
             </div>
           </div>
 
-          {customProps.map((prop) => (
+          {/* ── Schema 字段区：来自合集类型定义，优先展示 ── */}
+          {(effectiveSchema?.fields ?? []).map((field) => {
+            const matchProp = customProps.find((p) => p.id === field.id);
+            const editorProp = coerceSchemaPropForEditor(field, matchProp, card);
+            const linkFillRef =
+              field.type === "cardLink" && field.cardLinkFromEdge
+                ? card.relatedRefs?.find(
+                    (r) => r.linkType === field.cardLinkFromEdge
+                  )
+                : undefined;
+            return (
+              <div
+                key={`schema-${field.id}`}
+                className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
+              >
+                <div className="card-page__prop-label-wrap">
+                  <span className="card-page__prop-label">{field.name}</span>
+                </div>
+                <div className="card-page__prop-content">
+                  {editorProp ? (
+                    <PropValueEditor
+                      prop={editorProp}
+                      canEdit={canEdit}
+                      collections={collections}
+                      hideCollectionDots={hideCollectionDots}
+                      linkFillRef={linkFillRef}
+                      onOpenLinkedCard={onOpenLinkedCard}
+                      onChangeValue={(v) => {
+                        const baseId = editorProp.id;
+                        const nextType = field.type as CardPropertyType;
+                        const nextName = field.name;
+                        if (matchProp) {
+                          updateCustomProps(
+                            customProps.map((p) =>
+                              p.id === baseId
+                                ? {
+                                    ...p,
+                                    type: nextType,
+                                    name: nextName,
+                                    value: v,
+                                  }
+                                : p
+                            )
+                          );
+                        } else {
+                          updateCustomProps([
+                            ...customProps,
+                            {
+                              id: baseId,
+                              name: nextName,
+                              type: nextType,
+                              value: v as CardProperty["value"],
+                              options: field.options,
+                            },
+                          ]);
+                        }
+                      }}
+                      onChangeOptions={(opts) =>
+                        updateCustomProps(
+                          customProps.map((p) =>
+                            p.id === editorProp.id ? { ...p, options: opts } : p
+                          )
+                        )
+                      }
+                    />
+                  ) : canEdit ? (
+                    <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+                      <button
+                        type="button"
+                        className="card-page__tags-hit-btn card-page__tags-hit-btn--placeholder"
+                        onClick={() => {
+                          const seedProp: CardProperty = {
+                            id: field.id,
+                            name: field.name,
+                            type: field.type as CardPropertyType,
+                            value: field.type === "checkbox" ? false : null,
+                            options: field.options,
+                          };
+                          updateCustomProps([...customProps, seedProp]);
+                        }}
+                      >
+                        {field.type === "date" ? "设置日期…" : "填写…"}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+                      —
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* ── 卡片自有属性区：id 不在 schema 字段集合内的额外属性 ── */}
+          {customProps
+            .filter(
+              (prop) =>
+                !(effectiveSchema?.fields ?? []).some((f) => f.id === prop.id)
+            )
+            .map((prop) => (
             <div
               key={prop.id}
               className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
@@ -1301,6 +1654,8 @@ export function CardPageView({
                   canEdit={canEdit}
                   collections={collections}
                   hideCollectionDots={hideCollectionDots}
+                  linkFillRef={null}
+                  onOpenLinkedCard={onOpenLinkedCard}
                   onChangeValue={(v) =>
                     updateCustomProps(
                       customProps.map((p) =>
@@ -1331,34 +1686,7 @@ export function CardPageView({
               )}
             </div>
           ))}
-
-          {canEdit && (
-            <div className="card-page__prop-add-wrap" ref={typePickerRef}>
-              <button
-                type="button"
-                className="card-page__prop-add"
-                onClick={() => setShowTypePicker((v) => !v)}
-              >
-                + 添加属性
-              </button>
-              {showTypePicker && (
-                <div className="card-page__prop-type-menu">
-                  {(
-                    Object.keys(PROP_TYPE_LABELS) as CardPropertyType[]
-                  ).map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      className="card-page__prop-type-option"
-                      onClick={() => addProperty(type)}
-                    >
-                      {PROP_TYPE_LABELS[type]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        </>)}
       </>
     );
   }
@@ -1640,8 +1968,22 @@ export function CardPageView({
         >
           {ui.uiDownloadAttachment}
         </button>
-        {onCreateFileCardFromAttachment &&
-        !attachmentHasLinkedFileCard?.(attachMenu.item) ? (
+        {onOpenFileCard && attachmentHasLinkedFileCard?.(attachMenu.item) ? (
+          <button
+            type="button"
+            className="attachment-ctx-menu__item"
+            role="menuitem"
+            onClick={() => {
+              const it = attachMenu.item;
+              setAttachMenu(null);
+              setLightbox(null);
+              onOpenFileCard(it);
+            }}
+          >
+            {ui.uiOpenFileCard}
+          </button>
+        ) : onCreateFileCardFromAttachment &&
+          !attachmentHasLinkedFileCard?.(attachMenu.item) ? (
           <button
             type="button"
             className="attachment-ctx-menu__item"
@@ -1707,6 +2049,16 @@ export function CardPageView({
             />
           </svg>
         </button>
+        <div className="card-page__header-main">
+          {cardPageHeaderTitle ? (
+            <span
+              className="card-page__title"
+              title={cardPageHeaderTitle}
+            >
+              {cardPageHeaderTitle}
+            </span>
+          ) : null}
+        </div>
         <span className="card-page__time">
           {formatCardTimeLabel(card, lang)}
         </span>
@@ -1782,6 +2134,7 @@ export function CardPageView({
                   </span>
                   <span className="sidebar__section">属性</span>
                 </button>
+                {renderPropertyTypePickerChrome()}
               </div>
               {propsPanelOpen ? (
                 <div className="card-page__props-panel-inner">
@@ -1988,14 +2341,17 @@ export function CardPageView({
             >
               <div className="card-page__sheet-head">
                 <span className="card-page__sheet-title">属性</span>
-                <button
-                  type="button"
-                  className="card-page__sheet-close"
-                  aria-label={ui.uiClose}
-                  onClick={() => setMobileOverlay(null)}
-                >
-                  ×
-                </button>
+                <div className="card-page__sheet-head-trail">
+                  {renderPropertyTypePickerChrome()}
+                  <button
+                    type="button"
+                    className="card-page__sheet-close"
+                    aria-label={ui.uiClose}
+                    onClick={() => setMobileOverlay(null)}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
               <div className="card-page__sheet-body card-page__sheet-body--props">
                 <div className="card-page__props-panel-inner">

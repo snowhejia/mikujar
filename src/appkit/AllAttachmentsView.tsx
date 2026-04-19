@@ -292,7 +292,11 @@ function AttachmentGridCell({
   mediaIndex: number;
   item: NoteMediaItem;
   gridIndex: number;
-  onOpenCard: (colId: string, cardId: string, mediaIndex: number) => void;
+  onOpenCard: (
+    colId: string,
+    cardId: string,
+    mediaIndex: number
+  ) => void | Promise<void>;
   persistRemoteDuration: boolean;
   onRemoteDurationPersisted?: () => void;
 }) {
@@ -356,7 +360,11 @@ export function AllAttachmentsView({
   remoteListCacheUserKey?: string;
   /** 远程模式下附件变更时递增，用于重新拉取当前页 */
   remoteListRefreshNonce?: number;
-  onOpenCard: (colId: string, cardId: string, mediaIndex: number) => void;
+  onOpenCard: (
+    colId: string,
+    cardId: string,
+    mediaIndex: number
+  ) => void | Promise<void>;
   /** 浏览器探测到时长并写库后，使附件列表与笔记树刷新 */
   onRemoteListInvalidate?: () => void;
 }) {

@@ -13,6 +13,7 @@ type Props = {
   menu: CollectionContextMenuState | null;
   onMergeInto: (id: string, name: string) => void;
   onMoveUnder: (id: string, name: string) => void;
+  onChangeCategory: (id: string, name: string) => void;
   onRemove: (id: string, name: string, hasChildren: boolean) => void;
 };
 
@@ -20,6 +21,7 @@ export function CollectionContextMenu({
   menu,
   onMergeInto,
   onMoveUnder,
+  onChangeCategory,
   onRemove,
 }: Props) {
   const c = useAppChrome();
@@ -60,6 +62,17 @@ export function CollectionContextMenu({
         }}
       >
         {c.uiMoveCollectionUnderMenu}
+      </button>
+      <button
+        type="button"
+        className="attachment-ctx-menu__item"
+        role="menuitem"
+        onClick={(e) => {
+          e.stopPropagation();
+          onChangeCategory(menu.id, menu.name);
+        }}
+      >
+        {c.uiCollectionChangeCategoryMenu}
       </button>
       <button
         type="button"

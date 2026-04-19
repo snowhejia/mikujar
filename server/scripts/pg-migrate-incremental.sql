@@ -360,3 +360,33 @@ WHERE c.trashed_at IS NULL
 ON CONFLICT (from_card_id, to_card_id, link_type) DO NOTHING;
 
 UPDATE cards SET related_refs = '[]'::jsonb WHERE trashed_at IS NULL;
+
+-- ── Phase: Object-Kind Catalog System ────────────────────────────────────────
+
+-- 规范化现有卡片 object_kind（DEFAULT 'note' 已存在，此处补全历史 null 行）
+UPDATE cards SET object_kind = 'note' WHERE object_kind IS NULL OR object_kind = '';
+
+-- 加速 is_category 合集查询
+CREATE INDEX IF NOT EXISTS idx_collections_is_category
+  ON collections (user_id, is_category)
+  WHERE is_category = true;
+
+-- 加速按 link_type 过滤连接
+CREATE INDEX IF NOT EXISTS idx_card_links_type
+  ON card_links (link_type);
+
+-- 加速按 object_kind 过滤卡片
+CREATE INDEX IF NOT EXISTS idx_cards_object_kind
+  ON cards (user_id, object_kind)
+  WHERE trashed_at IS NULL;
+
+-- 自定义属性 JSON 检索（schema 外扩展字段）
+CREATE INDEX IF NOT EXISTS idx_cards_custom_props_gin
+  ON cards USING GIN (custom_props jsonb_path_ops);
+
+-- 笔记偏好（自动建卡规则开关等；owner_key = JWT sub 或 __single__）
+CREATE TABLE IF NOT EXISTS user_note_prefs (
+  owner_key  TEXT PRIMARY KEY,
+  prefs      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

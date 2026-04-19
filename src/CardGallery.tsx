@@ -142,6 +142,7 @@ export function CardGallery({
   onSetCoverItem,
   onCreateFileCard,
   attachmentHasLinkedFileCard,
+  onOpenFileCard,
   playback = "default",
   uploadPending = false,
   uploadProgress = null,
@@ -155,6 +156,8 @@ export function CardGallery({
   onCreateFileCard?: (item: NoteMediaItem) => void | Promise<void>;
   /** 若该附件已有对应文件卡，隐藏「创建文件卡」 */
   attachmentHasLinkedFileCard?: (item: NoteMediaItem) => boolean;
+  /** 已有文件卡时点击附件直接打开卡片页 */
+  onOpenFileCard?: (item: NoteMediaItem) => void;
   playback?: CardGalleryPlayback;
   /** 正在上传附件：在轮播区显示占位与进度圈 */
   uploadPending?: boolean;
@@ -444,6 +447,11 @@ export function CardGallery({
   }
 
   const openCurrentLightbox = () => {
+    const item = items[safeI];
+    if (item && onOpenFileCard && attachmentHasLinkedFileCard?.(item)) {
+      onOpenFileCard(item);
+      return;
+    }
     setLightbox({ index: safeI });
   };
 
@@ -700,8 +708,22 @@ export function CardGallery({
         >
           {ui.uiDownloadAttachment}
         </button>
-        {onCreateFileCard &&
-        !attachmentHasLinkedFileCard?.(attachMenu.item) ? (
+        {onOpenFileCard && attachmentHasLinkedFileCard?.(attachMenu.item) ? (
+          <button
+            type="button"
+            className="attachment-ctx-menu__item"
+            role="menuitem"
+            onClick={() => {
+              const it = attachMenu.item;
+              setAttachMenu(null);
+              setLightbox(null);
+              onOpenFileCard(it);
+            }}
+          >
+            {ui.uiOpenFileCard}
+          </button>
+        ) : onCreateFileCard &&
+          !attachmentHasLinkedFileCard?.(attachMenu.item) ? (
           <button
             type="button"
             className="attachment-ctx-menu__item"

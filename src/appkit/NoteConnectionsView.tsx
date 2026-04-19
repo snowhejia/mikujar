@@ -1,3 +1,7 @@
+/**
+ * 笔记探索白板：边来自全库的 relatedRefs（云端由 card_links 注入）。
+ * 子图查询可用 {@link fetchCardGraphFromApi}（GET /api/cards/:id/graph?depth=&linkTypes=）。
+ */
 import {
   useCallback,
   useEffect,
@@ -19,6 +23,8 @@ import {
 import { plainTextFromNoteHtml } from "../notePlainText";
 import type { ConnectionEdge } from "./connectionEdges";
 import type { Collection, NoteCard } from "../types";
+import { getPresetKindMeta } from "../notePresetTypesCatalog";
+import { cardHeadlinePlain } from "../notePlainText";
 import {
   CardAskAiPanel,
   type CardAskAiContext,
@@ -673,6 +679,11 @@ function ConnectionsBoardCard({
           aria-label={
             onLinkRailPointerDown ? c.connectionsLinkRailAria : undefined
           }
+          style={
+            card.objectKind && card.objectKind !== "note"
+              ? { background: getPresetKindMeta(card.objectKind)?.tint }
+              : undefined
+          }
           onPointerDown={
             onLinkRailPointerDown
               ? (e) => {
@@ -690,6 +701,20 @@ function ConnectionsBoardCard({
         >
           <div className="card__toolbar">
             <span className="card__time">
+              {card.objectKind && card.objectKind !== "note"
+                ? (() => {
+                    const meta = getPresetKindMeta(card.objectKind);
+                    return meta ? (
+                      <span
+                        className="connections-board__node-kind-badge"
+                        title={lang === "zh" ? meta.nameZh : meta.nameEn}
+                        aria-label={lang === "zh" ? meta.nameZh : meta.nameEn}
+                      >
+                        {meta.emoji}
+                      </span>
+                    ) : null;
+                  })()
+                : null}
               {formatCardTimeLabel(card, lang)}
               {reminderBesideTime ? (
                 <span className="card__time-reminder">{reminderBesideTime}</span>
@@ -812,8 +837,11 @@ export function NoteConnectionsView({
   ) => Promise<boolean>;
 }) {
   const c = useAppChrome();
+  const { lang } = useAppUiLang();
   const linkGestureEnabled = Boolean(canEdit && onLinkCards);
   const [askAi, setAskAi] = useState<CardAskAiContext | null>(null);
+  const [activeKindFilter, setActiveKindFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
   const { nodes, graphEdges, layoutKey } = useMemo(() => {
     const nodeMap = new Map<
@@ -1345,10 +1373,114 @@ export function NoteConnectionsView({
     );
   }
 
+  // 当前图中所有 objectKind 集合（用于类型过滤 chips）
+  const allKinds = useMemo(() => {
+    const kinds = new Set<string>();
+    for (const { card } of nodes.values()) {
+      if (card.objectKind && card.objectKind !== "note") kinds.add(card.objectKind);
+    }
+    return [...kinds];
+  }, [nodes]);
+
   return (
     <div className="connections-page connections-page--board">
-      <p className="connections-board__hint">{c.connectionsBoardHint}</p>
-      <div
+      <div className="connections-board__toolbar">
+        <p className="connections-board__hint">{c.connectionsBoardHint}</p>
+        <div className="connections-board__toolbar-right">
+          {/* Board / List 切换 */}
+          <div className="connections-board__view-tabs">
+            <button
+              type="button"
+              className={"connections-board__view-tab" + (viewMode === "board" ? " connections-board__view-tab--active" : "")}
+              onClick={() => setViewMode("board")}
+            >
+              图谱
+            </button>
+            <button
+              type="button"
+              className={"connections-board__view-tab" + (viewMode === "list" ? " connections-board__view-tab--active" : "")}
+              onClick={() => setViewMode("list")}
+            >
+              列表
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 类型过滤 chips（有多种 objectKind 时才显示） */}
+      {allKinds.length > 1 && (
+        <div className="connections-board__kind-filters">
+          {allKinds.map((kind) => {
+            const meta = getPresetKindMeta(kind);
+            if (!meta) return null;
+            const isActive = activeKindFilter === kind;
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={"connections-board__kind-chip" + (isActive ? " connections-board__kind-chip--active" : "")}
+                style={{ background: meta.tint }}
+                onClick={() => setActiveKindFilter((prev) => prev === kind ? null : kind)}
+              >
+                {meta.emoji} {lang === "zh" ? meta.nameZh : meta.nameEn}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* List 模式：按 objectKind 分组展示 */}
+      {viewMode === "list" ? (
+        <div className="connections-board__list-view">
+          {(() => {
+            const groups = new Map<string, Array<{ col: Collection; card: NoteCard }>>();
+            for (const { col, card } of nodes.values()) {
+              const kind = card.objectKind ?? "note";
+              if (!groups.has(kind)) groups.set(kind, []);
+              groups.get(kind)!.push({ col, card });
+            }
+            return [...groups.entries()].map(([kind, items]) => {
+              const meta = getPresetKindMeta(kind);
+              return (
+                <div key={kind} className="connections-board__list-group">
+                  <div
+                    className="connections-board__list-group-header"
+                    style={{ borderLeftColor: meta?.tint ?? "transparent" }}
+                  >
+                    {meta ? `${meta.emoji} ${lang === "zh" ? meta.nameZh : meta.nameEn}` : kind}
+                    <span className="connections-board__list-group-count">({items.length})</span>
+                  </div>
+                  {items.map(({ col, card }) => {
+                    const headline = cardHeadlinePlain(card).trim();
+                    return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className="connections-board__list-item"
+                      onClick={() => onOpenTarget(col.id, card.id)}
+                    >
+                      <span className="connections-board__list-item-text">
+                        {headline
+                          ? headline.slice(0, 80)
+                          : card.text
+                            ? card.text.replace(/<[^>]+>/g, "").trim().slice(0, 80)
+                            : (
+                                <span className="connections-board__list-item-empty">
+                                  （空卡片）
+                                </span>
+                              )}
+                      </span>
+                    </button>
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()}
+        </div>
+      ) : null}
+
+      {viewMode === "board" ? <div
         ref={viewportRef}
         className={
           "connections-board__viewport" +
@@ -1447,6 +1579,9 @@ export function NoteConnectionsView({
           {[...nodes.entries()].map(([id, { col, card }]) => {
             const p = positions.get(id);
             if (!p) return null;
+            const kindDimmed =
+              activeKindFilter !== null &&
+              (card.objectKind ?? "note") !== activeKindFilter;
             return (
               <div
                 key={id}
@@ -1475,6 +1610,7 @@ export function NoteConnectionsView({
                   left: p.x,
                   top: p.y,
                   transform: "translate(-50%, -50%)",
+                  ...(kindDimmed ? { opacity: 0.25, pointerEvents: "none" } : {}),
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -1525,7 +1661,7 @@ export function NoteConnectionsView({
             );
           })}
         </div>
-      </div>
+      </div> : null}
       {NOTE_CONNECTIONS_ASK_AI_ENABLED ? (
         <CardAskAiPanel
           open={askAi !== null}

@@ -891,6 +891,39 @@
   max-width: 40rem;
 }
 
+.connections-board__toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.connections-board__toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.connections-board__view-tabs {
+  display: flex;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.connections-board__view-tab {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  border: none;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.55);
+  cursor: pointer;
+}
+.connections-board__view-tab--active {
+  background: rgba(55, 53, 47, 0.07);
+  color: rgba(55, 53, 47, 0.85);
+  font-weight: 500;
+}
+
 .connections-board__hint {
   flex-shrink: 0;
   margin: 0;
@@ -898,6 +931,91 @@
   font-size: 0.75rem;
   line-height: 1.4;
   color: rgba(55, 53, 47, 0.45);
+}
+
+/* 类型过滤 chips */
+.connections-board__kind-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.connections-board__kind-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: rgba(55, 53, 47, 0.75);
+  transition: opacity 0.15s;
+}
+.connections-board__kind-chip--active {
+  border-color: rgba(55, 53, 47, 0.2);
+  color: rgba(55, 53, 47, 0.9);
+  font-weight: 500;
+}
+
+/* 节点类型标识 emoji */
+.connections-board__node-kind-badge {
+  margin-right: 4px;
+  font-size: 0.8em;
+}
+
+/* List 模式 */
+.connections-board__list-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+}
+.connections-board__list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.connections-board__list-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.6);
+  border-left: 3px solid transparent;
+  background: rgba(55, 53, 47, 0.02);
+  border-radius: 4px;
+}
+.connections-board__list-group-count {
+  font-weight: 400;
+  color: rgba(55, 53, 47, 0.4);
+}
+.connections-board__list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  color: rgba(55, 53, 47, 0.75);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.connections-board__list-item:hover {
+  background: rgba(55, 53, 47, 0.05);
+  color: rgba(55, 53, 47, 0.9);
+}
+.connections-board__list-item-empty {
+  color: rgba(55, 53, 47, 0.35);
+  font-style: italic;
 }
 
 .connections-board__viewport {
@@ -1483,12 +1601,37 @@
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition:
+    opacity 0.05s ease-out,
+    background 0.1s ease,
+    color 0.1s ease;
 }
 
 .sidebar__section-add:hover {
   background: rgba(55, 53, 47, 0.06);
   color: rgba(55, 53, 47, 0.55);
+}
+
+/*
+ * 桌面精细指针：加号默认隐藏，仅在本行 hover / focus-within 时显示。
+ * 用「默认 0 + 本行 :hover 1」避免依赖 :not(:hover)，防止悬停在「笔记」行时「文件」行加号仍可见。
+ */
+@media (hover: hover) and (pointer: fine) {
+  .sidebar__section-row--notes-head .sidebar__section-add,
+  .sidebar__section-row--files-head .sidebar__section-add,
+  .card-page__props-sidebar-row.sidebar__section-row .sidebar__section-add {
+    opacity: 0;
+  }
+
+  .sidebar__section-row--notes-head:hover .sidebar__section-add,
+  .sidebar__section-row--notes-head:focus-within .sidebar__section-add,
+  .sidebar__section-row--files-head:hover .sidebar__section-add,
+  .sidebar__section-row--files-head:focus-within .sidebar__section-add,
+  .card-page__props-sidebar-row.sidebar__section-row:hover .sidebar__section-add,
+  .card-page__props-sidebar-row.sidebar__section-row:focus-within
+    .sidebar__section-add {
+    opacity: 1;
+  }
 }
 
 .sidebar__section-row--collapsible {
@@ -1548,7 +1691,10 @@
 /* 侧栏分区线：日历 / 笔记 / 文件 等堆叠块。折叠时仅标题行底留白靠 .sidebar__section-row（6px）。 */
 .sidebar__features-section,
 .sidebar__notes-section,
-.sidebar__files-section {
+.sidebar__files-section,
+.sidebar__topic-section,
+.sidebar__clip-section,
+.sidebar__preset-sidebar-section {
   padding-bottom: 0;
   margin-bottom: 4px;
   border-bottom: 1px solid rgba(55, 53, 47, 0.08);
@@ -1556,8 +1702,141 @@
 
 .sidebar__features-section--expanded,
 .sidebar__notes-section--expanded,
-.sidebar__files-section--expanded {
+.sidebar__files-section--expanded,
+.sidebar__topic-section--expanded,
+.sidebar__clip-section--expanded,
+.sidebar__preset-sidebar-section--expanded {
   padding-bottom: 6px;
+}
+
+/* 笔记分区：占侧栏剩余高度，内嵌收藏 + 合集树可滚动 */
+.sidebar__notes-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.sidebar__notes-section--collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.sidebar__notes-section-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar__notes-section-main > .sidebar__collections {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 笔记区内：预设子类型 + 自定义文件夹列表可滚动（占满标题下剩余高度） */
+.sidebar__file-subtypes--notes-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.sidebar__file-subtypes--notes-scroll > .sidebar__file-subtype-row--notes-line:not(.sidebar__file-subtype-row--plain-folder) {
+  padding-left: 8px;
+  padding-right: 2px;
+  box-sizing: border-box;
+}
+
+/* 与合集树深度 0 一致：左 8px 后再 22px 折叠列 + 6px gap + 主按钮 */
+.sidebar__file-subtype-row--notes-line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.sidebar__file-subtype-hit--notes-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  padding: 4px 8px 4px 0;
+}
+
+/* 与 .sidebar__tree-row__tail 最大宽度一致，预设行占位使数量徽章与自定义行对齐 */
+.sidebar__notes-folder-tail-slot {
+  flex-shrink: 0;
+  width: 46px;
+  height: 22px;
+  pointer-events: none;
+}
+
+/* 笔记 / 文件区标题：左侧仅展开，中间分区名 + 数量，右侧加号垂直居中 */
+.sidebar__section-row--notes-head,
+.sidebar__section-row--files-head,
+.sidebar__section-row--topic-head,
+.sidebar__section-row--clip-head,
+.sidebar__section-row--preset-head {
+  align-items: center;
+  gap: 0;
+  padding-right: 2px;
+}
+
+.sidebar__section-hit--chevron-only {
+  flex: 0 0 auto;
+  width: 24px;
+  min-width: 24px;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.sidebar__section-hit--notes-title,
+.sidebar__section-hit--files-title,
+.sidebar__section-hit--topic-title,
+.sidebar__section-hit--clip-title,
+.sidebar__section-hit--preset-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 2px 6px 2px 0;
+}
+
+.sidebar__section-hit--notes-title .sidebar__section,
+.sidebar__section-hit--files-title .sidebar__section,
+.sidebar__section-hit--topic-title .sidebar__section,
+.sidebar__section-hit--clip-title .sidebar__section {
+  flex: 0 0 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.sidebar__section-hit--topic-title .sidebar__dot,
+.sidebar__section-hit--clip-title .sidebar__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.sidebar__section-title-count {
+  flex-shrink: 0;
+  min-width: 1rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  color: rgba(55, 53, 47, 0.42);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 侧栏「功能」区内主导航（全部笔记 / 待办 / 笔记探索 / 所有附件）；含手机抽屉
@@ -1631,6 +1910,94 @@
   line-height: 1.3;
   padding: 1px 5px;
   border-radius: 3px;
+  background: rgba(55, 53, 47, 0.08);
+  color: rgba(55, 53, 47, 0.55);
+}
+
+/* 侧栏「文件」下：与合集树同构（折叠列占位 + 圆点 + 名 + 数量徽章） */
+.sidebar__file-subtypes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px;
+  margin: 0 0 2px;
+}
+
+.sidebar__file-subtype-row {
+  margin: 0;
+  padding: 0;
+}
+
+/* 无 preset 合集行：拖拽/投放态挂在整行；布局由 --notes-line 承担 */
+.sidebar__file-subtype-row--plain-folder {
+  padding-right: 2px;
+  box-sizing: border-box;
+}
+
+.sidebar__file-subtype-row--plain-folder .sidebar__tree-row__tail {
+  flex-shrink: 0;
+}
+
+.sidebar__file-subtype-hit {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 4px 8px 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #37352f;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+  text-align: left;
+}
+
+.sidebar__file-subtype-hit:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.sidebar__file-subtype-hit.is-active {
+  background: rgba(55, 53, 47, 0.08);
+}
+
+.sidebar__file-subtype-hit:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.4);
+  outline-offset: 1px;
+}
+
+.sidebar__file-subtype-hit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sidebar__file-subtype-hit:disabled:hover {
+  background: transparent;
+}
+
+.sidebar__file-subtype-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar__file-subtype-body .sidebar__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar__file-subtype-hit.is-active .sidebar__count {
   background: rgba(55, 53, 47, 0.08);
   color: rgba(55, 53, 47, 0.55);
 }
@@ -2024,7 +2391,7 @@
   flex-shrink: 0;
   margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  /* 与上方「文件」区块的 border-bottom 二选一，避免双线 */
 }
 
 .sidebar__trash-hit {
@@ -3018,55 +3385,6 @@
   gap: 2px;
   min-width: 0;
   flex: 1;
-}
-
-.main__heading-wrap--attachments-filters {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.main__heading-wrap--attachments-filters .main__heading {
-  flex-shrink: 0;
-}
-
-.main__attachments-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0 10px;
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-left: 10px;
-}
-
-.main__attachments-filter {
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: none;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: rgba(55, 53, 47, 0.48);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.main__attachments-filter:hover {
-  color: rgba(55, 53, 47, 0.88);
-}
-
-.main__attachments-filter.is-active {
-  color: var(--mikujar-logo-jar);
-  font-weight: 600;
-}
-
-.main__attachments-filter.is-active:hover {
-  color: var(--mikujar-logo-jar-deep);
 }
 
 .main__heading {
@@ -4105,7 +4423,7 @@ textarea.main__hint-editor:focus {
   border-radius: 0;
 }
 
-/* 顶栏固定一行格高，与背景横线周期严格对齐 */
+/* 时间线底栏（时间 / 操作）：固定一行格高，与背景横线周期严格对齐 */
 .card__toolbar {
   display: flex;
   align-items: center;
@@ -4261,7 +4579,7 @@ textarea.main__hint-editor:focus {
 .card__paper {
   flex: 1;
   min-width: 0;
-  /* 顶栏 + 正文共用横格：上内边距为 0，格线从顶部对齐（不设 overflow:hidden，避免裁切 ⋯ 菜单） */
+  /* 正文与底栏时间共用横格：上内边距为 0，格线从顶部对齐（不设 overflow:hidden，避免裁切 ⋯ 菜单） */
   border-radius: 12px;
   padding: 0 18px calc(var(--note-line-height) * 0.5);
   min-height: calc(3 * var(--note-line-height));
@@ -5417,6 +5735,55 @@ div.card__text--readonly:not(.card__text--preview) {
   font-weight: 400;
   line-height: var(--note-line-height);
   color: inherit;
+}
+
+/* 主题类目（人物/组织/事件/地点/概念等）：时间线首条标题即实体名称，与正文区分 */
+.card.card--topic-entity
+  .card__text-editor--timeline-body-headings
+  .ProseMirror
+  :is(h1, h2, h3, h4, h5, h6):first-of-type {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.94);
+  letter-spacing: -0.01em;
+  line-height: 1.33;
+  margin: 0 0 0.28em 0;
+  padding: 0;
+}
+
+/* 人物卡第一行：左侧名称 + 右侧与笔记卡相同的操作按钮（始终贴第一行右端） */
+.card__person-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: var(--note-line-height);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.card__person-timeline-head .card__toolbar-actions {
+  flex-shrink: 0;
+}
+
+.card__person-timeline-name {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.94);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  padding: 0 2px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 人物 / 剪藏卡末行：仅时间/提醒，占满一行 */
+.card__toolbar--person-time-row .card__time {
+  flex: 1 1 auto;
 }
 
 /*
@@ -6689,7 +7056,6 @@ div.card__text--readonly:not(.card__text--preview) {
     margin-bottom: 0;
     padding-top: 0;
     padding-bottom: 2px;
-    border-top: 1px solid rgba(55, 53, 47, 0.08);
   }
 
   .app--mobile-nav-open .sidebar__trash-hit {
@@ -6725,6 +7091,13 @@ div.card__text--readonly:not(.card__text--preview) {
   .app--mobile-nav-open .sidebar__all-notes-hit.is-active .sidebar__all-notes-count {
     background: rgba(55, 53, 47, 0.12);
     color: rgba(55, 53, 47, 0.62);
+  }
+
+  .app--mobile-nav-open .sidebar__file-subtype-hit {
+    font-size: 0.9375rem;
+    padding: 8px 12px;
+    border-radius: 0;
+    min-height: auto;
   }
 
   .sidebar__header-row .sidebar__mobile-close {
@@ -7519,6 +7892,7 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .note-settings-modal__main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -7526,14 +7900,60 @@ div.card__text--readonly:not(.card__text--preview) {
   min-height: 0;
 }
 
-.note-settings-modal__content-title {
+.note-settings-modal__content-head {
   flex-shrink: 0;
-  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 1.25rem 1.5rem 0.65rem;
+}
+
+.note-settings-modal__content-head .note-settings-modal__content-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
   font-size: 1.05rem;
   font-weight: 600;
   color: #37352f;
   letter-spacing: -0.02em;
+}
+
+.note-settings-modal__add-type-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font: inherit;
+  cursor: pointer;
+  color: rgba(55, 53, 47, 0.72);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.note-settings-modal__add-type-btn:hover {
+  background: rgba(55, 53, 47, 0.04);
+  border-color: rgba(55, 53, 47, 0.2);
+  color: #37352f;
+}
+
+.note-settings-modal__add-type-btn-icon {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1;
+  margin-top: -0.05em;
 }
 
 .note-settings-modal__panel-scroll {
@@ -7583,9 +8003,9 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
-/** 顶层「类型」六格；与下方子类型区分开 */
+/** 顶层类型网格；与下方子类型区分开 */
 .note-settings-modal__type-root-grid {
-  margin-bottom: 1.15rem;
+  margin-bottom: 1.65rem;
 }
 
 .note-settings-modal__subtype-stack {
@@ -7595,24 +8015,24 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .note-settings-modal__subtype-stack .note-settings-modal__type-group {
-  margin-top: 1rem;
+  margin-top: 1.35rem;
+  padding: 16px 14px 18px;
+  border-radius: 14px;
+  background: rgba(55, 53, 47, 0.03);
+  border: 1px solid rgba(55, 53, 47, 0.08);
 }
 
 .note-settings-modal__subtype-stack .note-settings-modal__type-group:first-child {
-  margin-top: 0.35rem;
+  margin-top: 0.5rem;
 }
 
-/** 子类型区块上方：与顶层同款的父类型卡 */
-.note-settings-modal__type-parent-display {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 0.6rem;
-}
-
-.note-settings-modal__subtype-grid {
-  padding-left: 0.25rem;
-  border-left: 2px solid rgba(55, 53, 47, 0.08);
-  margin-left: 0.15rem;
+/** 有子类型的分块：仅文字标题，不重复父类型图标 */
+.note-settings-modal__type-section-title {
+  margin: 0 0 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgba(55, 53, 47, 0.72);
 }
 
 .note-settings-modal__preset-grid .note-settings-modal__preset-subhead--span {
@@ -7627,8 +8047,14 @@ div.card__text--readonly:not(.card__text--preview) {
 
 .note-settings-modal__preset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 18px;
+}
+
+.note-settings-modal__subtype-row.note-settings-modal__preset-grid {
+  /* 与顶层同一套网格，子类型区略松一点 */
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
 }
 
 .note-settings-modal__preset-card {
@@ -7636,7 +8062,7 @@ div.card__text--readonly:not(.card__text--preview) {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 14px 8px 12px;
+  padding: 16px 10px 14px;
   border-radius: 12px;
   border: 1px solid rgba(55, 53, 47, 0.1);
   background: #fff;
@@ -7665,10 +8091,317 @@ div.card__text--readonly:not(.card__text--preview) {
   line-height: 1.25;
 }
 
-.note-settings-modal__preset-badge {
-  font-size: 0.625rem;
+/* ── Interactive type list ─────────────────────────────────── */
+
+.note-settings-modal__type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.note-settings-modal__type-group-block {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.note-settings-modal__type-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 4px;
+  border-radius: 8px;
+}
+
+.note-settings-modal__type-row:hover {
+  background: rgba(55, 53, 47, 0.04);
+}
+
+.note-settings-modal__type-row .note-settings-modal__preset-card {
+  flex: 1 1 0;
+  flex-direction: row;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  align-items: center;
+}
+
+.note-settings-modal__type-row .note-settings-modal__preset-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.note-settings-modal__type-row .note-settings-modal__preset-emoji {
+  font-size: 1.125rem;
+}
+
+.note-settings-modal__type-row .note-settings-modal__preset-name {
+  text-align: left;
+  font-size: 0.8125rem;
+}
+
+.note-settings-modal__type-row--child {
+  padding-left: 28px;
+}
+
+.note-settings-modal__auto-link-lead,
+.note-settings-modal__auto-link-hint {
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.note-settings-modal__auto-link-hint--warn {
+  color: rgba(180, 83, 9, 0.95);
+}
+
+.note-settings-modal__auto-link-hint--steps {
+  margin-bottom: 12px;
+}
+
+.note-settings-modal__auto-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.note-settings-modal__auto-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  background: rgba(55, 53, 47, 0.02);
+}
+
+.note-settings-modal__auto-link-row-text {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: rgba(55, 53, 47, 0.82);
+  min-width: 0;
+}
+
+.note-settings-modal__auto-link-section-label {
+  margin-top: 16px;
+}
+
+.note-settings-modal__auto-link-row--custom {
+  margin-bottom: 4px;
+}
+
+.note-settings-modal__auto-link-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.note-settings-modal__auto-link-form .note-settings-modal__label {
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+
+.note-settings-modal__auto-link-form .note-settings-modal__label:first-child {
+  margin-top: 0;
+}
+
+.note-settings-modal__auto-link-add-btn {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.note-settings-modal__subtype-list {
+  border-left: 2px solid rgba(55, 53, 47, 0.08);
+  margin-left: 18px;
+  margin-bottom: 4px;
+}
+
+.note-settings-modal__type-toggle {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.18);
+  background: transparent;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: rgba(55, 53, 47, 0.38);
+  color: rgba(55, 53, 47, 0.65);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.note-settings-modal__type-toggle:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.85);
+}
+
+.note-settings-modal__type-toggle--on {
+  background: rgba(35, 131, 226, 0.1);
+  border-color: rgba(35, 131, 226, 0.35);
+  color: rgb(35, 131, 226);
+}
+
+.note-settings-modal__type-toggle--on:hover:not(:disabled) {
+  background: rgba(35, 131, 226, 0.18);
+}
+
+.note-settings-modal__type-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.note-settings-modal__type-toggle--compact {
+  padding: 4px 8px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.note-settings-modal__preset-grid-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.note-settings-modal__preset-grid-cell .note-settings-modal__preset-card {
+  width: 100%;
+  max-width: 156px;
+}
+
+.note-settings-modal__subtype-row .note-settings-modal__preset-grid-cell .note-settings-modal__preset-card {
+  max-width: 160px;
+}
+
+.note-settings-modal__custom-type-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  background: rgba(25, 23, 20, 0.35);
+  overflow: auto;
+}
+
+.note-settings-modal__custom-type-dialog {
+  width: 100%;
+  max-width: 420px;
+  padding: 18px 20px 16px;
+  border-radius: 12px;
+  background: var(--vp-c-bg, #fff);
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.note-settings-modal__custom-type-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.88);
+}
+
+.note-settings-modal__custom-type-err {
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  color: #c62828;
+}
+
+.note-settings-modal__custom-type-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.note-settings-modal__custom-type-field-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.note-settings-modal__custom-type-remove-field {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.18);
+  background: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.note-settings-modal__custom-type-remove-field:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.note-settings-modal__custom-type-add-field {
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.note-settings-modal__custom-type-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ── Attachment migration section ──────────────────────────── */
+
+.note-settings-modal__migrate-section {
+  margin-top: 1.5rem;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(55, 53, 47, 0.035);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+}
+
+.note-settings-modal__migrate-desc {
+  margin: 4px 0 10px;
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.55);
+  line-height: 1.5;
+}
+
+.note-settings-modal__migrate-result {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(35, 131, 226);
+}
+
+.note-settings-modal__migrate-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.2);
+  background: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: rgba(55, 53, 47, 0.8);
+  transition: background 0.12s;
+}
+
+.note-settings-modal__migrate-btn:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.05);
+}
+
+.note-settings-modal__migrate-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 @media (max-width: 640px) {
@@ -7698,7 +8431,7 @@ div.card__text--readonly:not(.card__text--preview) {
     padding: 0.4rem 0.75rem;
   }
 
-  .note-settings-modal__content-title {
+  .note-settings-modal__content-head {
     padding-top: 1rem;
   }
 }
@@ -7815,6 +8548,10 @@ div.card__text--readonly:not(.card__text--preview) {
   padding: 0.5rem 0.65rem 0.65rem;
   margin-top: 0.15rem;
   border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.sidebar__notes-section-main .sidebar__local-note-tools {
+  flex-shrink: 0;
 }
 
 .sidebar__local-note-tools-btn {
@@ -9752,6 +10489,13 @@ body.app--card-page-open .app {
   color: rgba(55, 53, 47, 0.9);
 }
 
+.card-page__sheet-head-trail {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .card-page__sheet-close {
   flex: 0 0 auto;
   display: inline-flex;
@@ -9874,6 +10618,25 @@ body.app--card-page-open .app {
   flex: 0 0 auto;
 }
 
+/* 返回与时间之间的伸缩区：对象卡标题单行省略 */
+.card-page__header-main {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.card-page__title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: rgba(55, 53, 47, 0.94);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .card-page--compact .card-page__header {
   padding: 10px max(12px, env(safe-area-inset-left, 0px)) 10px
     max(12px, env(safe-area-inset-right, 0px));
@@ -9904,12 +10667,12 @@ body.app--card-page-open .app {
 }
 
 .card-page:not(.card-page--compact) .card-page__time {
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .card-page--compact .card-page__time {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex-shrink: 0;
+  max-width: 42%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10458,6 +11221,82 @@ body.app--card-page-open .app {
   word-break: break-all;
   white-space: normal;
   align-items: flex-start;
+}
+
+.card-page__prop-author-link {
+  color: rgba(37, 99, 235, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.card-page__prop-author-link:hover {
+  color: rgba(29, 78, 216, 0.95);
+}
+
+.card-page__prop-text-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.card-page__prop-text-edit-row .card-page__tags-add-input--prop-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.card-page__prop-cardlink-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.card-page__prop-cardlink-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.card-page__prop-cardlink-clear {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: rgba(55, 53, 47, 0.45);
+}
+
+.card-page__prop-cardlink-clear:hover {
+  color: rgba(55, 53, 47, 0.75);
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.card-page__prop-cardlink-fill {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.1);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  color: rgba(37, 99, 235, 0.95);
+}
+
+.card-page__prop-cardlink-fill:hover {
+  background: rgba(37, 99, 235, 0.16);
 }
 
 .card-page__prop-empty--in-tags-panel {
@@ -11148,28 +11987,11 @@ body.app--card-page-open .app {
   color: rgb(220, 60, 60);
 }
 
-/* 添加属性区域 */
+/* 属性类型加号（标题行右侧，与侧栏 .sidebar__section-add 一致） */
 
-.card-page__prop-add-wrap {
+.card-page__prop-type-picker {
   position: relative;
-  margin-top: 8px;
-}
-
-.card-page__prop-add {
-  background: none;
-  border: 1px dashed rgba(55, 53, 47, 0.2);
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 0.8125rem;
-  color: rgba(55, 53, 47, 0.4);
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.card-page__prop-add:hover {
-  border-color: rgba(55, 53, 47, 0.35);
-  color: rgba(55, 53, 47, 0.65);
-  background: rgba(55, 53, 47, 0.03);
+  flex-shrink: 0;
 }
 
 /* 属性类型选择浮层 */
@@ -11177,7 +11999,8 @@ body.app--card-page-open .app {
 .card-page__prop-type-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  right: 0;
+  left: auto;
   background: #fff;
   border: 1px solid rgba(55, 53, 47, 0.12);
   border-radius: 10px;

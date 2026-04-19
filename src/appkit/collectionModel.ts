@@ -20,6 +20,16 @@ export function createLooseNotesCollection(displayName: string): Collection {
   };
 }
 
+/** 文件卡：objectKind 以 'file' 开头，属于独立的附件对象系统，不混入笔记视图 */
+export function isFileCard(card: NoteCard): boolean {
+  return (card.objectKind ?? "note").startsWith("file");
+}
+
+/** 「全部笔记」列表与计数：仅笔记形态（不含人物/组织/网页/文件等对象卡） */
+export function isNoteForAllNotesView(card: NoteCard): boolean {
+  return (card.objectKind ?? "note") === "note";
+}
+
 export function walkCollections(
   cols: Collection[],
   visit: (c: Collection) => void
@@ -144,6 +154,7 @@ export function collectCardsOnDate(
   let colWalkSeq = 0;
   walkCollections(cols, (col) => {
     col.cards.forEach((card, order) => {
+      if (isFileCard(card)) return;
       if (card.addedOn === date) {
         out.push({ col, card, colWalkSeq, order });
       }
@@ -244,6 +255,7 @@ export function collectAllMediaAttachmentEntries(
   const out: MediaAttachmentListEntry[] = [];
   walkCollections(cols, (col) => {
     for (const card of col.cards) {
+      if (!isFileCard(card)) continue;
       const media = card.media;
       if (!media?.length) continue;
       media.forEach((item, mediaIndex) => {
@@ -269,6 +281,7 @@ export function datesWithNoteAddedOn(cols: Collection[]): Set<string> {
   const s = new Set<string>();
   walkCollections(cols, (col) => {
     for (const card of col.cards) {
+      if (isFileCard(card)) continue;
       if (card.addedOn) s.add(card.addedOn);
     }
   });
@@ -571,6 +584,30 @@ export function previewCardTextOneLine(text: string, maxLen = 72): string {
 /** 侧栏角标：仅本合集一层的小笔记张数（子合集内的笔记不计入父行，避免空文件夹拖入子文件夹后父级误显示有笔记） */
 export function countSidebarCollectionCardBadge(c: Collection): number {
   return c.cards.length;
+}
+
+/** 侧栏分区角标等：合集子树内卡片总数 */
+export function countCollectionSubtreeCards(c: Collection): number {
+  let n = c.cards.length;
+  for (const ch of c.children ?? []) n += countCollectionSubtreeCards(ch);
+  return n;
+}
+
+/** 按预设类型 id 在树中查找首个合集（深度优先） */
+export function findCollectionByPresetType(
+  cols: Collection[],
+  presetTypeId: string
+): Collection | undefined {
+  const key = presetTypeId.trim();
+  if (!key) return undefined;
+  for (const c of cols) {
+    if (c.presetTypeId?.trim() === key) return c;
+    if (c.children?.length) {
+      const f = findCollectionByPresetType(c.children, key);
+      if (f) return f;
+    }
+  }
+  return undefined;
 }
 
 /** 从根到 target 的父级 id（不含 target） */

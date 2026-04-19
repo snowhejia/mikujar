@@ -4,6 +4,8 @@ export type NoteMediaKind = "image" | "video" | "audio" | "file";
 export type NoteCardRelatedRef = {
   colId: string;
   cardId: string;
+  /** 来自 card_links.link_type（如 creator、source）；旧数据可能无此字段 */
+  linkType?: string;
 };
 
 export type NoteMediaItem = {
@@ -28,9 +30,17 @@ export type CardPropertyType =
   | "choice"
   /** 关联合集路径：值为合集 id 的 string[] | null，不修改笔记实际归属 */
   | "collectionLink"
+  /** 关联另一张卡片（如作者 → 人物卡）：值为 { colId, cardId } | null */
+  | "cardLink"
   | "date"
   | "checkbox"
   | "url";
+
+/** custom_props 中 cardLink 类型的取值 */
+export type CardLinkRef = {
+  colId: string;
+  cardId: string;
+};
 
 export type CardPropertyOption = {
   id: string;
@@ -42,7 +52,7 @@ export type CardProperty = {
   id: string;
   name: string;
   type: CardPropertyType;
-  value: string | number | boolean | string[] | null;
+  value: string | number | boolean | string[] | CardLinkRef | null;
   options?: CardPropertyOption[];
 };
 
@@ -81,8 +91,125 @@ export type NoteCard = {
   customProps?: CardProperty[];
 };
 
+// ─── Schema Field ───────────────────────────────────────────────────────────
+
+export type SchemaFieldType =
+  | "text"
+  | "number"
+  | "choice"
+  | "date"
+  | "checkbox"
+  | "url"
+  | "collectionLink"
+  | "cardLink";
+
+/**
+ * 合集类型 schema 中的单个属性定义。
+ * 卡片归属该合集时，此字段会在属性面板顶部预先展示。
+ */
+export type SchemaField = {
+  /** 稳定 UUID；与 CardProperty.id 对应，用于 schema 字段与卡片属性的匹配 */
+  id: string;
+  name: string;
+  type: SchemaFieldType;
+  required?: boolean;
+  /** choice 类型的可选项（复用 CardPropertyOption） */
+  options?: CardPropertyOption[];
+  /** 在 schema 字段列表中的显示顺序 */
+  order: number;
+  /**
+   * `cardLink`：可从 `card_links` 的该边类型取对端卡片作为默认值（如 creator → 人物）
+   */
+  cardLinkFromEdge?: "creator" | "source";
+};
+
+// ─── Auto-Link Rule ─────────────────────────────────────────────────────────
+
+export type AutoLinkRuleTrigger = "on_create" | "on_save";
+
+/** 单条自动关联目标（多目标规则中的一步） */
+export type AutoLinkTarget = {
+  /** 在同一 ruleId 内唯一，用于合并 schema 与幂等判断辅助 */
+  targetKey: string;
+  targetObjectKind: string;
+  linkType: string;
+  targetPresetTypeId?: string;
+  /** 新卡放入指定合集（优先于 targetPresetTypeId） */
+  targetCollectionId?: string;
+  /** 将新关联卡写入源卡 custom_props 中对应 schema 字段 id（通常为 cardLink） */
+  syncSchemaFieldId?: string;
+  /** 在新关联卡上写入指向源卡的 cardLink */
+  targetSyncSchemaFieldId?: string;
+};
+
+/**
+ * 合集 schema 中的自动关联卡片规则。
+ * 卡片保存时，服务端检查是否已有匹配的关联卡片；若无则静默创建并双向连接。
+ * 多目标：设 `targets`；单目标可仍用 `targetObjectKind` + `linkType`（与旧数据兼容）。
+ */
+export type AutoLinkRule = {
+  /** 规则唯一键，防止重复执行 */
+  ruleId: string;
+  trigger: AutoLinkRuleTrigger;
+  /**
+   * 仅当源卡 object_kind 匹配时执行（未设置则不限，用于内置 schema 规则）。
+   * 用户自定义规则建议至少与 sourcePresetTypeId 二选一。
+   */
+  sourceObjectKind?: string;
+  /**
+   * 仅当源卡至少有一个归属合集的父链上出现该 preset_type_id 时执行。
+   */
+  sourcePresetTypeId?: string;
+  /**
+   * 仅当源卡**直接**归属该合集（placements 含此 id）时执行；与设置里「源合集」一致。
+   */
+  sourceCollectionId?: string;
+  /** 要自动创建的卡片的 objectKind（如 'person', 'file_video'） */
+  targetObjectKind?: string;
+  /** 连接边的 link_type（如 'creator', 'attachment', 'source'） */
+  linkType?: string;
+  /**
+   * 新卡片放入哪个预设类型合集（通过 collections.preset_type_id 匹配）。
+   * 未设置时放入源卡片的第一个合集。
+   */
+  targetPresetTypeId?: string;
+  /**
+   * 新卡片直接放入指定合集 id（若通过校验）；与 targetPresetTypeId 同时存在时优先此项。
+   */
+  targetCollectionId?: string;
+  /**
+   * 单目标简写：新建关联卡后把引用写入源卡上该 schema 字段（须为 cardLink，且与源卡归属预设字段一致）。
+   */
+  syncSchemaFieldId?: string;
+  /**
+   * 在目标卡上写入指向源卡的 cardLink（与 syncSchemaFieldId 成对，简单四步规则用）。
+   */
+  targetSyncSchemaFieldId?: string;
+  /** 一次保存创建多张关联卡（如投稿 → 人物 + 链接对象） */
+  targets?: AutoLinkTarget[];
+  labelZh?: string;
+  labelEn?: string;
+};
+
+/** 笔记设置中的用户偏好（本地缓存 + 云端 /api/me/note-prefs） */
+export type UserNotePrefs = {
+  /** 禁用的预设 autoLink ruleId；未列出的规则在保存卡片时仍会执行 */
+  disabledAutoLinkRuleIds: string[];
+  /** 高级：追加自定义 AutoLinkRule（与开发者文档中的结构一致） */
+  extraAutoLinkRules?: AutoLinkRule[];
+};
+
+// ─── Collection Card Schema ──────────────────────────────────────────────────
+
 /** 类别合集上的字段定义（JSON，服务端存储；子合集可继承并扩展） */
-export type CollectionCardSchema = Record<string, unknown>;
+export type CollectionCardSchema = {
+  /** 属性字段模板（按 order 排序展示在卡片属性面板顶部） */
+  fields?: SchemaField[];
+  /** 保存时自动创建关联卡片的规则 */
+  autoLinkRules?: AutoLinkRule[];
+  /** schema 版本号，从 1 开始；0 或未设置视为旧数据 */
+  version?: number;
+};
 
 export type Collection = {
   id: string;

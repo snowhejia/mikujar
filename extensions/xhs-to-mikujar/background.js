@@ -1,7 +1,5 @@
 const REFERER_XHS = "https://www.xiaohongshu.com/";
 const REFERER_BILI = "https://www.bilibili.com/";
-/** 与主站 `LOOSE_NOTES_COLLECTION_ID` 一致：选项未填合集时保存到「全部笔记」所用 inbox */
-const INBOX_ALL_NOTES_COLLECTION_ID = "__loose_notes";
 /** 超过则不上传视频，提示用户自行下载；与主站 merge-bili-dash 单轨上限一致（1024MiB） */
 const MAX_CLIP_VIDEO_BYTES = 1024 * 1024 * 1024;
 
@@ -36,50 +34,79 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildCardHtml({ title, body }) {
+function buildCardHtml({ title, body, intro }) {
   const paras = body
     .split(/\n+/)
     .map((p) => p.trim())
     .filter(Boolean)
     .map((p) => `<p>${escapeHtml(p)}</p>`)
     .join("");
-  return `<p><strong>${escapeHtml(title)}</strong></p>${paras || "<p>（无正文）</p>"}`;
-}
-
-function newCustomPropId() {
-  return `cp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const introTrim = String(intro ?? "").trim();
+  const introBlock = introTrim ? `<p>${escapeHtml(introTrim)}</p>` : "";
+  return `<p><strong>${escapeHtml(title)}</strong></p>${paras || "<p>（无正文）</p>"}${introBlock}`;
 }
 
 /**
- * 与主站 CardProperty 一致：链接、作者；有简介时增加「简介」（B 站投稿）。
+ * 与主站剪藏预设一致：父级 sf-clip-url / sf-clip-title + 子类链接与作者。
  */
-function buildClipCustomProps(pageUrl, authorNickname, intro) {
+function buildPresetClipCustomProps(isBili, pageUrl, authorNickname, clipTitle) {
   const url = String(pageUrl || "").trim();
   const author = String(authorNickname || "").trim();
-  const introTrim = String(intro ?? "").trim();
-  const out = [
+  const title = String(clipTitle || "").trim();
+  const clipBase = [
+    { id: "sf-clip-url", name: "链接", type: "url", value: url || null },
+    { id: "sf-clip-title", name: "标题", type: "text", value: title || null },
+  ];
+  if (isBili) {
+    return [
+      ...clipBase,
+      {
+        id: "sf-bili-url",
+        name: "视频链接",
+        type: "url",
+        value: url || null,
+      },
+      {
+        id: "sf-bili-author",
+        name: "UP 主",
+        type: "text",
+        value: author || null,
+      },
+    ];
+  }
+  return [
+    ...clipBase,
     {
-      id: newCustomPropId(),
-      name: "链接",
+      id: "sf-xhs-url",
+      name: "原始链接",
       type: "url",
       value: url || null,
     },
     {
-      id: newCustomPropId(),
+      id: "sf-xhs-author",
       name: "作者",
       type: "text",
       value: author || null,
     },
   ];
-  if (introTrim) {
-    out.push({
-      id: newCustomPropId(),
-      name: "简介",
-      type: "text",
-      value: introTrim,
-    });
-  }
-  return out;
+}
+
+async function fetchPresetCollectionId(settings, presetTypeId) {
+  const pid = String(presetTypeId || "").trim();
+  if (!pid || !settings.apiBase || !settings.bearerToken) return null;
+  const r = await fetch(
+    appendUserId(
+      `${settings.apiBase}/api/preset-collection/${encodeURIComponent(pid)}`,
+      settings.userId
+    ),
+    {
+      headers: { Authorization: `Bearer ${settings.bearerToken}` },
+    }
+  );
+  if (r.status === 404) return null;
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => ({}));
+  return typeof j.id === "string" && j.id.trim() ? j.id.trim() : null;
 }
 
 function newCardId() {
@@ -969,34 +996,6 @@ async function createCard(apiBase, token, userId, collectionId, card) {
 }
 
 /**
- * 确保存在「未归类」合集行，与网页在「全部笔记」下新建笔记一致；幂等，可忽略非致命错误。
- */
-async function ensureInboxCollectionForAllNotes(apiBase, token, userId) {
-  try {
-    const r = await fetch(
-      appendUserId(`${apiBase}/api/collections`, userId),
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: INBOX_ALL_NOTES_COLLECTION_ID,
-          name: "未归类笔记",
-          dotColor: "#a8a29e",
-        }),
-      }
-    );
-    if (!r.ok && r.status !== 409) {
-      /* 已存在或其它错误时仍尝试建卡，由 createCard 返回明确错误 */
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
  * 在页面 MAIN world 读取 __playinfo__ / videoData（不能用内联 script：B 站 CSP 会拦截）。
  */
 async function collectBiliMainWorldPlaySnapshot(tabId) {
@@ -1069,10 +1068,6 @@ async function runSave(tabId, emit) {
     });
     return;
   }
-  const targetCollectionId =
-    String(settings.collectionId || "").trim() ||
-    INBOX_ALL_NOTES_COLLECTION_ID;
-
   emit({ type: "progress", value: 10, text: "检查 API 访问权限…" });
   const okPerm = await ensureApiPermission(settings.apiBase);
   if (!okPerm) {
@@ -1471,33 +1466,46 @@ async function runSave(tabId, emit) {
     }
   }
 
-  emit({ type: "progress", value: 90, text: "创建笔记…" });
+  emit({ type: "progress", value: 88, text: "解析剪藏合集…" });
+  const presetTypeId = isBili ? "post_bilibili" : "post_xhs";
+  const saveCollectionId = await fetchPresetCollectionId(settings, presetTypeId);
+  if (!saveCollectionId) {
+    emit({
+      type: "done",
+      ok: false,
+      message:
+        "请先在网页版打开 笔记设置 → 对象类型，启用「剪藏」及对应子类型（网页剪藏 / 小红书 / B 站），再保存。",
+    });
+    return;
+  }
+
+  emit({ type: "progress", value: 90, text: "创建剪藏卡片…" });
   const now = new Date();
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
   const card = {
     id: newCardId(),
-    text: buildCardHtml({ title, body }),
+    /** 标题写入 sf-clip-title，正文不再重复首行 strong 标题 */
+    text: buildCardHtml({ title: "", body, intro }),
     minutesOfDay,
     addedOn: todayYMD(),
-    tags: isBili ? ["bilibili"] : ["小红书"],
-    customProps: buildClipCustomProps(pageUrl, authorNickname, intro),
+    tags: [],
+    objectKind: presetTypeId,
+    customProps: buildPresetClipCustomProps(
+      isBili,
+      pageUrl,
+      authorNickname,
+      title
+    ),
     media,
     insertAtStart: settings.insertNewNotesAtTop,
   };
 
   try {
-    if (targetCollectionId === INBOX_ALL_NOTES_COLLECTION_ID) {
-      await ensureInboxCollectionForAllNotes(
-        settings.apiBase,
-        settings.bearerToken,
-        settings.userId
-      );
-    }
     await createCard(
       settings.apiBase,
       settings.bearerToken,
       settings.userId,
-      targetCollectionId,
+      saveCollectionId,
       card
     );
     const nImg = media.filter((m) => m.kind === "image").length;

@@ -7575,6 +7575,24 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
+.note-settings-modal__preset-subhead--tier {
+  margin-top: 1.5rem;
+}
+
+.note-settings-modal__preset-subhead--tier:first-of-type {
+  margin-top: 0.35rem;
+}
+
+.note-settings-modal__preset-grid .note-settings-modal__preset-subhead--span {
+  grid-column: 1 / -1;
+  margin: 0.85rem 0 0.4rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.52);
+}
+
 .note-settings-modal__preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));

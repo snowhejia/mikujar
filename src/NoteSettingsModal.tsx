@@ -6,7 +6,8 @@ import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
 import {
   PRESET_OBJECT_TYPES_BASIC,
-  PRESET_OBJECT_TYPES_MAIN,
+  PRESET_OBJECT_TYPES_OPTIONAL,
+  PRESET_OBJECT_TYPES_RECOMMENDED,
   type PresetObjectTypeItem,
 } from "./notePresetTypesCatalog";
 
@@ -292,29 +293,59 @@ export function NoteSettingsModal({
         <p className="note-settings-modal__object-types-lead">
           {c.noteSettingsObjectTypesLead}
         </p>
-        <p className="note-settings-modal__preset-subhead">
-          {c.noteSettingsObjectTypesMain}
+
+        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
+          {c.noteSettingsObjectTypesTierBasic}
         </p>
         <div
           className="note-settings-modal__preset-grid"
           role="list"
-          aria-label={c.noteSettingsObjectTypesMain}
+          aria-label={c.noteSettingsObjectTypesTierBasic}
         >
-          {PRESET_OBJECT_TYPES_MAIN.map((item) => (
+          {PRESET_OBJECT_TYPES_BASIC.map((item) => (
             <div key={item.id} role="listitem">
               <PresetTypeCard item={item} label={presetLabel(item)} />
             </div>
           ))}
         </div>
-        <p className="note-settings-modal__preset-subhead">
-          {c.noteSettingsObjectTypesBasic}
+
+        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
+          {c.noteSettingsObjectTypesTierRecommended}
         </p>
         <div
           className="note-settings-modal__preset-grid"
           role="list"
-          aria-label={c.noteSettingsObjectTypesBasic}
+          aria-label={c.noteSettingsObjectTypesTierRecommended}
         >
-          {PRESET_OBJECT_TYPES_BASIC.map((item) => (
+          {PRESET_OBJECT_TYPES_RECOMMENDED.map((row) => {
+            if (row.kind === "subhead") {
+              return (
+                <p
+                  key={`sub-${row.id}`}
+                  className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--span"
+                >
+                  {lang === "en" ? row.nameEn : row.nameZh}
+                </p>
+              );
+            }
+            const { kind: _k, ...item } = row;
+            return (
+              <div key={item.id} role="listitem">
+                <PresetTypeCard item={item} label={presetLabel(item)} />
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
+          {c.noteSettingsObjectTypesTierOptional}
+        </p>
+        <div
+          className="note-settings-modal__preset-grid"
+          role="list"
+          aria-label={c.noteSettingsObjectTypesTierOptional}
+        >
+          {PRESET_OBJECT_TYPES_OPTIONAL.map((item) => (
             <div key={item.id} role="listitem">
               <PresetTypeCard item={item} label={presetLabel(item)} />
             </div>

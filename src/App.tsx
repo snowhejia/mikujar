@@ -2330,19 +2330,20 @@ export default function App() {
         window.alert(c.cardAddToCollectionAlreadyThere);
         return;
       }
+      const preferTop = readNewNotePlacement() === "top";
       if (dataMode === "local") {
         setCollections((prev) =>
           appendCardCopyToCollection(
             prev,
             targetColId,
             hit.card,
-            newNotePlacement === "top"
+            preferTop
           )
         );
         return;
       }
       const placement = await addCardPlacementApi(cardId, targetColId, {
-        insertAtStart: newNotePlacement === "top",
+        insertAtStart: preferTop,
         pinned: hit.card.pinned === true,
       });
       if (!placement) {
@@ -2353,7 +2354,7 @@ export default function App() {
         collectionsRef.current,
         targetColId,
         { ...hit.card, pinned: placement.pinned },
-        newNotePlacement === "top"
+        preferTop
       );
       setCollections(mergedAdd);
       const skAdd = remoteSnapshotUserKey(
@@ -2367,7 +2368,6 @@ export default function App() {
       canEdit,
       collections,
       dataMode,
-      newNotePlacement,
       c.cardAddToCollectionAlreadyThere,
       c.errMergeColSave,
       writeRequiresLogin,
@@ -2449,6 +2449,7 @@ export default function App() {
   const restoreTrashedEntry = useCallback(
     async (entry: TrashedNoteEntry) => {
       if (!canEdit) return;
+      const preferTop = readNewNotePlacement() === "top";
       const targetColId = findCollectionById(collections, entry.colId)
         ? entry.colId
         : LOOSE_NOTES_COLLECTION_ID;
@@ -2485,7 +2486,7 @@ export default function App() {
         const restored = await postMeTrashRestore({
           cardId: entry.card.id,
           targetCollectionId: targetColId,
-          insertAtStart: newNotePlacement === "top",
+          insertAtStart: preferTop,
         });
         if (!restored.ok) {
           window.alert(c.errTrashRestore);
@@ -2511,7 +2512,7 @@ export default function App() {
         return mapCollectionById(next, targetColId, (col) => ({
           ...col,
           cards:
-            newNotePlacement === "top"
+            preferTop
               ? [
                   structuredClone(cardToAppend) as NoteCard,
                   ...col.cards,
@@ -2530,7 +2531,6 @@ export default function App() {
       collections,
       trashStorageKey,
       dataMode,
-      newNotePlacement,
       c.looseNotesCollectionName,
       c.errTrashRestore,
     ]
@@ -2676,6 +2676,7 @@ export default function App() {
       const trimmed = plainAnswer.trim();
       if (!canEdit || !trimmed) return false;
 
+      const preferTop = readNewNotePlacement() === "top";
       const htmlBody = noteBodyToHtml(trimmed);
       const now = new Date();
       const minutesOfDay = now.getHours() * 60 + now.getMinutes();
@@ -2694,7 +2695,7 @@ export default function App() {
           mapCollectionById(prev, sourceColId, (col) => ({
             ...col,
             cards:
-              newNotePlacement === "top"
+              preferTop
                 ? [newCard, ...col.cards]
                 : [...col.cards, newCard],
           }))
@@ -2707,7 +2708,7 @@ export default function App() {
       }
 
       const created = await createCardApi(sourceColId, newCard, {
-        insertAtStart: newNotePlacement === "top",
+        insertAtStart: preferTop,
       });
       if (!created) {
         flushSync(() => {
@@ -2738,7 +2739,7 @@ export default function App() {
       addRelatedPair(sourceColId, sourceCardId, sourceColId, newId);
       return true;
     },
-    [canEdit, dataMode, newNotePlacement, addRelatedPair]
+    [canEdit, dataMode, addRelatedPair]
   );
 
   const setCardTags = useCallback(
@@ -3027,6 +3028,7 @@ export default function App() {
       if (remindersViewActive && !opts?.reminderOn) return null;
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
+      const preferTop = readNewNotePlacement() === "top";
       let targetColId =
         targetColIdOverride?.trim() ||
         (allNotesViewActive || remindersViewActive
@@ -3074,7 +3076,7 @@ export default function App() {
           return mapCollectionById(next, targetColId, (col) => ({
             ...col,
             cards:
-              newNotePlacement === "top"
+              preferTop
                 ? [newCard, ...col.cards]
                 : [...col.cards, newCard],
           }));
@@ -3111,7 +3113,7 @@ export default function App() {
           }
         }
         const created = await createCardApi(targetColId, newCard, {
-          insertAtStart: newNotePlacement === "top",
+          insertAtStart: preferTop,
         });
         if (!created) {
           flushSync(() => {
@@ -3137,7 +3139,6 @@ export default function App() {
       active?.id,
       searchQuery,
       dataMode,
-      newNotePlacement,
       allNotesViewActive,
       c.looseNotesCollectionName,
       c.errCreateCol,
@@ -4049,7 +4050,7 @@ export default function App() {
     resyncCollectionsFromRemote: resyncRemoteCollectionsTree,
     collectionLayoutSaveFailedMessage: c.errCollectionLayoutSave,
     noteMoveSaveFailedMessage: c.errNoteMoveSave,
-    dropOnCollectionToTop: newNotePlacement === "top",
+    dropOnCollectionToTop: readNewNotePlacement() === "top",
     noteCardDragActiveRef,
     draggingCollectionIdRef,
     getLatestCollections: () => collectionsRef.current,

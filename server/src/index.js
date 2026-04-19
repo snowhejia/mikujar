@@ -1348,7 +1348,7 @@ app.post("/api/me/trash/restore", preferencesWriterMw, async (req, res) => {
       typeof b.targetCollectionId === "string"
         ? b.targetCollectionId.trim()
         : "";
-    const insertAtStart = Boolean(b.insertAtStart);
+    const insertAtStart = b.insertAtStart === true;
     if (!cardId || !targetCollectionId) {
       return res.status(400).json({ error: "缺少 cardId 或 targetCollectionId" });
     }

@@ -255,7 +255,7 @@ export async function getCollectionsTree(userId) {
      FROM card_placements p
      INNER JOIN cards c ON c.id = p.card_id AND c.trashed_at IS NULL
      WHERE p.collection_id = ANY($1)
-     ORDER BY p.collection_id, p.sort_order`,
+     ORDER BY p.collection_id, p.sort_order ASC, c.id ASC`,
     [colIds]
   );
 
@@ -528,7 +528,7 @@ export async function addCardToCollectionPlacement(
   const cid = String(cardId || "").trim();
   if (!cid || !colId) throw new Error("缺少卡片或合集");
 
-  const insertAtStart = Boolean(opts.insertAtStart);
+  const insertAtStart = opts.insertAtStart === true;
   const pinned = Boolean(opts.pinned);
 
   const { sql: uidSql, params: uidParams } = userIdCondition(userId, 2);
@@ -611,8 +611,10 @@ export async function createCard(userId, collectionId, card) {
     relatedRefs = [],
     media = [],
     customProps = [],
-    insertAtStart = false,
   } = card;
+
+  /** 仅显式布尔 true 插入到最前，避免 "false" 等真值误判或客户端异常字段 */
+  const insertAtStart = card.insertAtStart === true;
 
   if (!id) throw new Error("card.id 为必填项");
 

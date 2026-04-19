@@ -78,7 +78,7 @@ function allAttachmentsPageIndexKey(
   return `${PAGE_INDEX_PREFIX}${userKey}:${dataMode}:${filterKey}`;
 }
 
-/** 刷新后恢复「所有附件」分页（按用户 / 模式 / 筛选） */
+/** 刷新后恢复「文件」分页（按用户 / 模式 / 筛选） */
 export function readAllAttachmentsStoredPageIndex(
   userKey: string,
   dataMode: "local" | "remote",

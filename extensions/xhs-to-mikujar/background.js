@@ -1245,7 +1245,7 @@ async function runSave(tabId, emit) {
         url: up.url,
         kind: up.kind === "video" ? "video" : "image",
         name: up.name || filename,
-        /** 与主站一致，供「所有附件」等展示体积；缺省则 UI 为 – */
+        /** 与主站一致，供「文件」等展示体积；缺省则 UI 为 – */
         sizeBytes: Math.floor(blob.size),
       });
     } catch (e) {

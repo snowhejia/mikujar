@@ -117,7 +117,7 @@ function readInitialDetailLayoutStack(): boolean {
 
 export interface CardDetailProps {
   card: NoteCard;
-  /** `card.media` 下标；从「所有附件」等打开时定位轮播当前项 */
+  /** `card.media` 下标；从「文件」等打开时定位轮播当前项 */
   openAtMediaIndex?: number;
   onClose: () => void;
   canEdit: boolean;

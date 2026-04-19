@@ -50,7 +50,7 @@ export type AppChrome = {
   sidebarFeaturesSection: string;
   /** 侧栏「笔记」分区（全部笔记 / 待办 / 连接） */
   sidebarNotesSection: string;
-  /** 侧栏「文件」分区（所有附件） */
+  /** 侧栏「文件」分区（库内文件列表） */
   sidebarFilesSection: string;
   /** 侧栏「主题」分区（对象类型 · 主题；仅当已启用人物预设时显示） */
   sidebarTopicSection: string;
@@ -95,7 +95,7 @@ export type AppChrome = {
     totalPages: number
   ) => string;
   allAttachmentsPaginationNavAria: string;
-  /** 所有附件顶栏：缩略图在「原比例」与「正方形裁剪」之间切换 */
+  /** 文件视图顶栏：缩略图在「原比例」与「正方形裁剪」之间切换 */
   allAttachmentsPreviewToggleToSquareAria: string;
   allAttachmentsPreviewToggleToOriginalAria: string;
   allAttachmentsPreviewToggleToSquareTitle: string;
@@ -388,23 +388,24 @@ const zh: AppChrome = {
   connectionsOpenTarget: "打开目标笔记",
   connectionsBoardHint:
     "空白处拖曳平移画布，滚轮缩放。在卡片左侧灰条上按下并拖到另一张卡片可建立相关笔记。",
-  allAttachmentsEntry: "所有附件",
-  titleAllAttachments: "所有附件",
-  allAttachmentsEmpty: "还没有带附件的笔记～在卡片里添加图片、视频或文件后会出现在这里。",
-  allAttachmentsEmptyFiltered: "没有符合当前筛选的附件。",
+  allAttachmentsEntry: "文件",
+  titleAllAttachments: "文件",
+  allAttachmentsEmpty:
+    "还没有可展示的文件～在笔记卡片里添加图片、视频或文件后会出现在这里。",
+  allAttachmentsEmptyFiltered: "没有符合当前筛选的文件。",
   allAttachmentsFilterAll: "全部",
   allAttachmentsFilterImage: "图片",
   allAttachmentsFilterVideo: "视频",
   allAttachmentsFilterAudio: "音频",
   allAttachmentsFilterDocument: "文档",
   allAttachmentsFilterOther: "其他",
-  allAttachmentsFiltersAria: "按类型筛选附件",
+  allAttachmentsFiltersAria: "按类型筛选文件",
   allAttachmentsMetaDash: "—",
   allAttachmentsPaginationPrev: "上一页",
   allAttachmentsPaginationNext: "下一页",
   allAttachmentsPaginationPageOf: (page, totalPages) =>
     `第 ${page} / ${totalPages} 页`,
-  allAttachmentsPaginationNavAria: "附件列表分页",
+  allAttachmentsPaginationNavAria: "文件列表分页",
   allAttachmentsPreviewToggleToSquareAria: "切换到正方形裁剪预览",
   allAttachmentsPreviewToggleToOriginalAria: "切换到原比例预览",
   allAttachmentsPreviewToggleToSquareTitle: "缩略图改为正方形裁剪显示（点击切换）",
@@ -463,8 +464,8 @@ const zh: AppChrome = {
   allTags: "全部标签",
   trashAria: "垃圾桶",
   backToList: "返回合集列表",
-  searchPlaceholder: "搜搜笔记、合集、附件名～",
-  searchAria: "搜索笔记、附件名、合集名",
+  searchPlaceholder: "搜搜笔记、合集、文件名～",
+  searchAria: "搜索笔记、文件名、合集名",
   searchClear: "清除搜索",
   searchCollapse: "收起搜索",
   titleSearch: "搜索",
@@ -590,7 +591,7 @@ const zh: AppChrome = {
   importAppleNotesBlockedNoEdit: "当前不可编辑，无法导入。",
   importAppleNotesBlockedTrash: "请先退出回收站视图再导入。",
   importAppleNotesBlockedConnections: "请先退出「笔记探索」视图再导入。",
-  importAppleNotesBlockedAttachments: "请先退出「所有附件」视图再导入。",
+  importAppleNotesBlockedAttachments: "请先退出「文件」视图再导入。",
   importAppleNotesBlockedReminders: "请先退出「我的待办」入口再导入。",
   importAppleNotesBlockedCalendar: "请先关闭日历单日视图再导入。",
   importAppleNotesBlockedSearch: "请先清空搜索再导入。",
@@ -695,10 +696,10 @@ const en: AppChrome = {
   connectionsOpenTarget: "Open target",
   connectionsBoardHint:
     "Drag empty space to pan. Scroll wheel to zoom. Drag from the left rail on a card to another to link.",
-  allAttachmentsEntry: "All attachments",
-  titleAllAttachments: "All attachments",
+  allAttachmentsEntry: "Files",
+  titleAllAttachments: "Files",
   allAttachmentsEmpty:
-    "No attachments yet — add images, video, or files to a note to see them here.",
+    "No files yet — add images, video, or other files to a note to see them here.",
   allAttachmentsEmptyFiltered: "Nothing matches the current filter.",
   allAttachmentsFilterAll: "All",
   allAttachmentsFilterImage: "Images",
@@ -706,13 +707,13 @@ const en: AppChrome = {
   allAttachmentsFilterAudio: "Audio",
   allAttachmentsFilterDocument: "Documents",
   allAttachmentsFilterOther: "Other",
-  allAttachmentsFiltersAria: "Filter attachments by type",
+  allAttachmentsFiltersAria: "Filter files by type",
   allAttachmentsMetaDash: "—",
   allAttachmentsPaginationPrev: "Previous",
   allAttachmentsPaginationNext: "Next",
   allAttachmentsPaginationPageOf: (page, totalPages) =>
     `Page ${page} of ${totalPages}`,
-  allAttachmentsPaginationNavAria: "Attachments pagination",
+  allAttachmentsPaginationNavAria: "Files pagination",
   allAttachmentsPreviewToggleToSquareAria: "Switch to square-cropped previews",
   allAttachmentsPreviewToggleToOriginalAria: "Switch to original-aspect previews",
   allAttachmentsPreviewToggleToSquareTitle: "Crop previews to a square (tap)",
@@ -776,8 +777,8 @@ const en: AppChrome = {
   allTags: "All tags",
   trashAria: "Trash",
   backToList: "Back to collections",
-  searchPlaceholder: "Search notes, collections, attachments…",
-  searchAria: "Search notes, attachments, collections",
+  searchPlaceholder: "Search notes, collections, file names…",
+  searchAria: "Search notes, file names, collections",
   searchClear: "Clear search",
   searchCollapse: "Collapse search",
   titleSearch: "Search",
@@ -906,7 +907,7 @@ const en: AppChrome = {
   importAppleNotesBlockedNoEdit: "Editing is disabled; import is unavailable.",
   importAppleNotesBlockedTrash: "Leave the trash view before importing.",
   importAppleNotesBlockedConnections: "Leave Explore before importing.",
-  importAppleNotesBlockedAttachments: "Leave All attachments before importing.",
+  importAppleNotesBlockedAttachments: "Leave Files before importing.",
   importAppleNotesBlockedReminders: "Leave the reminders entry before importing.",
   importAppleNotesBlockedCalendar: "Close the calendar day view before importing.",
   importAppleNotesBlockedSearch: "Clear search before importing.",

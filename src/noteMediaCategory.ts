@@ -1,6 +1,6 @@
 import type { NoteMediaItem } from "./types";
 
-/** 与「所有附件」筛选一致：图片 / 视频 / 音频 / 文档 / 其他 */
+/** 与「文件」视图筛选一致：图片 / 视频 / 音频 / 文档 / 其他 */
 export type AttachmentUiCategory =
   | "image"
   | "video"

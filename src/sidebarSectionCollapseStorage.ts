@@ -3,7 +3,7 @@ import type { AppDataMode } from "./appDataModeStorage";
 export type SidebarSectionCollapseState = {
   /** 侧栏「全部笔记 / 待办 / 笔记探索」 */
   notes: boolean;
-  /** 侧栏「所有附件」 */
+  /** 侧栏「文件」 */
   files: boolean;
   /** 侧栏「主题」（人物类目） */
   topic: boolean;

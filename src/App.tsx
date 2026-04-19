@@ -382,7 +382,7 @@ function presetGroupSectionCardCount(
   return has ? sum : ("–" as const);
 }
 
-/** 「所有附件」面包屑：子级文案与顶栏筛选一致 */
+/** 「文件」视图面包屑：子级文案与顶栏筛选一致 */
 function attachmentFilterCrumbLabel(
   k: AttachmentFilterKey,
   c: {
@@ -662,7 +662,7 @@ export default function App() {
   const [detailCard, setDetailCard] = useState<{
     card: NoteCard;
     colId: string;
-    /** `card.media` 下标：从「所有附件」等入口打开时定位轮播 */
+    /** `card.media` 下标：从「文件」等入口打开时定位轮播 */
     openAtMediaIndex?: number;
   } | null>(null);
   const [cardPageCard, setCardPageCard] = useState<{
@@ -1078,7 +1078,7 @@ export default function App() {
     return () => mq.removeEventListener("change", onMq);
   }, []);
 
-  /** 窄屏无「笔记探索 / 所有附件」入口：从桌面切入窄屏或误入对应态时回到全部笔记 */
+  /** 窄屏无「笔记探索 / 文件」入口：从桌面切入窄屏或误入对应态时回到全部笔记 */
   useEffect(() => {
     if (!narrowUi) return;
     if (!connectionsViewActive && !attachmentsViewActive) return;
@@ -1846,7 +1846,7 @@ export default function App() {
     remoteLoaded,
   ]);
 
-  /** 「所有附件」类型筛选：刷新后保持，与主区模式 / 用户分键 */
+  /** 「文件」类型筛选：刷新后保持，与主区模式 / 用户分键 */
   useEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
@@ -2011,7 +2011,7 @@ export default function App() {
     };
   }, [dataMode, remoteLoaded, attachmentsViewActive]);
 
-  /** 远程模式下卡片附件增删后刷新侧边栏总数，并驱动「所有附件」列表重新拉取 */
+  /** 远程模式下卡片附件增删后刷新侧边栏总数，并驱动「文件」列表重新拉取 */
   const [attachmentsRemoteListNonce, setAttachmentsRemoteListNonce] =
     useState(0);
   const notifyRemoteAttachmentsChanged = useCallback(() => {
@@ -2090,7 +2090,7 @@ export default function App() {
     []
   );
 
-  /** 「所有附件」网格：打开附件时优先进入已关联的 file 卡；否则创建 file 卡并建双向连接后再打开 */
+  /** 「文件」网格：打开附件时优先进入已关联的 file 卡；否则创建 file 卡并建双向连接后再打开 */
   const openAttachmentFromAllAttachmentsView = useCallback(
     (colId: string, noteCardId: string, mediaIndex: number) => {
       const tryOpen = async (depth = 0): Promise<void> => {

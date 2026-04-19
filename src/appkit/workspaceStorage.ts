@@ -16,13 +16,13 @@ export const PERSISTED_WORKSPACE_REMINDERS = "__mikujar_workspace_reminders__";
 /** 主区为「笔记探索」 */
 export const PERSISTED_WORKSPACE_CONNECTIONS = "__mikujar_workspace_connections__";
 
-/** 主区为「所有附件」 */
+/** 主区为「文件」 */
 export const PERSISTED_WORKSPACE_ALL_ATTACHMENTS =
   "__mikujar_workspace_all_attachments__";
 
 export const ATTACHMENTS_FILTER_STORAGE_PREFIX = "mikujar-attachments-filter:";
 
-/** 「所有附件」顶栏类型筛选（与 {@link activeCollectionStorageKey} 同样按模式 / 用户分键） */
+/** 「文件」顶栏类型筛选（与 {@link activeCollectionStorageKey} 同样按模式 / 用户分键） */
 export function attachmentsFilterStorageKey(
   mode: AppDataMode,
   userId: string | null

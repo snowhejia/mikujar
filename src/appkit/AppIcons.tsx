@@ -270,7 +270,7 @@ export function SidebarNavExploreIcon({
   );
 }
 
-/** 侧栏「所有附件」：回形针 */
+/** 侧栏「文件」：回形针 */
 export function SidebarNavAttachmentsIcon({
   className,
 }: {

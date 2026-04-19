@@ -1904,7 +1904,7 @@ export async function countCardAttachments(ownerKey, filterKey = "all") {
 }
 
 /**
- * 分页附件列表（用于「所有附件」页，避免拉全树）。
+ * 分页附件列表（用于「文件」页，避免拉全树）。
  * @param {string} ownerKey
  * @param {{ filterKey?: string, limit?: number, offset?: number }} opts
  */

@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS card_placements (
 CREATE INDEX IF NOT EXISTS idx_card_placements_col ON card_placements(collection_id);
 CREATE INDEX IF NOT EXISTS idx_card_placements_card ON card_placements(card_id);
 
--- 卡片附件行（与 cards.media JSONB 由触发器同步；「所有附件」分页走此表）
+-- 卡片附件行（与 cards.media JSONB 由触发器同步；「文件」分页走此表）
 CREATE TABLE IF NOT EXISTS card_attachments (
   id              BIGSERIAL PRIMARY KEY,
   card_id         TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,

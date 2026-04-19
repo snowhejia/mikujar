@@ -500,7 +500,7 @@
   letter-spacing: -0.02em;
 }
 
-/* 主区「所有附件」：类型筛选 + 网格 · 预览原比例或正方形裁剪 · 文件名 / 大小 / 时长 */
+/* 主区「文件」：类型筛选 + 网格 · 预览原比例或正方形裁剪 · 文件名 / 大小 / 时长 */
 .all-attachments-page {
   box-sizing: border-box;
   width: 100%;
@@ -1839,7 +1839,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 侧栏「功能」区内主导航（全部笔记 / 待办 / 笔记探索 / 所有附件）；含手机抽屉
+/* 侧栏「功能」区内主导航（全部笔记 / 待办 / 笔记探索 / 文件）；含手机抽屉
    与 .sidebar__nav 同宽：不再左右内缩，选中条与合集树行同宽、同圆角 */
 .sidebar__all-notes {
   display: block;

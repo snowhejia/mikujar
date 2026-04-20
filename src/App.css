@@ -1754,35 +1754,6 @@
   box-sizing: border-box;
 }
 
-/* 「网页 / 主题 / 剪藏…」纵向成组（与「笔记」「文件」同级下挂在侧栏内）；桌面限制高度，避免挤占「笔记」子树 */
-.sidebar__tail {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 1;
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-@media (min-width: 901px) {
-  .app:not(.app--mobile-nav-open) .sidebar__tail {
-    max-height: min(46vh, 420px);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .app:not(.app--mobile-nav-open) .sidebar__tail::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  .app:not(.app--mobile-nav-open) .sidebar__tail::-webkit-scrollbar-thumb {
-    background: rgba(55, 53, 47, 0.22);
-    border-radius: 4px;
-  }
-}
-
 /* 与合集树深度 0 一致：左 8px 后再 22px 折叠列 + 6px gap + 主按钮 */
 .sidebar__file-subtype-row--notes-line {
   display: flex;

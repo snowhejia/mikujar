@@ -5998,7 +5998,6 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="sidebar__tail">
         {renderPresetCatalogSidebarSection("web")}
 
         {topicNavRootCol ? (
@@ -6313,7 +6312,6 @@ export default function App() {
               </span>
             ) : null}
           </button>
-        </div>
         </div>
       </aside>
 

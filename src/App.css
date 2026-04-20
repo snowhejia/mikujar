@@ -1754,12 +1754,14 @@
   box-sizing: border-box;
 }
 
-/* 「文件 / 网页 / 主题…」纵向成组；桌面限制高度，避免挤占「笔记」子树滚动区 */
+/* 「网页 / 主题 / 剪藏…」纵向成组（与「笔记」「文件」同级下挂在侧栏内）；桌面限制高度，避免挤占「笔记」子树 */
 .sidebar__tail {
   display: flex;
   flex-direction: column;
   flex-shrink: 1;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (min-width: 901px) {
@@ -1768,7 +1770,6 @@
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
   }
 

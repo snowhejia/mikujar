@@ -39,7 +39,10 @@ import {
   cardHeadlinePlain,
   readFileTitleFromCustomProps,
 } from "./notePlainText";
-import { fetchCardEffectiveSchema } from "./api/collections";
+import {
+  fetchCardEffectiveSchema,
+  postCardAutoLinkApi,
+} from "./api/collections";
 import type { ReminderPickerTarget } from "./ReminderPickerModal";
 import { useAppUiLang } from "./appUiLang";
 import { useAppChrome } from "./i18n/useAppChrome";
@@ -539,6 +542,8 @@ export interface CardPageViewProps {
   onOpenFileCard?: (item: NoteMediaItem) => void;
   /** 打开属性面板中链到的人物卡（如作者 → person） */
   onOpenLinkedCard?: (targetColId: string, targetCardId: string) => void;
+  /** 云端：自动建卡请求成功后拉取合集树（刷新 custom_props / 关联） */
+  onAfterRemoteAutoLink?: () => Promise<void>;
 }
 
 function PropValueEditor({
@@ -1008,6 +1013,7 @@ export function CardPageView({
   attachmentHasLinkedFileCard,
   onOpenFileCard,
   onOpenLinkedCard,
+  onAfterRemoteAutoLink,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
   const ui = useAppChrome();
@@ -1057,6 +1063,7 @@ export function CardPageView({
   } | null>(null);
   const [tocPanelOpen, setTocPanelOpen] = useState(true);
   const [tocActiveIndex, setTocActiveIndex] = useState(0);
+  const [rerunAutoLinkBusy, setRerunAutoLinkBusy] = useState(false);
 
   const PROPS_WIDTH_KEY = "mikujar-card-page-props-width";
   const [propsWidth, setPropsWidth] = useState(() => {
@@ -1599,6 +1606,17 @@ export function CardPageView({
     setCardCustomProps(card.id, migrateCustomPropsList(next));
   }
 
+  async function handleRerunAutoLink() {
+    if (!onAfterRemoteAutoLink || rerunAutoLinkBusy) return;
+    setRerunAutoLinkBusy(true);
+    try {
+      const ok = await postCardAutoLinkApi(card.id);
+      if (ok) await onAfterRemoteAutoLink();
+    } finally {
+      setRerunAutoLinkBusy(false);
+    }
+  }
+
   function addProperty(type: CardPropertyType) {
     const newProp: CardProperty = {
       id: genId(),
@@ -1993,6 +2011,27 @@ export function CardPageView({
               )}
             </div>
           ))}
+
+        {canEdit && onAfterRemoteAutoLink ? (
+          <div className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom">
+            <span className="card-page__prop-label">
+              {ui.cardPageRerunAutoLinkSection}
+            </span>
+            <div className="card-page__prop-content">
+              <button
+                type="button"
+                className="card-page__rerun-auto-link"
+                disabled={rerunAutoLinkBusy}
+                title={ui.cardPageRerunAutoLinkTitle}
+                onClick={() => void handleRerunAutoLink()}
+              >
+                {rerunAutoLinkBusy
+                  ? ui.cardPageRerunAutoLinkBusy
+                  : ui.cardPageRerunAutoLink}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </>
     );
   }

@@ -11265,6 +11265,32 @@ body.app--card-page-open .app {
   padding-top: 0;
 }
 
+.card-page__rerun-auto-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 0.35rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #37352f;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.card-page__rerun-auto-link:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.04);
+  border-color: rgba(55, 53, 47, 0.18);
+}
+
+.card-page__rerun-auto-link:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .card-page__tags-panel {
   width: 100%;
   box-sizing: border-box;

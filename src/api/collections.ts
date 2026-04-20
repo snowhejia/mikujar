@@ -325,6 +325,24 @@ export async function updateCardApi(
   }
 }
 
+/** 再跑一遍自动建卡规则（人物 / 网页等）；成功后可拉合集树刷新卡片 */
+export async function postCardAutoLinkApi(cardId: string): Promise<boolean> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/cards/${encodeURIComponent(cardId)}/auto-link`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: "{}",
+      })
+    );
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** 仅合并单条附件元数据（durationSec / sizeBytes / widthPx+heightPx）；服务端已有值不覆盖 */
 export async function patchCardMediaItemApi(
   cardId: string,

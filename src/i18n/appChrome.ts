@@ -124,6 +124,11 @@ export type AppChrome = {
   cardCollectionTagInputPlaceholder: string;
   cardCollectionTagDropdownEmpty: string;
   cardCollectionTagDropdownAria: string;
+  /** 全页卡片：手动触发服务端自动建卡 */
+  cardPageRerunAutoLinkSection: string;
+  cardPageRerunAutoLink: string;
+  cardPageRerunAutoLinkBusy: string;
+  cardPageRerunAutoLinkTitle: string;
   /** 笔记探索白板卡片左侧灰条：拖动拉线建立关联 */
   connectionsLinkRailAria: string;
   /** 笔记探索 · 问 AI 侧栏 */
@@ -433,6 +438,11 @@ const zh: AppChrome = {
   cardCollectionTagInputPlaceholder: "添加或搜索合集…",
   cardCollectionTagDropdownEmpty: "暂无可添加的合集。",
   cardCollectionTagDropdownAria: "选择合集",
+  cardPageRerunAutoLinkSection: "自动建卡",
+  cardPageRerunAutoLink: "重新执行自动建卡",
+  cardPageRerunAutoLinkBusy: "正在处理…",
+  cardPageRerunAutoLinkTitle:
+    "按当前合集上的自动建卡规则，补建缺失的关联卡（如人物、网页）并写回关联属性",
   connectionsLinkRailAria: "从此处拖动连线到另一张笔记",
   cardAskAiTitle: "问 AI",
   cardAskAiToolbar: "问 AI",
@@ -743,6 +753,11 @@ const en: AppChrome = {
   cardCollectionTagInputPlaceholder: "Add or search collections…",
   cardCollectionTagDropdownEmpty: "No collections available to add.",
   cardCollectionTagDropdownAria: "Pick a collection",
+  cardPageRerunAutoLinkSection: "Auto-link",
+  cardPageRerunAutoLink: "Run auto-link rules again",
+  cardPageRerunAutoLinkBusy: "Working…",
+  cardPageRerunAutoLinkTitle:
+    "Re-run preset auto-link rules to create missing linked cards (e.g. person, web) and update link fields",
   connectionsLinkRailAria: "Drag a line from here to another note",
   cardAskAiTitle: "Ask AI",
   cardAskAiToolbar: "Ask AI",

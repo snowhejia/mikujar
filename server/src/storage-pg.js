@@ -2404,6 +2404,76 @@ function resolveSchemaFromChain(colMap, colId) {
   };
 }
 
+/** 从 placement 合集沿父链查找 preset_type_id 与卡片 object_kind 一致时的深度（0=本合集）。 */
+function placementPresetMatchDepth(colMap, colId, objectKind) {
+  const want = typeof objectKind === "string" ? objectKind.trim() : "";
+  if (!want) return -1;
+  let cur = colMap.get(colId);
+  let depth = 0;
+  while (cur) {
+    const pid = typeof cur.preset_type_id === "string" ? cur.preset_type_id.trim() : "";
+    if (pid && pid === want) return depth;
+    cur = cur.parent_id ? colMap.get(cur.parent_id) : null;
+    depth++;
+  }
+  return -1;
+}
+
+/**
+ * 与 src/notePresetTypesCatalog.ts 剪藏子类型 autoLinkRules 一致；仅当 DB 合集 card_schema 未写入规则时补救。
+ * 若改目录请同步此处。
+ */
+function builtinClipAutoLinkRuleForObjectKind(objectKind) {
+  const k = typeof objectKind === "string" ? objectKind.trim() : "";
+  if (k === "post_xhs") {
+    return {
+      ruleId: "xhs-auto-graph",
+      trigger: "on_save",
+      targets: [
+        {
+          targetKey: "creator",
+          targetObjectKind: "person",
+          linkType: "creator",
+          targetPresetTypeId: "person",
+          syncSchemaFieldId: "sf-xhs-author",
+        },
+        {
+          targetKey: "source",
+          targetObjectKind: "web",
+          linkType: "source",
+          targetPresetTypeId: "web",
+        },
+      ],
+      labelZh: "自动关联作者与链接对象",
+      labelEn: "Auto-link creator and URL card",
+    };
+  }
+  if (k === "post_bilibili") {
+    return {
+      ruleId: "bili-auto-graph",
+      trigger: "on_save",
+      targets: [
+        {
+          targetKey: "creator",
+          targetObjectKind: "person",
+          linkType: "creator",
+          targetPresetTypeId: "person",
+          syncSchemaFieldId: "sf-bili-author",
+        },
+        {
+          targetKey: "source",
+          targetObjectKind: "web",
+          linkType: "source",
+          targetPresetTypeId: "web",
+        },
+      ],
+      labelZh: "自动关联 UP 主与链接对象",
+      labelEn: "Auto-link uploader and URL card",
+    };
+  }
+  return null;
+}
+
 /**
  * 用户笔记偏好（与 trashed_notes.owner_key 一致：JWT sub 或 __single__）。
  * @param {Map<string, object>} ruleMap
@@ -2540,13 +2610,29 @@ export async function runAutoLinkRulesForCard(userId, cardId) {
     );
     const colMap = new Map(allColsRes.rows.map((r) => [r.id, r]));
 
-    // 4. 合并所有合集的规则（按 ruleId 去重，后合集覆盖前）
+    const ok = normalizeCardObjectKindRow(cardRow);
+    const colIdsSorted = [...colIds].sort((a, b) => {
+      const da = placementPresetMatchDepth(colMap, a, ok);
+      const db = placementPresetMatchDepth(colMap, b, ok);
+      const ka = da < 0 ? 0 : 100 - da;
+      const kb = db < 0 ? 0 : 100 - db;
+      if (ka !== kb) return ka - kb;
+      return String(a).localeCompare(String(b));
+    });
+
+    // 4. 合并所有 placement 上的规则（同 ruleId 后者覆盖前者；优先处理与 object_kind 更匹配的归属合集）
     const allRules = new Map();
-    for (const colId of colIds) {
+    for (const colId of colIdsSorted) {
       const { rules } = resolveSchemaFromChain(colMap, colId);
       for (const rule of rules) {
-        if (!allRules.has(rule.ruleId)) allRules.set(rule.ruleId, rule);
+        const rid = rule && typeof rule.ruleId === "string" ? rule.ruleId.trim() : "";
+        if (rid) allRules.set(rid, rule);
       }
+    }
+
+    const fallbackRule = builtinClipAutoLinkRuleForObjectKind(ok);
+    if (fallbackRule && !allRules.has(fallbackRule.ruleId)) {
+      allRules.set(fallbackRule.ruleId, fallbackRule);
     }
 
     const prefsOwnerKey = uid != null ? String(uid) : "__single__";
@@ -2556,7 +2642,7 @@ export async function runAutoLinkRulesForCard(userId, cardId) {
     if (allRules.size === 0) return;
 
     const mergedFieldMap = new Map();
-    for (const cid of colIds) {
+    for (const cid of colIdsSorted) {
       const { fields } = resolveSchemaFromChain(colMap, cid);
       for (const f of fields) mergedFieldMap.set(f.id, f);
     }

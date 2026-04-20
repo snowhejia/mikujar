@@ -6936,6 +6936,15 @@ export default function App() {
               onOpenLinkedCard={(targetColId, targetCardId) =>
                 setCardPageCard({ colId: targetColId, cardId: targetCardId })
               }
+              onAfterRemoteAutoLink={
+                dataMode === "remote" && canEdit
+                  ? async () => {
+                      await resyncRemoteCollectionsTree({
+                        skipPreferenceRefresh: true,
+                      });
+                    }
+                  : undefined
+              }
             />
           </Suspense>
         ) : cardPageCard ? (

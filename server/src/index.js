@@ -1354,6 +1354,23 @@ app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
   }
 });
 
+/** POST /api/cards/:cardId/auto-link — 手动再跑自动建卡规则（await 完成后再响应，便于前端刷新） */
+app.post(
+  "/api/cards/:cardId/auto-link",
+  collectionsWriterMw,
+  async (req, res) => {
+    try {
+      await runAutoLinkRulesForCard(getUserId(req), req.params.cardId);
+      notifyCollectionsSync(req);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      const status = e.message?.includes("不存在") ? 404 : 400;
+      res.status(status).json({ error: e.message || "执行失败" });
+    }
+  }
+);
+
 /**
  * PATCH /api/cards/:cardId/media/:mediaIndex — 仅合并单条附件元数据（durationSec / sizeBytes / widthPx+heightPx），已有值不覆盖
  */

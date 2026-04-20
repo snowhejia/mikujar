@@ -18,7 +18,13 @@ export function readPersonNameFromCustomProps(card: NoteCard): string {
   for (const p of card.customProps ?? []) {
     if (p.id === "sf-person-name" && p.type === "text") {
       const v = p.value;
-      if (typeof v === "string" && v.trim()) return v.trim();
+      if (typeof v === "string" && v.trim()) {
+        const t = v.trim();
+        if (/<[^>]+>/.test(t)) {
+          return plainTextFromNoteHtml(t).slice(0, 160);
+        }
+        return t;
+      }
     }
   }
   return "";

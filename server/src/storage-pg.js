@@ -2429,6 +2429,80 @@ async function mergeCardLinkCustomPropWithClient(
   );
 }
 
+/** 剪藏正文误入人物名时常含标签且较长 */
+function personDisplayNameLooksLikeHtmlBlob(s) {
+  const t = String(s ?? "").trim();
+  return t.length >= 24 && /<[^>]+>/.test(t);
+}
+
+/**
+ * 已关联的人物卡若名称曾被误写入剪藏 HTML，在自动建卡重跑时用源卡作者字段或纯文本兜底修正。
+ */
+async function repairLinkedPersonNameIfHtmlBlob(
+  client,
+  userId,
+  personCardId,
+  step,
+  sourceCardRow,
+  mergedFieldMap
+) {
+  const kind =
+    typeof step.targetObjectKind === "string" ? step.targetObjectKind.trim() : "";
+  if (kind !== "person") return;
+  const syncId =
+    typeof step.syncSchemaFieldId === "string" && step.syncSchemaFieldId.trim()
+      ? step.syncSchemaFieldId.trim()
+      : "";
+  if (!syncId) return;
+
+  const { sql: ownSql, params: ownParams } = cardOwnershipCondition(userId, 2);
+  const res = await client.query(
+    `SELECT text, custom_props, object_kind FROM cards WHERE id = $1 AND (${ownSql}) AND trashed_at IS NULL`,
+    [personCardId, ...ownParams]
+  );
+  if (res.rowCount === 0) return;
+  const row = res.rows[0];
+  if (normalizeCardObjectKindRow(row) !== "person") return;
+
+  const props = customPropsArrayFromDbCell(row.custom_props);
+  const nameIdx = props.findIndex((p) => p && p.id === "sf-person-name");
+  let rawName = "";
+  if (nameIdx >= 0 && props[nameIdx]?.type === "text") {
+    const v = props[nameIdx].value;
+    if (typeof v === "string" && v.trim()) rawName = v.trim();
+  }
+  if (!rawName) rawName = String(row.text ?? "").trim();
+  if (!personDisplayNameLooksLikeHtmlBlob(rawName)) return;
+
+  const fromClip = autoLinkNewCardTitleFromSource(step, sourceCardRow, mergedFieldMap);
+  let nextName = "";
+  if (fromClip) {
+    nextName = fromClip;
+  } else {
+    const plain = sanitizeAutoLinkTitleRaw(rawName, true);
+    nextName = plain.length > 0 && plain.length <= 80 ? plain : "";
+  }
+  if (nextName === rawName) return;
+
+  let finalProps;
+  if (nameIdx >= 0) {
+    finalProps = props.map((p, i) =>
+      i === nameIdx ? { ...p, type: "text", value: nextName } : p
+    );
+  } else {
+    finalProps = [
+      ...props,
+      { id: "sf-person-name", name: "名称", type: "text", value: nextName },
+    ];
+  }
+
+  const { sql: ownUpSql, params: ownUpParams } = cardOwnershipCondition(userId, 4);
+  await client.query(
+    `UPDATE cards SET custom_props = $2::jsonb, text = $3 WHERE id = $1 AND (${ownUpSql}) AND trashed_at IS NULL`,
+    [personCardId, JSON.stringify(finalProps), nextName, ...ownUpParams]
+  );
+}
+
 /**
  * 解析合集树中一条合集链（colId → 父 → 爷…）的有效 Schema，
  * 合并 autoLinkRules（子优先覆盖父，按 ruleId 去重）。
@@ -2872,6 +2946,15 @@ export async function runAutoLinkRulesForCard(userId, cardId) {
                   targetMerged
                 );
               }
+
+              await repairLinkedPersonNameIfHtmlBlob(
+                client,
+                userId,
+                linkedCardId,
+                step,
+                cardRow,
+                mergedFieldMap
+              );
 
               await client.query("COMMIT");
             }

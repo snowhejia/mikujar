@@ -1797,6 +1797,15 @@
   padding: 2px 0;
 }
 
+/* 与 .sidebar__section-hit--chevron-only 同宽，无子合集时占位对齐 */
+.sidebar__section-chevron-placeholder {
+  flex: 0 0 auto;
+  width: 24px;
+  min-width: 24px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
 .sidebar__section-hit--notes-title,
 .sidebar__section-hit--files-title,
 .sidebar__section-hit--topic-title,

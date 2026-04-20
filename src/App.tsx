@@ -1974,6 +1974,50 @@ export default function App() {
     [collections]
   );
 
+  /** 有任一可展示的子合集（或本地工具条）时才显示折叠箭头 */
+  const notesSectionHasChildCollections = useMemo(() => {
+    if (
+      NOTE_PRESET_SUBTYPE_ITEMS.some((item) =>
+        findCollectionByPresetType(collections, item.id)
+      )
+    ) {
+      return true;
+    }
+    if (collectionsForNotesSidebar.length > 0) return true;
+    if (dataMode === "local" && canEdit && !currentUser) return true;
+    return false;
+  }, [
+    collections,
+    collectionsForNotesSidebar,
+    dataMode,
+    canEdit,
+    currentUser,
+  ]);
+
+  const filesSectionHasChildCollections = useMemo(
+    () =>
+      FILE_PRESET_SUBTYPE_ITEMS.some((item) =>
+        findCollectionByPresetType(collections, item.id)
+      ),
+    [collections]
+  );
+
+  const topicSectionHasChildCollections = useMemo(
+    () =>
+      TOPIC_PRESET_SUBTYPE_ITEMS.some((item) =>
+        findCollectionByPresetType(collections, item.id)
+      ),
+    [collections]
+  );
+
+  const clipSectionHasChildCollections = useMemo(
+    () =>
+      CLIP_PRESET_SUBTYPE_ITEMS.some((item) =>
+        findCollectionByPresetType(collections, item.id)
+      ),
+    [collections]
+  );
+
   const allMediaAttachmentEntries = useMemo(() => {
     if (dataMode === "remote") return [];
     return collectAllMediaAttachmentEntries(collections);
@@ -2411,6 +2455,10 @@ export default function App() {
       appUiLang === "en" ? group.baseLabelEn : group.baseLabelZh;
     const sectionCount = presetGroupSectionCardCount(collections, group);
     const collapsed = sidebarSectionCollapsed[baseId];
+    const hasChildCollections = group.children.some((item) =>
+      findCollectionByPresetType(collections, item.id)
+    );
+    const collapsedEffective = hasChildCollections && collapsed;
     const listAria =
       appUiLang === "zh"
         ? `「${sectionLabel}」下的子类型`
@@ -2420,28 +2468,36 @@ export default function App() {
         key={baseId}
         className={
           "sidebar__preset-sidebar-section" +
-          (collapsed
+          (collapsedEffective
             ? " sidebar__preset-sidebar-section--collapsed"
             : " sidebar__preset-sidebar-section--expanded")
         }
       >
         <div className="sidebar__section-row sidebar__section-row--collapsible sidebar__section-row--preset-head">
-          <button
-            type="button"
-            className="sidebar__section-hit sidebar__section-hit--chevron-only"
-            onClick={() => toggleSidebarSection(baseId)}
-            aria-expanded={!collapsed}
-            aria-label={sidebarSectionToggleAria(baseId, sectionLabel)}
-          >
-            <span
-              className={
-                "sidebar__chevron" + (!collapsed ? " is-expanded" : "")
-              }
-              aria-hidden
+          {hasChildCollections ? (
+            <button
+              type="button"
+              className="sidebar__section-hit sidebar__section-hit--chevron-only"
+              onClick={() => toggleSidebarSection(baseId)}
+              aria-expanded={!collapsedEffective}
+              aria-label={sidebarSectionToggleAria(baseId, sectionLabel)}
             >
-              <span className="sidebar__chevron-icon">›</span>
-            </span>
-          </button>
+              <span
+                className={
+                  "sidebar__chevron" +
+                  (!collapsedEffective ? " is-expanded" : "")
+                }
+                aria-hidden
+              >
+                <span className="sidebar__chevron-icon">›</span>
+              </span>
+            </button>
+          ) : (
+            <span
+              className="sidebar__section-chevron-placeholder"
+              aria-hidden
+            />
+          )}
           <button
             type="button"
             className={
@@ -2470,7 +2526,7 @@ export default function App() {
             </span>
           </button>
         </div>
-        {!collapsed && group.children.length > 0 ? (
+        {!collapsedEffective && hasChildCollections ? (
           <div
             className="sidebar__file-subtypes"
             role="list"
@@ -5598,29 +5654,42 @@ export default function App() {
         <div
           className={
             "sidebar__notes-section" +
-            (!sidebarSectionCollapsed.notes
+            (!(
+              notesSectionHasChildCollections &&
+              sidebarSectionCollapsed.notes
+            )
               ? " sidebar__notes-section--expanded"
               : " sidebar__notes-section--collapsed")
           }
         >
           <div className="sidebar__section-row sidebar__section-row--collapsible sidebar__section-row--notes-head">
-            <button
-              type="button"
-              className="sidebar__section-hit sidebar__section-hit--chevron-only"
-              onClick={() => toggleSidebarSection("notes")}
-              aria-expanded={!sidebarSectionCollapsed.notes}
-              aria-label={sidebarSectionToggleAria("notes", c.sidebarNotesSection)}
-            >
-              <span
-                className={
-                  "sidebar__chevron" +
-                  (!sidebarSectionCollapsed.notes ? " is-expanded" : "")
-                }
-                aria-hidden
+            {notesSectionHasChildCollections ? (
+              <button
+                type="button"
+                className="sidebar__section-hit sidebar__section-hit--chevron-only"
+                onClick={() => toggleSidebarSection("notes")}
+                aria-expanded={!sidebarSectionCollapsed.notes}
+                aria-label={sidebarSectionToggleAria(
+                  "notes",
+                  c.sidebarNotesSection
+                )}
               >
-                <span className="sidebar__chevron-icon">›</span>
-              </span>
-            </button>
+                <span
+                  className={
+                    "sidebar__chevron" +
+                    (!sidebarSectionCollapsed.notes ? " is-expanded" : "")
+                  }
+                  aria-hidden
+                >
+                  <span className="sidebar__chevron-icon">›</span>
+                </span>
+              </button>
+            ) : (
+              <span
+                className="sidebar__section-chevron-placeholder"
+                aria-hidden
+              />
+            )}
             <button
               type="button"
               className={
@@ -5654,7 +5723,9 @@ export default function App() {
               </button>
             ) : null}
           </div>
-          {!sidebarSectionCollapsed.notes ? (
+          {!(
+            notesSectionHasChildCollections && sidebarSectionCollapsed.notes
+          ) ? (
             <div className="sidebar__notes-section-main">
               <div className="sidebar__collections">
                 <div
@@ -5857,29 +5928,42 @@ export default function App() {
         <div
           className={
             "sidebar__files-section" +
-            (!sidebarSectionCollapsed.files
+            (!(
+              filesSectionHasChildCollections &&
+              sidebarSectionCollapsed.files
+            )
               ? " sidebar__files-section--expanded"
               : " sidebar__files-section--collapsed")
           }
         >
           <div className="sidebar__section-row sidebar__section-row--collapsible sidebar__section-row--files-head">
-            <button
-              type="button"
-              className="sidebar__section-hit sidebar__section-hit--chevron-only"
-              onClick={() => toggleSidebarSection("files")}
-              aria-expanded={!sidebarSectionCollapsed.files}
-              aria-label={sidebarSectionToggleAria("files", c.sidebarFilesSection)}
-            >
-              <span
-                className={
-                  "sidebar__chevron" +
-                  (!sidebarSectionCollapsed.files ? " is-expanded" : "")
-                }
-                aria-hidden
+            {filesSectionHasChildCollections ? (
+              <button
+                type="button"
+                className="sidebar__section-hit sidebar__section-hit--chevron-only"
+                onClick={() => toggleSidebarSection("files")}
+                aria-expanded={!sidebarSectionCollapsed.files}
+                aria-label={sidebarSectionToggleAria(
+                  "files",
+                  c.sidebarFilesSection
+                )}
               >
-                <span className="sidebar__chevron-icon">›</span>
-              </span>
-            </button>
+                <span
+                  className={
+                    "sidebar__chevron" +
+                    (!sidebarSectionCollapsed.files ? " is-expanded" : "")
+                  }
+                  aria-hidden
+                >
+                  <span className="sidebar__chevron-icon">›</span>
+                </span>
+              </button>
+            ) : (
+              <span
+                className="sidebar__section-chevron-placeholder"
+                aria-hidden
+              />
+            )}
             <button
               type="button"
               className={
@@ -5933,7 +6017,10 @@ export default function App() {
               </button>
             ) : null}
           </div>
-          {!sidebarSectionCollapsed.files ? (
+          {!(
+            filesSectionHasChildCollections &&
+            sidebarSectionCollapsed.files
+          ) ? (
             <div
               className="sidebar__file-subtypes"
               role="list"
@@ -6004,32 +6091,42 @@ export default function App() {
           <div
             className={
               "sidebar__topic-section" +
-              (!sidebarSectionCollapsed.topic
+              (!(
+                topicSectionHasChildCollections &&
+                sidebarSectionCollapsed.topic
+              )
                 ? " sidebar__topic-section--expanded"
                 : " sidebar__topic-section--collapsed")
             }
           >
             <div className="sidebar__section-row sidebar__section-row--collapsible sidebar__section-row--topic-head">
-              <button
-                type="button"
-                className="sidebar__section-hit sidebar__section-hit--chevron-only"
-                onClick={() => toggleSidebarSection("topic")}
-                aria-expanded={!sidebarSectionCollapsed.topic}
-                aria-label={sidebarSectionToggleAria(
-                  "topic",
-                  c.sidebarTopicSection
-                )}
-              >
-                <span
-                  className={
-                    "sidebar__chevron" +
-                    (!sidebarSectionCollapsed.topic ? " is-expanded" : "")
-                  }
-                  aria-hidden
+              {topicSectionHasChildCollections ? (
+                <button
+                  type="button"
+                  className="sidebar__section-hit sidebar__section-hit--chevron-only"
+                  onClick={() => toggleSidebarSection("topic")}
+                  aria-expanded={!sidebarSectionCollapsed.topic}
+                  aria-label={sidebarSectionToggleAria(
+                    "topic",
+                    c.sidebarTopicSection
+                  )}
                 >
-                  <span className="sidebar__chevron-icon">›</span>
-                </span>
-              </button>
+                  <span
+                    className={
+                      "sidebar__chevron" +
+                      (!sidebarSectionCollapsed.topic ? " is-expanded" : "")
+                    }
+                    aria-hidden
+                  >
+                    <span className="sidebar__chevron-icon">›</span>
+                  </span>
+                </button>
+              ) : (
+                <span
+                  className="sidebar__section-chevron-placeholder"
+                  aria-hidden
+                />
+              )}
               <button
                 type="button"
                 className={
@@ -6060,7 +6157,10 @@ export default function App() {
                 </span>
               </button>
             </div>
-            {!sidebarSectionCollapsed.topic ? (
+            {!(
+              topicSectionHasChildCollections &&
+              sidebarSectionCollapsed.topic
+            ) ? (
               <div
                 className="sidebar__file-subtypes"
                 role="list"
@@ -6138,32 +6238,42 @@ export default function App() {
           <div
             className={
               "sidebar__clip-section" +
-              (!sidebarSectionCollapsed.clip
+              (!(
+                clipSectionHasChildCollections &&
+                sidebarSectionCollapsed.clip
+              )
                 ? " sidebar__clip-section--expanded"
                 : " sidebar__clip-section--collapsed")
             }
           >
             <div className="sidebar__section-row sidebar__section-row--collapsible sidebar__section-row--clip-head">
-              <button
-                type="button"
-                className="sidebar__section-hit sidebar__section-hit--chevron-only"
-                onClick={() => toggleSidebarSection("clip")}
-                aria-expanded={!sidebarSectionCollapsed.clip}
-                aria-label={sidebarSectionToggleAria(
-                  "clip",
-                  c.sidebarClipSection
-                )}
-              >
-                <span
-                  className={
-                    "sidebar__chevron" +
-                    (!sidebarSectionCollapsed.clip ? " is-expanded" : "")
-                  }
-                  aria-hidden
+              {clipSectionHasChildCollections ? (
+                <button
+                  type="button"
+                  className="sidebar__section-hit sidebar__section-hit--chevron-only"
+                  onClick={() => toggleSidebarSection("clip")}
+                  aria-expanded={!sidebarSectionCollapsed.clip}
+                  aria-label={sidebarSectionToggleAria(
+                    "clip",
+                    c.sidebarClipSection
+                  )}
                 >
-                  <span className="sidebar__chevron-icon">›</span>
-                </span>
-              </button>
+                  <span
+                    className={
+                      "sidebar__chevron" +
+                      (!sidebarSectionCollapsed.clip ? " is-expanded" : "")
+                    }
+                    aria-hidden
+                  >
+                    <span className="sidebar__chevron-icon">›</span>
+                  </span>
+                </button>
+              ) : (
+                <span
+                  className="sidebar__section-chevron-placeholder"
+                  aria-hidden
+                />
+              )}
               <button
                 type="button"
                 className={
@@ -6194,7 +6304,10 @@ export default function App() {
                 </span>
               </button>
             </div>
-            {!sidebarSectionCollapsed.clip ? (
+            {!(
+              clipSectionHasChildCollections &&
+              sidebarSectionCollapsed.clip
+            ) ? (
               <div
                 className="sidebar__file-subtypes"
                 role="list"

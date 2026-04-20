@@ -326,7 +326,9 @@ export async function updateCardApi(
 }
 
 /** 再跑一遍自动建卡规则（人物 / 网页等）；成功后可拉合集树刷新卡片 */
-export async function postCardAutoLinkApi(cardId: string): Promise<boolean> {
+export async function postCardAutoLinkApi(
+  cardId: string
+): Promise<{ ok: boolean; error?: string }> {
   const base = apiBase();
   try {
     const r = await fetch(
@@ -337,9 +339,20 @@ export async function postCardAutoLinkApi(cardId: string): Promise<boolean> {
         body: "{}",
       })
     );
-    return r.ok;
-  } catch {
-    return false;
+    if (!r.ok) {
+      let detail = `${r.status}`;
+      try {
+        const j = (await r.json()) as { error?: unknown };
+        if (typeof j?.error === "string" && j.error.trim()) detail = j.error.trim();
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: detail };
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg || "network" };
   }
 }
 

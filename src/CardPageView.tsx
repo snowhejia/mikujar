@@ -1064,6 +1064,9 @@ export function CardPageView({
   const [tocPanelOpen, setTocPanelOpen] = useState(true);
   const [tocActiveIndex, setTocActiveIndex] = useState(0);
   const [rerunAutoLinkBusy, setRerunAutoLinkBusy] = useState(false);
+  const [rerunAutoLinkMessage, setRerunAutoLinkMessage] = useState<
+    string | null
+  >(null);
 
   const PROPS_WIDTH_KEY = "mikujar-card-page-props-width";
   const [propsWidth, setPropsWidth] = useState(() => {
@@ -1608,10 +1611,18 @@ export function CardPageView({
 
   async function handleRerunAutoLink() {
     if (!onAfterRemoteAutoLink || rerunAutoLinkBusy) return;
+    setRerunAutoLinkMessage(null);
     setRerunAutoLinkBusy(true);
     try {
-      const ok = await postCardAutoLinkApi(card.id);
-      if (ok) await onAfterRemoteAutoLink();
+      const res = await postCardAutoLinkApi(card.id);
+      if (res.ok) {
+        await onAfterRemoteAutoLink();
+        setRerunAutoLinkMessage(ui.cardPageRerunAutoLinkOk);
+      } else {
+        setRerunAutoLinkMessage(
+          ui.cardPageRerunAutoLinkFail(res.error ?? "—")
+        );
+      }
     } finally {
       setRerunAutoLinkBusy(false);
     }
@@ -2029,6 +2040,14 @@ export function CardPageView({
                   ? ui.cardPageRerunAutoLinkBusy
                   : ui.cardPageRerunAutoLink}
               </button>
+              {rerunAutoLinkMessage ? (
+                <p
+                  className="card-page__rerun-auto-link-msg"
+                  role="status"
+                >
+                  {rerunAutoLinkMessage}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}

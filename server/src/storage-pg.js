@@ -2338,6 +2338,20 @@ export async function getPresetCollectionId(userId, presetTypeId) {
  * @param {{ colId: string, cardId: string }} ref
  * @param {Map<string, object>} mergedFieldMap
  */
+function customPropsArrayFromDbCell(raw) {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const p = JSON.parse(raw);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 async function mergeCardLinkCustomPropWithClient(
   client,
   userId,
@@ -2353,9 +2367,7 @@ async function mergeCardLinkCustomPropWithClient(
     [sourceCardId, ...ownParams]
   );
   if (res.rowCount === 0) return;
-  const props = Array.isArray(res.rows[0].custom_props)
-    ? res.rows[0].custom_props
-    : [];
+  const props = customPropsArrayFromDbCell(res.rows[0].custom_props);
   const fieldMeta = mergedFieldMap.get(fieldId);
   const name = fieldMeta?.name ?? fieldId;
   const idx = props.findIndex((p) => p && p.id === fieldId);
@@ -2370,9 +2382,11 @@ async function mergeCardLinkCustomPropWithClient(
   } else {
     nextProps = [...props, { id: fieldId, name, type: "cardLink", value: nextVal }];
   }
+  /** $1=id，$2=jsonb；归属条件须从 $3 起，避免与 $2 冲突 */
+  const { sql: ownUpSql, params: ownUpParams } = cardOwnershipCondition(userId, 3);
   await client.query(
-    `UPDATE cards SET custom_props = $2::jsonb WHERE id = $1 AND (${ownSql}) AND trashed_at IS NULL`,
-    [sourceCardId, JSON.stringify(nextProps), ...ownParams]
+    `UPDATE cards SET custom_props = $2::jsonb WHERE id = $1 AND (${ownUpSql}) AND trashed_at IS NULL`,
+    [sourceCardId, JSON.stringify(nextProps), ...ownUpParams]
   );
 }
 
@@ -2592,7 +2606,10 @@ export async function runAutoLinkRulesForCard(userId, cardId) {
     );
     if (cardRes.rowCount === 0) return;
     const uid = cardRes.rows[0].user_id;
-    const cardRow = cardRes.rows[0];
+    const cardRow = {
+      ...cardRes.rows[0],
+      custom_props: customPropsArrayFromDbCell(cardRes.rows[0].custom_props),
+    };
 
     // 2. 找到卡片所在的所有合集
     const placementsRes = await query(

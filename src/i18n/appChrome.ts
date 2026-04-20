@@ -129,6 +129,8 @@ export type AppChrome = {
   cardPageRerunAutoLink: string;
   cardPageRerunAutoLinkBusy: string;
   cardPageRerunAutoLinkTitle: string;
+  cardPageRerunAutoLinkOk: string;
+  cardPageRerunAutoLinkFail: (detail: string) => string;
   /** 笔记探索白板卡片左侧灰条：拖动拉线建立关联 */
   connectionsLinkRailAria: string;
   /** 笔记探索 · 问 AI 侧栏 */
@@ -443,6 +445,8 @@ const zh: AppChrome = {
   cardPageRerunAutoLinkBusy: "正在处理…",
   cardPageRerunAutoLinkTitle:
     "按当前合集上的自动建卡规则，补建缺失的关联卡（如人物、网页）并写回关联属性",
+  cardPageRerunAutoLinkOk: "已执行自动建卡并刷新本页数据。",
+  cardPageRerunAutoLinkFail: (detail) => `未能完成：${detail}`,
   connectionsLinkRailAria: "从此处拖动连线到另一张笔记",
   cardAskAiTitle: "问 AI",
   cardAskAiToolbar: "问 AI",
@@ -758,6 +762,8 @@ const en: AppChrome = {
   cardPageRerunAutoLinkBusy: "Working…",
   cardPageRerunAutoLinkTitle:
     "Re-run preset auto-link rules to create missing linked cards (e.g. person, web) and update link fields",
+  cardPageRerunAutoLinkOk: "Auto-link finished; data refreshed.",
+  cardPageRerunAutoLinkFail: (detail) => `Couldn’t complete: ${detail}`,
   connectionsLinkRailAria: "Drag a line from here to another note",
   cardAskAiTitle: "Ask AI",
   cardAskAiToolbar: "Ask AI",

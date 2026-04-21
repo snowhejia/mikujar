@@ -25,9 +25,9 @@ export const NOTE_SETTINGS_POST_MIGRATE_HINTS: NoteSettingsPostMigrateHint[] = [
     titleZh: "跑完数据库脚本后，在设置里点哪里",
     titleEn: "After DB scripts: where to tap in Settings",
     bodyZh:
-      "左侧点「对象类型」：若发版后内置类型（如人物）多了新属性，先点「从目录更新 schema」写回合集定义，再视需要滚到最下方做数据迁移（相关笔记 JSON、文件卡标题、剪藏迁入、附件→文件卡等）。不要为刷新字段去关开「已启用」预设。",
+      "左侧点「对象类型」：若发版后内置类型（如人物）多了新属性，先点「从目录更新 schema」写回合集定义，再视需要滚到最下方做数据迁移（相关笔记 JSON、文件卡标题、剪藏迁入、附件→文件卡等）。不要为刷新字段去关开「已启用」模板。",
     bodyEn:
-      "Open Object types: after a release, use “Update schema from catalog” to refresh built-in type fields, then scroll down for data migrations if needed. Do not toggle presets off/on just to refresh fields.",
+      "Open Object types: after a release, use “Update schema from catalog” to refresh built-in type fields, then scroll down for data migrations if needed. Do not toggle templates off/on just to refresh fields.",
     focusPanel: "objectTypes",
   },
 ];

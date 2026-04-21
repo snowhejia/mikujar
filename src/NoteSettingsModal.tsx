@@ -230,15 +230,15 @@ function summarizeCustomAutoLinkRule(
   if (rule.sourceObjectKind)
     parts.push(lang === "en" ? `kind ${rule.sourceObjectKind}` : `形态 ${rule.sourceObjectKind}`);
   if (rule.sourcePresetTypeId)
-    parts.push(lang === "en" ? `preset ${rule.sourcePresetTypeId}` : `预设 ${rule.sourcePresetTypeId}`);
+    parts.push(lang === "en" ? `template ${rule.sourcePresetTypeId}` : `模板 ${rule.sourcePresetTypeId}`);
   const cond = parts.length ? parts.join(lang === "en" ? "; " : "，") : "—";
   const tgt = rule.targetObjectKind ?? "?";
   const place =
     rule.targetCollectionId ??
     (rule.targetPresetTypeId
       ? lang === "en"
-        ? `preset:${rule.targetPresetTypeId}`
-        : `预设:${rule.targetPresetTypeId}`
+        ? `template:${rule.targetPresetTypeId}`
+        : `模板:${rule.targetPresetTypeId}`
       : "?");
   const lt = rule.linkType ?? "related";
   return lang === "en"

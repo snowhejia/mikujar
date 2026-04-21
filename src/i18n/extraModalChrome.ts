@@ -92,7 +92,7 @@ export type ExtraModalChrome = {
   noteSettingsSidebarDotsHide: string;
   noteSettingsSidebarDotsAria: string;
   noteSettingsStorageAria: string;
-  /** 保存笔记时按预设自动创建关联卡片的规则 */
+  /** 保存笔记时按模板自动创建关联卡片的规则 */
   noteSettingsAutoLinkTitle: string;
   noteSettingsAutoLinkLead: string;
   noteSettingsAutoLinkLocalHint: string;
@@ -148,11 +148,11 @@ export type ExtraModalChrome = {
   noteSettingsImportSourceYuque: string;
   /** 大页面左侧：通用设置 */
   noteSettingsNavGeneral: string;
-  /** 大页面左侧：对象类型预设 */
+  /** 大页面左侧：对象类型模板 */
   noteSettingsNavObjectTypes: string;
   noteSettingsObjectTypesTitle: string;
   noteSettingsObjectTypesLead: string;
-  /** 对象类型：一键启用目录内全部预设（云端） */
+  /** 对象类型：一键启用目录内全部模板（云端） */
   noteSettingsEnableAllPresets: string;
   noteSettingsEnableAllPresetsBusy: string;
   /** 将当前代码目录中的字段定义写回已启用的内置类型合集（不删合集、不动卡片归属） */
@@ -169,7 +169,7 @@ export type ExtraModalChrome = {
   noteSettingsMigrateRelatedRefsBtn: string;
   noteSettingsMigrateRelatedRefsBusy: string;
   noteSettingsMigrateRelatedRefsResult: (withJson: number, migrated: number) => string;
-  /** 扩展写入的「小红书」「bilibili」标签笔记 → 剪藏预设卡 */
+  /** 扩展写入的「小红书」「bilibili」标签笔记 → 剪藏模板卡 */
   noteSettingsMigrateClipTaggedTitle: string;
   noteSettingsMigrateClipTaggedDesc: string;
   noteSettingsMigrateClipTaggedBtn: string;
@@ -348,7 +348,7 @@ const zh: ExtraModalChrome = {
   noteSettingsStorageAria: "数据存储位置",
   noteSettingsAutoLinkTitle: "自动建卡规则",
   noteSettingsAutoLinkLead:
-    "保存卡片时，可按已启用类型的预设自动创建关联对象（例如剪藏卡关联人物卡与链接对象）。你可单独关闭某条规则；未在列表中的规则来自合集 schema，仍随类型预设生效。",
+    "保存卡片时，可按已启用类型的模板自动创建关联对象（例如剪藏卡关联人物卡与链接对象）。你可单独关闭某条规则；未在列表中的规则来自合集 schema，仍随类型模板生效。",
   noteSettingsAutoLinkLocalHint:
     "当前为仅本地数据时，偏好会保存在本浏览器；改用云端后会在保存笔记时由服务器执行相应规则。",
   noteSettingsAutoLinkRuleAria: "自动建卡规则",
@@ -356,29 +356,29 @@ const zh: ExtraModalChrome = {
   noteSettingsNavAutoLink: "自动建卡",
   noteSettingsAutoLinkPanelTitle: "自动建卡",
   noteSettingsAutoLinkPanelLead:
-    "保存到云端时，可按下面「自定义规则」自动新建一张关联卡并互链。预设模板自带的规则可在上方单独关闭。",
-  noteSettingsAutoLinkSectionBuiltin: "预设模板中的规则",
+    "保存到云端时，可按下面「自定义规则」自动新建一张关联卡并互链。模板自带的规则可在上方单独关闭。",
+  noteSettingsAutoLinkSectionBuiltin: "模板中的规则",
   noteSettingsAutoLinkCreatorTargetTitle: "剪藏作者建卡目标合集",
   noteSettingsAutoLinkCreatorTargetXhs: "小红书作者（creator）",
   noteSettingsAutoLinkCreatorTargetBili: "B 站 UP 主（creator）",
-  noteSettingsAutoLinkCreatorTargetDefault: "默认（人物预设合集）",
+  noteSettingsAutoLinkCreatorTargetDefault: "默认（人物模板合集）",
   noteSettingsAutoLinkSectionCustom: "自定义规则",
   noteSettingsAutoLinkSourceKind: "当源卡形态为",
-  noteSettingsAutoLinkSourcePreset: "且归属预设（可选）",
+  noteSettingsAutoLinkSourcePreset: "且归属模板（可选）",
   noteSettingsAutoLinkAnyPreset: "不限",
   noteSettingsAutoLinkTargetKind: "则新建对象形态",
-  noteSettingsAutoLinkTargetPreset: "放入预设类型（按名称解析合集）",
+  noteSettingsAutoLinkTargetPreset: "放入模板类型（按名称解析合集）",
   noteSettingsAutoLinkTargetCollection: "或指定合集",
   noteSettingsAutoLinkLinkType: "连接类型",
   noteSettingsAutoLinkAdd: "添加规则",
   noteSettingsAutoLinkDelete: "删除",
-  noteSettingsAutoLinkErrSource: "请至少选择源卡形态或归属预设之一。",
-  noteSettingsAutoLinkErrTarget: "请选择新建卡的形态，并选择预设类型或指定合集之一。",
+  noteSettingsAutoLinkErrSource: "请至少选择源卡形态或归属模板之一。",
+  noteSettingsAutoLinkErrTarget: "请选择新建卡的形态，并选择模板类型或指定合集之一。",
   noteSettingsAutoLinkCollectionsHint: "启用云端并加载合集树后，可选择具体合集。",
   noteSettingsAutoLinkSyncField: "写入源卡属性（可选）",
   noteSettingsAutoLinkSyncFieldNone: "不写入",
-  noteSettingsAutoLinkSyncFieldEmpty: "请先选择源卡形态或归属预设，以加载该类型的属性列表。",
-  noteSettingsAutoLinkSyncFieldNoCardLink: "该类型预设中暂无「关联卡片」类属性，无法写回源卡字段。",
+  noteSettingsAutoLinkSyncFieldEmpty: "请先选择源卡形态或归属模板，以加载该类型的属性列表。",
+  noteSettingsAutoLinkSyncFieldNoCardLink: "该类型模板中暂无「关联卡片」类属性，无法写回源卡字段。",
   noteSettingsAutoLinkFourStepsHint:
     "按顺序选四项即可：源合集 → 该合集上要关联的属性 → 目标合集 → 目标合集上的属性（仅列出类型里的「关联卡片」字段）。保存源笔记时，若没有对应关联卡会自动在目标合集建卡并双向写入这两个属性。",
   noteSettingsAutoLinkStep1: "① 源合集（笔记当前所在的文件夹）",
@@ -400,8 +400,8 @@ const zh: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "对象类型",
   noteSettingsObjectTypesTitle: "对象类型",
   noteSettingsObjectTypesLead:
-    "以下为内置对象类型目录（笔记、文件、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；自动关联可为内容补建人物卡与网页剪藏卡。未启用的预设不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
-  noteSettingsEnableAllPresets: "启用全部预设类型",
+    "以下为内置对象类型目录（笔记、文件、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；自动关联可为内容补建人物卡与网页剪藏卡。未启用的模板不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
+  noteSettingsEnableAllPresets: "启用全部模板类型",
   noteSettingsEnableAllPresetsBusy: "正在启用…",
   noteSettingsSyncBuiltinSchemaTitle: "同步内置类型的属性定义",
   noteSettingsSyncBuiltinSchemaDesc:
@@ -420,7 +420,7 @@ const zh: ExtraModalChrome = {
     `扫描 ${withJson} 张含 JSON 的卡片，完成 ${migrated} 张迁移。`,
   noteSettingsMigrateClipTaggedTitle: "剪藏标签笔记迁入对象类型",
   noteSettingsMigrateClipTaggedDesc:
-    "将带「小红书」或「bilibili」标签的笔记（多为浏览器扩展保存）转为剪藏下的对应卡片：写入链接/作者等预设字段、去掉来源标签，并加入「小红书」「B 站」预设合集。需先在上方启用剪藏及对应子类型；其它合集内的归属会保留，仅从「未归类」移除。",
+    "将带「小红书」或「bilibili」标签的笔记（多为浏览器扩展保存）转为剪藏下的对应卡片：写入链接/作者等模板字段、去掉来源标签，并加入「小红书」「B 站」模板合集。需先在上方启用剪藏及对应子类型；其它合集内的归属会保留，仅从「未归类」移除。",
   noteSettingsMigrateClipTaggedBtn: "执行迁入",
   noteSettingsMigrateClipTaggedBusy: "迁入中…",
   noteSettingsMigrateClipTaggedResult: (
@@ -431,7 +431,7 @@ const zh: ExtraModalChrome = {
     errors,
     backfillTitles
   ) =>
-    `扫描 ${scanned} 张，已迁入 ${migrated} 张；未启用对应预设 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
+    `扫描 ${scanned} 张，已迁入 ${migrated} 张；未启用对应模板 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
     (backfillTitles > 0 ? ` 已从正文补全剪藏「标题」${backfillTitles} 张。` : ""),
   noteSettingsMigrateFileTitlesTitle: "文件卡标题迁移",
   noteSettingsMigrateFileTitlesDesc:
@@ -604,7 +604,7 @@ const en: ExtraModalChrome = {
   noteSettingsStorageAria: "Data storage",
   noteSettingsAutoLinkTitle: "Auto-create linked cards",
   noteSettingsAutoLinkLead:
-    "When you save a card, preset rules can silently create linked object cards (for example Clips → person + URL object). Turn off individual rules here. Rules not listed still come from collection schemas for enabled types.",
+    "When you save a card, template rules can silently create linked object cards (for example Clips → person + URL object). Turn off individual rules here. Rules not listed still come from collection schemas for enabled types.",
   noteSettingsAutoLinkLocalHint:
     "With local-only data, choices are stored in this browser; after switching to cloud, the server applies them when notes are saved.",
   noteSettingsAutoLinkRuleAria: "Auto-link rule",
@@ -612,31 +612,31 @@ const en: ExtraModalChrome = {
   noteSettingsNavAutoLink: "Auto-link",
   noteSettingsAutoLinkPanelTitle: "Auto-create linked cards",
   noteSettingsAutoLinkPanelLead:
-    "When a note is saved to the cloud, custom rules below can auto-create a linked card. Turn off built-in preset rules in the section above if needed.",
-  noteSettingsAutoLinkSectionBuiltin: "Rules from presets",
+    "When a note is saved to the cloud, custom rules below can auto-create a linked card. Turn off built-in template rules in the section above if needed.",
+  noteSettingsAutoLinkSectionBuiltin: "Rules from templates",
   noteSettingsAutoLinkCreatorTargetTitle: "Clip creator target collection",
   noteSettingsAutoLinkCreatorTargetXhs: "Xiaohongshu creator",
   noteSettingsAutoLinkCreatorTargetBili: "Bilibili uploader",
-  noteSettingsAutoLinkCreatorTargetDefault: "Default (Person preset collection)",
+  noteSettingsAutoLinkCreatorTargetDefault: "Default (Person template collection)",
   noteSettingsAutoLinkSectionCustom: "Custom rules",
   noteSettingsAutoLinkSourceKind: "When source card kind is",
-  noteSettingsAutoLinkSourcePreset: "and under preset (optional)",
+  noteSettingsAutoLinkSourcePreset: "and under template (optional)",
   noteSettingsAutoLinkAnyPreset: "Any",
   noteSettingsAutoLinkTargetKind: "create linked card of kind",
-  noteSettingsAutoLinkTargetPreset: "in preset type (resolve collection)",
+  noteSettingsAutoLinkTargetPreset: "in template type (resolve collection)",
   noteSettingsAutoLinkTargetCollection: "or specific collection",
   noteSettingsAutoLinkLinkType: "Link type",
   noteSettingsAutoLinkAdd: "Add rule",
   noteSettingsAutoLinkDelete: "Remove",
-  noteSettingsAutoLinkErrSource: "Pick at least a source card kind or a source preset.",
-  noteSettingsAutoLinkErrTarget: "Pick the new card kind and either a preset type or a collection.",
+  noteSettingsAutoLinkErrSource: "Pick at least a source card kind or a source template.",
+  noteSettingsAutoLinkErrTarget: "Pick the new card kind and either a template type or a collection.",
   noteSettingsAutoLinkCollectionsHint: "Load the collection tree (cloud) to pick a folder.",
   noteSettingsAutoLinkSyncField: "Write back to source field (optional)",
   noteSettingsAutoLinkSyncFieldNone: "Don’t write",
   noteSettingsAutoLinkSyncFieldEmpty:
-    "Choose a source card kind or preset first to load cardLink fields for that type.",
+    "Choose a source card kind or template first to load cardLink fields for that type.",
   noteSettingsAutoLinkSyncFieldNoCardLink:
-    "This preset type has no cardLink fields in its schema.",
+    "This template type has no cardLink fields in its schema.",
   noteSettingsAutoLinkFourStepsHint:
     "Pick four things in order: source collection → a cardLink field on that type → target collection → a cardLink field there. When you save the source card, a missing link creates a new card in the target folder and fills both fields.",
   noteSettingsAutoLinkStep1: "① Source collection (folder the note is in)",
@@ -658,12 +658,12 @@ const en: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "Object types",
   noteSettingsObjectTypesTitle: "Object types",
   noteSettingsObjectTypesLead:
-    "Below is the built-in catalog of object types (notes, files, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; auto-link can add person cards and bookmark clip cards when needed. Disabled presets stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
-  noteSettingsEnableAllPresets: "Enable all preset types",
+    "Below is the built-in catalog of object types (notes, files, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; auto-link can add person cards and bookmark clip cards when needed. Disabled templates stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
+  noteSettingsEnableAllPresets: "Enable all template types",
   noteSettingsEnableAllPresetsBusy: "Enabling…",
   noteSettingsSyncBuiltinSchemaTitle: "Sync built-in type fields",
   noteSettingsSyncBuiltinSchemaDesc:
-    "Rewrite each enabled built-in preset collection’s card schema from the app catalog (person, clip, file subtypes, etc.). Does not delete collections or move cards; only updates which properties those types have. Custom types are skipped.",
+    "Rewrite each enabled built-in template collection’s card schema from the app catalog (person, clip, file subtypes, etc.). Does not delete collections or move cards; only updates which properties those types have. Custom types are skipped.",
   noteSettingsSyncBuiltinSchemaBtn: "Update schema from catalog",
   noteSettingsSyncBuiltinSchemaBusy: "Updating…",
   noteSettingsSyncBuiltinSchemaResult: (updated, failed) =>
@@ -678,7 +678,7 @@ const en: ExtraModalChrome = {
     `Scanned ${withJson} card(s) with JSON; migrated ${migrated}.`,
   noteSettingsMigrateClipTaggedTitle: "Move clip-tagged notes into Clips",
   noteSettingsMigrateClipTaggedDesc:
-    "Turn notes tagged 小红书 or bilibili (usually saved by the browser extension) into Clip preset cards: preset URL/author fields, remove those tags, and add them to the Xiaohongshu / Bilibili preset collections. Enable Clips and the matching subtypes first. Placements in other folders are kept; only the inbox placement is removed when present.",
+    "Turn notes tagged 小红书 or bilibili (usually saved by the browser extension) into Clip template cards: preset URL/author fields, remove those tags, and add them to the Xiaohongshu / Bilibili template collections. Enable Clips and the matching subtypes first. Placements in other folders are kept; only the inbox placement is removed when present.",
   noteSettingsMigrateClipTaggedBtn: "Run migration",
   noteSettingsMigrateClipTaggedBusy: "Migrating…",
   noteSettingsMigrateClipTaggedResult: (
@@ -689,7 +689,7 @@ const en: ExtraModalChrome = {
     errors,
     backfillTitles
   ) =>
-    `Scanned ${scanned}; migrated ${migrated}. Skipped (preset off): ${skippedNoPreset}. Skipped (tags): ${skippedNoKind}. Errors: ${errors}.` +
+    `Scanned ${scanned}; migrated ${migrated}. Skipped (template off): ${skippedNoPreset}. Skipped (tags): ${skippedNoKind}. Errors: ${errors}.` +
     (backfillTitles > 0
       ? ` Filled missing Clip title from body for ${backfillTitles} card(s).`
       : ""),

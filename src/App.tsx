@@ -3227,16 +3227,30 @@ export default function App() {
 
   const deleteCard = useCallback(
     async (colId: string, cardId: string) => {
-      const col = findCollectionById(collections, colId);
-      const card = col?.cards.find((c) => c.id === cardId);
+      /** 父级 preset 视图会聚合整棵子树的卡，colId 此时是 root；
+       *  卡本身并不直接挂在 root.cards 上，需要在全树里定位其真实 placement。 */
+      let resolvedColId = colId;
+      let resolvedCol = findCollectionById(collections, colId);
+      let card = resolvedCol?.cards.find((c) => c.id === cardId);
+      if (!card) {
+        walkCollections(collections, (col) => {
+          if (card) return;
+          const hit = col.cards.find((c) => c.id === cardId);
+          if (hit) {
+            card = hit;
+            resolvedCol = col;
+            resolvedColId = col.id;
+          }
+        });
+      }
       if (card && canEdit) {
         const entry: TrashedNoteEntry = {
           trashId:
             dataMode === "local"
               ? `t-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
               : card.id,
-          colId,
-          colPathLabel: collectionPathLabel(collections, colId),
+          colId: resolvedColId,
+          colPathLabel: collectionPathLabel(collections, resolvedColId),
           card: structuredClone(card) as NoteCard,
           deletedAt: new Date().toISOString(),
         };

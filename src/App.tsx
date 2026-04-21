@@ -6471,16 +6471,18 @@ export default function App() {
         {renderPresetCatalogSidebarSection("account")}
 
         {(() => {
-          /** 递归找名称为「已归档」的第一个合集（任一层级）；命中才显示入口 */
+          /** 递归找名称为「已归档」的第一个合集（任一层级）；找不到入口仍渲染，只是禁用 */
           const archivedColRef: { value: Collection | null } = { value: null };
           walkCollections(collections, (col) => {
             if (archivedColRef.value) return;
             if (col.name === "已归档") archivedColRef.value = col;
           });
           const archivedCol = archivedColRef.value;
-          if (!archivedCol) return null;
-          const archivedCount = countCollectionSubtreeCards(archivedCol);
+          const archivedCount = archivedCol
+            ? countCollectionSubtreeCards(archivedCol)
+            : 0;
           const archivedActive =
+            !!archivedCol &&
             !trashViewActive &&
             !searchActive &&
             !remindersViewActive &&
@@ -6490,97 +6492,115 @@ export default function App() {
             !connectionsViewActive &&
             activeId === archivedCol.id;
           return (
-            <div className="sidebar__trash" aria-label={c.archivedAria}>
-              <button
-                type="button"
-                className={
-                  "sidebar__trash-hit" +
-                  (archivedActive ? " is-active" : "")
-                }
-                onClick={() => {
-                  closeCardFullPage();
-                  setTrashViewActive(false);
-                  setRemindersViewActive(false);
-                  setSearchQuery("");
-                  setSearchBarOpen(false);
-                  setCalendarDay(null);
-                  setAllNotesViewActive(false);
-                  setAttachmentsViewActive(false);
-                  setConnectionsViewActive(false);
-                  setActiveId(archivedCol.id);
-                  expandAncestorsOf(archivedCol.id);
-                  setMobileNavOpen(false);
-                }}
+            <div className="sidebar__tail-row">
+              <div
+                className="sidebar__trash sidebar__tail-row-item"
+                aria-label={c.archivedAria}
               >
-                <svg
-                  className="sidebar__trash-icon"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
+                <button
+                  type="button"
+                  className={
+                    "sidebar__trash-hit" +
+                    (archivedActive ? " is-active" : "") +
+                    (archivedCol ? "" : " is-disabled")
+                  }
+                  disabled={!archivedCol}
+                  title={
+                    archivedCol
+                      ? undefined
+                      : "尚无命名为「已归档」的合集"
+                  }
+                  onClick={() => {
+                    if (!archivedCol) return;
+                    closeCardFullPage();
+                    setTrashViewActive(false);
+                    setRemindersViewActive(false);
+                    setSearchQuery("");
+                    setSearchBarOpen(false);
+                    setCalendarDay(null);
+                    setAllNotesViewActive(false);
+                    setAttachmentsViewActive(false);
+                    setConnectionsViewActive(false);
+                    setActiveId(archivedCol.id);
+                    expandAncestorsOf(archivedCol.id);
+                    setMobileNavOpen(false);
+                  }}
                 >
-                  <path d="M21 8v13H3V8" />
-                  <path d="M1 3h22v5H1z" />
-                  <path d="M10 12h4" />
-                </svg>
-                <span className="sidebar__trash-label">{c.titleArchived}</span>
-                {archivedCount > 0 ? (
-                  <span className="sidebar__trash-badge">
-                    {archivedCount > 99 ? "99+" : archivedCount}
+                  <svg
+                    className="sidebar__trash-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M21 8v13H3V8" />
+                    <path d="M1 3h22v5H1z" />
+                    <path d="M10 12h4" />
+                  </svg>
+                  <span className="sidebar__trash-label">
+                    {c.titleArchived}
                   </span>
-                ) : null}
-              </button>
+                  {archivedCount > 0 ? (
+                    <span className="sidebar__trash-badge">
+                      {archivedCount > 99 ? "99+" : archivedCount}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+
+              <div
+                className="sidebar__trash sidebar__tail-row-item"
+                aria-label={c.trashAria}
+              >
+                <button
+                  type="button"
+                  className={
+                    "sidebar__trash-hit" +
+                    (trashViewActive && !searchActive ? " is-active" : "")
+                  }
+                  onClick={() => {
+                    closeCardFullPage();
+                    setTrashViewActive(true);
+                    setRemindersViewActive(false);
+                    setSearchQuery("");
+                    setSearchBarOpen(false);
+                    setCalendarDay(null);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  <svg
+                    className="sidebar__trash-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  <span className="sidebar__trash-label">{c.titleTrash}</span>
+                  {trashEntries.length > 0 ? (
+                    <span className="sidebar__trash-badge">
+                      {trashEntries.length > 99 ? "99+" : trashEntries.length}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
             </div>
           );
         })()}
-
-        <div className="sidebar__trash" aria-label={c.trashAria}>
-          <button
-            type="button"
-            className={
-              "sidebar__trash-hit" +
-              (trashViewActive && !searchActive ? " is-active" : "")
-            }
-            onClick={() => {
-              closeCardFullPage();
-              setTrashViewActive(true);
-              setRemindersViewActive(false);
-              setSearchQuery("");
-              setSearchBarOpen(false);
-              setCalendarDay(null);
-              setMobileNavOpen(false);
-            }}
-          >
-            <svg
-              className="sidebar__trash-icon"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              <path d="M10 11v6M14 11v6" />
-            </svg>
-            <span className="sidebar__trash-label">{c.titleTrash}</span>
-            {trashEntries.length > 0 ? (
-              <span className="sidebar__trash-badge">
-                {trashEntries.length > 99 ? "99+" : trashEntries.length}
-              </span>
-            ) : null}
-          </button>
-        </div>
       </aside>
 
       <main

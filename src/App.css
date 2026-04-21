@@ -2474,6 +2474,51 @@
   /* 与上方「文件」区块的 border-bottom 二选一，避免双线 */
 }
 
+/* 侧栏底部「已归档 / 垃圾桶」一排左右分隔 */
+.sidebar__tail-row {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.sidebar__tail-row .sidebar__tail-row-item {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.sidebar__tail-row .sidebar__trash-hit {
+  /* 两个按钮同排时内容收紧，避免 label + 徽章挤不下 */
+  gap: 6px;
+  padding: 8px;
+  font-size: 0.78125rem;
+}
+
+.sidebar__tail-row .sidebar__trash-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__tail-row .sidebar__trash-hit.is-disabled,
+.sidebar__tail-row .sidebar__trash-hit:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.sidebar__tail-row .sidebar__trash-hit.is-disabled:hover,
+.sidebar__tail-row .sidebar__trash-hit:disabled:hover {
+  background: transparent;
+  color: rgba(55, 53, 47, 0.55);
+}
+
 .sidebar__trash-hit {
   display: flex;
   flex-direction: row;

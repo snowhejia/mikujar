@@ -24,6 +24,7 @@ import {
   LOOSE_NOTES_COLLECTION_ID,
 } from "./appkit/collectionModel";
 import { mergedTemplateSchemaFieldsForPlacements } from "./appkit/schemaTemplateFields";
+import { DatePropPopover } from "./appkit/DatePropPopover";
 import { formatByteSize } from "./noteStats";
 import { migrateCustomPropsList } from "./noteCardCustomProps";
 import type {
@@ -119,23 +120,6 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function toDateTimeLocalInputValue(raw: unknown): string {
-  const t = typeof raw === "string" ? raw.trim() : "";
-  if (!t) return "";
-  if (DATE_ONLY_RE.test(t)) return `${t}T00:00`;
-  const m = t.match(DATE_TIME_LOCAL_RE);
-  if (m) return `${m[1]}T${m[2]}`;
-  const ms = Date.parse(t);
-  if (!Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mi = pad2(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-}
-
 function formatDatePropDisplay(raw: unknown): string {
   const t = typeof raw === "string" ? raw.trim() : "";
   if (!t) return "";
@@ -151,20 +135,6 @@ function formatDatePropDisplay(raw: unknown): string {
   const hh = pad2(d.getHours());
   const mi = pad2(d.getMinutes());
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-function splitDateTimeLocalParts(raw: unknown): {
-  date: string;
-  time: string;
-  /** 源值是否带 T + HH:MM（true）还是仅 YYYY-MM-DD（false） */
-  hasTime: boolean;
-} {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  if (DATE_ONLY_RE.test(s)) return { date: s, time: "", hasTime: false };
-  const dt = toDateTimeLocalInputValue(raw);
-  if (!dt) return { date: "", time: "", hasTime: false };
-  const [date, time = ""] = dt.split("T");
-  return { date: date || "", time: time || "00:00", hasTime: Boolean(time) };
 }
 
 function hasDraggedFiles(dt: DataTransfer | null): boolean {
@@ -1016,48 +986,14 @@ function PropValueEditor({
   }
 
   if (prop.type === "date") {
-    const { date, time, hasTime } = splitDateTimeLocalParts(prop.value);
+    const strValue = typeof prop.value === "string" ? prop.value : "";
     return (
       <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-        <div
-          className={
-            "card-page__prop-datetime-inline" +
-            (date ? "" : " card-page__prop-datetime-inline--empty")
-          }
-        >
-          <input
-            type="date"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--date"
-            value={date}
-            onChange={(e) => {
-              const d = e.target.value;
-              if (!d) {
-                onChangeValue(null);
-                return;
-              }
-              /** 切换日期：保留原本是否带时间的语义；不带时间就只存 YYYY-MM-DD */
-              onChangeValue(hasTime ? `${d}T${time || "00:00"}` : d);
-            }}
-          />
-          {/* 时间入口始终可见；没选日期时禁用，选了但还没设时间时留空占位 */}
-          <input
-            type="time"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
-            value={hasTime ? time : ""}
-            disabled={!date}
-            aria-label="时间（可选）"
-            onChange={(e) => {
-              if (!date) return;
-              const t = e.target.value;
-              /** 用户清空时间输入 → 退回仅日期存储 */
-              if (!t) {
-                onChangeValue(date);
-                return;
-              }
-              onChangeValue(`${date}T${t}`);
-            }}
-          />
-        </div>
+        <DatePropPopover
+          value={strValue}
+          onChange={(next) => onChangeValue(next)}
+          className="card-page__prop-datetime-popover"
+        />
       </div>
     );
   }

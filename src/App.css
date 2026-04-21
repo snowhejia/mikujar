@@ -10975,6 +10975,22 @@ body.app--card-page-open .app {
   white-space: nowrap;
 }
 
+.card-page__header-delete {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.06);
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-page__header-delete:hover {
+  background: rgba(220, 38, 38, 0.12);
+}
+
 .card-page--compact .card-page__header-collections {
   display: none;
 }

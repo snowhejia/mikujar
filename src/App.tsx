@@ -7131,6 +7131,17 @@ export default function App() {
                     }
                   : undefined
               }
+              onDeleteCard={
+                canEdit
+                  ? () => {
+                      deleteCard(
+                        cardPageCardLive.colId,
+                        cardPageCardLive.card.id
+                      );
+                      setCardPageCard(null);
+                    }
+                  : undefined
+              }
             />
           </Suspense>
         ) : cardPageCard ? (

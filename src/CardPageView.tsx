@@ -657,6 +657,8 @@ export interface CardPageViewProps {
   onOpenLinkedCard?: (targetColId: string, targetCardId: string) => void;
   /** 云端：自动建卡请求成功后拉取合集树（刷新 custom_props / 关联） */
   onAfterRemoteAutoLink?: () => Promise<void>;
+  /** 全页删除当前卡片（移入回收站） */
+  onDeleteCard?: () => void;
 }
 
 function PropValueEditor({
@@ -1175,6 +1177,7 @@ export function CardPageView({
   onOpenFileCard,
   onOpenLinkedCard,
   onAfterRemoteAutoLink,
+  onDeleteCard,
 }: CardPageViewProps) {
   const { lang } = useAppUiLang();
   const ui = useAppChrome();
@@ -2662,6 +2665,15 @@ export function CardPageView({
           <span className="card-page__time">
             {formatCardTimeLabel(card, lang)}
           </span>
+          {canEdit && onDeleteCard ? (
+            <button
+              type="button"
+              className="card-page__header-delete"
+              onClick={onDeleteCard}
+            >
+              {ui.cardMenuDeleteCard}
+            </button>
+          ) : null}
         </div>
         {compactLayout ? (
           <nav

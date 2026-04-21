@@ -1274,12 +1274,7 @@ async function runSave(tabId, emit) {
   }
 
   for (let i = 0; i < imgs.length; i++) {
-    /**
-     * 后端当前按附件目标文件卡 created_at 倒序回传（新的在前）。
-     * 为让小红书多图最终展示顺序与原帖一致（1→N），这里对 XHS 反向上传：
-     * 先传最后一张，最后传第一张。B 站仍保持原顺序（封面优先）。
-     */
-    const sourceIdx = isBili ? i : imgs.length - 1 - i;
+    const sourceIdx = i;
     const url = imgs[sourceIdx];
     emitStepProgress(i, `图片 ${i + 1} / ${imgs.length}…`);
     try {

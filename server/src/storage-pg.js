@@ -354,7 +354,7 @@ async function loadMediaForCards(cardIds, q) {
   const out = new Map();
   if (!cardIds.length) return out;
 
-  // (a) note 引用的附件 —— 按文件卡 created_at 倒序（新的在前）
+  // (a) note 引用的附件 —— 以 attachment 链 sort_order 为准（与写入顺序一致）
   const r = await q(
     `SELECT l.from_card_id AS owner_id, l.sort_order AS link_sort,
             f.url, f.original_name, f.thumb_url, f.cover_url, f.cover_thumb_url, f.bytes,
@@ -366,7 +366,7 @@ async function loadMediaForCards(cardIds, q) {
        JOIN card_types ct ON ct.id = c.card_type_id
        JOIN card_files f ON f.card_id = c.id
       WHERE l.from_card_id = ANY($1) AND l.property_key = 'attachment'
-      ORDER BY l.from_card_id, c.created_at DESC, l.sort_order ASC`,
+      ORDER BY l.from_card_id, l.sort_order ASC, c.created_at DESC`,
     [cardIds]
   );
 

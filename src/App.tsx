@@ -453,18 +453,6 @@ function readInitialAttachmentsFilterKey(): AttachmentFilterKey {
   }
 }
 
-function groupCalendarRestByCol(
-  items: { col: Collection; card: NoteCard }[]
-): { col: Collection; cards: NoteCard[] }[] {
-  const out: { col: Collection; cards: NoteCard[] }[] = [];
-  for (const { col, card } of items) {
-    const last = out[out.length - 1];
-    if (last && last.col.id === col.id) last.cards.push(card);
-    else out.push({ col, cards: [card] });
-  }
-  return out;
-}
-
 function groupSearchHitsFromFlat(
   hits: { col: Collection; path: string; card: NoteCard }[]
 ): { col: Collection; path: string; cards: NoteCard[] }[] {
@@ -3085,15 +3073,7 @@ export default function App() {
     return out;
   }, [calendarRestByCol]);
 
-  const calendarRestByColDisplayed = useMemo(
-    () =>
-      groupCalendarRestByCol(
-        calendarRestFlat.slice(0, calendarRestFlatVisibleCount)
-      ),
-    [calendarRestFlat, calendarRestFlatVisibleCount]
-  );
-
-  /** 日历某日：非置顶笔记按合集分组展示，触底再挂载更多 */
+  /** 日历某日：非置顶笔记扁平列出，触底再挂载更多 */
   useEffect(() => {
     if (!calendarDay) {
       calendarDayRestSessionRef.current = null;
@@ -7563,23 +7543,15 @@ export default function App() {
                     aria-hidden
                   />
                 )}
-                {calendarRestByColDisplayed.map(({ col, cards: dayColCards }) => (
-                  <div
-                    key={col.id}
-                    className="timeline__cal-group"
-                  >
-                    <h2 className="timeline__cal-group-title">
-                      「{col.name}」
-                    </h2>
-                    <MasonryShortestColumns
-                      columnCount={timelineColumnCount}
-                    >
-                      {dayColCards.map((card) =>
+                {calendarRestFlat.length > 0 ? (
+                  <MasonryShortestColumns columnCount={timelineColumnCount}>
+                    {calendarRestFlat
+                      .slice(0, calendarRestFlatVisibleCount)
+                      .map(({ col, card }) =>
                         renderNoteTimelineCard(card, col.id)
                       )}
-                    </MasonryShortestColumns>
-                  </div>
-                ))}
+                  </MasonryShortestColumns>
+                ) : null}
                 {calendarRestFlatVisibleCount < calendarRestFlat.length ? (
                   <div
                     ref={calendarRestSentinelRef}

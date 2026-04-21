@@ -24,6 +24,7 @@ import {
   LOOSE_NOTES_COLLECTION_ID,
 } from "./appkit/collectionModel";
 import { mergedTemplateSchemaFieldsForPlacements } from "./appkit/schemaTemplateFields";
+import { DatePropPopover } from "./appkit/DatePropPopover";
 import { formatByteSize } from "./noteStats";
 import { migrateCustomPropsList } from "./noteCardCustomProps";
 import type {
@@ -119,23 +120,6 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function toDateTimeLocalInputValue(raw: unknown): string {
-  const t = typeof raw === "string" ? raw.trim() : "";
-  if (!t) return "";
-  if (DATE_ONLY_RE.test(t)) return `${t}T00:00`;
-  const m = t.match(DATE_TIME_LOCAL_RE);
-  if (m) return `${m[1]}T${m[2]}`;
-  const ms = Date.parse(t);
-  if (!Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mi = pad2(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-}
-
 function formatDatePropDisplay(raw: unknown): string {
   const t = typeof raw === "string" ? raw.trim() : "";
   if (!t) return "";
@@ -151,13 +135,6 @@ function formatDatePropDisplay(raw: unknown): string {
   const hh = pad2(d.getHours());
   const mi = pad2(d.getMinutes());
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-function splitDateTimeLocalParts(raw: unknown): { date: string; time: string } {
-  const dt = toDateTimeLocalInputValue(raw);
-  if (!dt) return { date: "", time: "00:00" };
-  const [date, time = "00:00"] = dt.split("T");
-  return { date: date || "", time: time || "00:00" };
 }
 
 function hasDraggedFiles(dt: DataTransfer | null): boolean {
@@ -331,18 +308,20 @@ function CardLinksValueEditor({
 
   return (
     <div className="card-page__tags-panel card-page__tags-panel--cardlinks">
-      <div className="card-page__prop-text-edit-row">
-        <input
-          type="text"
-          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-          placeholder="可先填写文字，再补充关联…"
-          defaultValue={seed}
-          onBlur={(e) => onChangeSeedTitle?.(e.target.value.trim() || null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-        />
-      </div>
+      {refs.length === 0 ? (
+        <div className="card-page__prop-text-edit-row">
+          <input
+            type="text"
+            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+            placeholder="可先填写文字，再补充关联…"
+            defaultValue={seed}
+            onBlur={(e) => onChangeSeedTitle?.(e.target.value.trim() || null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
+        </div>
+      ) : null}
       {refs.length > 0 ? (
         <div className="card-page__prop-cardlinks-list">
           {refs.map((ref) => (
@@ -837,7 +816,7 @@ function PropValueEditor({
 
   if (prop.type === "checkbox") {
     return (
-      <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+      <div className="card-page__tags-panel card-page__tags-panel--single-hit card-page__tags-panel--checkbox">
         <div className="card-page__prop-checkbox-cell">
           <input
             type="checkbox"
@@ -985,51 +964,36 @@ function PropValueEditor({
             </button>
           ) : null}
         </div>
-        <div className="card-page__prop-text-edit-row">
-          <input
-            type="text"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-            placeholder="可先填写文字，再补充关联…"
-            defaultValue={seed}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              onChangeSeedTitle?.(next || null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
-          />
-        </div>
+        {ref == null ? (
+          <div className="card-page__prop-text-edit-row">
+            <input
+              type="text"
+              className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+              placeholder="可先填写文字，再补充关联…"
+              defaultValue={seed}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                onChangeSeedTitle?.(next || null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
 
   if (prop.type === "date") {
-    const { date, time } = splitDateTimeLocalParts(prop.value);
+    const strValue = typeof prop.value === "string" ? prop.value : "";
     return (
       <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-        <div className="card-page__prop-datetime-inline">
-          <input
-            type="date"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--date"
-            value={date}
-            onChange={(e) => {
-              const d = e.target.value;
-              onChangeValue(d ? `${d}T${time || "00:00"}` : null);
-            }}
-          />
-          <input
-            type="time"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
-            value={time}
-            disabled={!date}
-            onChange={(e) => {
-              if (!date) return;
-              const t = e.target.value || "00:00";
-              onChangeValue(`${date}T${t}`);
-            }}
-          />
-        </div>
+        <DatePropPopover
+          value={strValue}
+          onChange={(next) => onChangeValue(next)}
+          className="card-page__prop-datetime-popover"
+        />
       </div>
     );
   }

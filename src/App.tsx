@@ -453,18 +453,6 @@ function readInitialAttachmentsFilterKey(): AttachmentFilterKey {
   }
 }
 
-function groupCalendarRestByCol(
-  items: { col: Collection; card: NoteCard }[]
-): { col: Collection; cards: NoteCard[] }[] {
-  const out: { col: Collection; cards: NoteCard[] }[] = [];
-  for (const { col, card } of items) {
-    const last = out[out.length - 1];
-    if (last && last.col.id === col.id) last.cards.push(card);
-    else out.push({ col, cards: [card] });
-  }
-  return out;
-}
-
 function groupSearchHitsFromFlat(
   hits: { col: Collection; path: string; card: NoteCard }[]
 ): { col: Collection; path: string; cards: NoteCard[] }[] {
@@ -2462,7 +2450,8 @@ export default function App() {
     const r = collectConnectionEdges(collections, connectionsEdgeLimit);
     return { connectionEdges: r.edges, connectionEdgesTruncated: r.truncated };
   }, [collections, connectionsPrimed, connectionsEdgeLimit]);
-  const connectedCardsCount = useMemo(() => {
+  /** 卡片探索徽章数（当前入口已隐藏；保留计算以便再开时零改动） */
+  const _connectedCardsCount = useMemo(() => {
     let count = 0;
     walkCollections(collections, (col) => {
       for (const card of col.cards) {
@@ -2471,6 +2460,7 @@ export default function App() {
     });
     return count;
   }, [collections]);
+  void _connectedCardsCount;
 
   const allNotesSorted = useMemo(() => {
     const entries: { col: Collection; card: NoteCard }[] = [];
@@ -2648,11 +2638,13 @@ export default function App() {
                     style={{ width: `${Math.min(depth, 8) * 12}px`, flex: "0 0 auto" }}
                   />
                 ) : null}
-                <span
-                  className="sidebar__dot"
-                  style={{ backgroundColor: toReadableSidebarDotColor(col.dotColor) }}
-                  aria-hidden
-                />
+                {!hideSidebarCollectionDots ? (
+                  <span
+                    className="sidebar__dot"
+                    style={{ backgroundColor: toReadableSidebarDotColor(col.dotColor) }}
+                    aria-hidden
+                  />
+                ) : null}
                 <span className="sidebar__name">{label}</span>
                 <span className="sidebar__count">{subtypeCount}</span>
               </span>
@@ -3081,15 +3073,7 @@ export default function App() {
     return out;
   }, [calendarRestByCol]);
 
-  const calendarRestByColDisplayed = useMemo(
-    () =>
-      groupCalendarRestByCol(
-        calendarRestFlat.slice(0, calendarRestFlatVisibleCount)
-      ),
-    [calendarRestFlat, calendarRestFlatVisibleCount]
-  );
-
-  /** 日历某日：非置顶笔记按合集分组展示，触底再挂载更多 */
+  /** 日历某日：非置顶笔记扁平列出，触底再挂载更多 */
   useEffect(() => {
     if (!calendarDay) {
       calendarDayRestSessionRef.current = null;
@@ -5829,35 +5813,7 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="sidebar__features-section">
-          <div className="sidebar__all-notes">
-            <button
-              type="button"
-              className={
-                "sidebar__all-notes-hit" +
-                (connectionsViewActive && !searchActive ? " is-active" : "")
-              }
-              onClick={() => {
-                closeCardFullPage();
-                setTrashViewActive(false);
-                setCalendarDay(null);
-                setSearchQuery("");
-                setSearchBarOpen(false);
-                setAllNotesViewActive(false);
-                setAttachmentsViewActive(false);
-                setRemindersViewActive(false);
-                setConnectionsViewActive(true);
-                setConnectionsPrimed(true);
-                setConnectionsEdgeLimit(CONNECTIONS_EDGE_BATCH);
-                setMobileNavOpen(false);
-              }}
-              aria-label={`卡片探索（关联卡片 ${connectedCardsCount}）`}
-            >
-              <span className="sidebar__all-notes-label">卡片探索</span>
-              <span className="sidebar__all-notes-count">{connectedCardsCount}</span>
-            </button>
-          </div>
-        </div>
+        {/* 「卡片探索」模块暂时隐藏；保留事件与状态不删，方便后续再开 */}
 
         <div
           className={
@@ -6254,15 +6210,17 @@ export default function App() {
                     >
                       <span className="sidebar__chevron-spacer" aria-hidden />
                       <span className="sidebar__file-subtype-body">
-                        <span
-                          className="sidebar__dot"
-                          style={{
-                            backgroundColor:
-                              FILE_SUBTYPE_SIDEBAR_DOT[item.id] ??
-                              "rgba(55, 53, 47, 0.35)",
-                          }}
-                          aria-hidden
-                        />
+                        {!hideSidebarCollectionDots ? (
+                          <span
+                            className="sidebar__dot"
+                            style={{
+                              backgroundColor:
+                                FILE_SUBTYPE_SIDEBAR_DOT[item.id] ??
+                                "rgba(55, 53, 47, 0.35)",
+                            }}
+                            aria-hidden
+                          />
+                        ) : null}
                         <span className="sidebar__name">{label}</span>
                         <span className="sidebar__count">{subtypeCount}</span>
                       </span>
@@ -6512,48 +6470,137 @@ export default function App() {
         {renderPresetCatalogSidebarSection("expense")}
         {renderPresetCatalogSidebarSection("account")}
 
-        <div className="sidebar__trash" aria-label={c.trashAria}>
-          <button
-            type="button"
-            className={
-              "sidebar__trash-hit" +
-              (trashViewActive && !searchActive ? " is-active" : "")
-            }
-            onClick={() => {
-              closeCardFullPage();
-              setTrashViewActive(true);
-              setRemindersViewActive(false);
-              setSearchQuery("");
-              setSearchBarOpen(false);
-              setCalendarDay(null);
-              setMobileNavOpen(false);
-            }}
-          >
-            <svg
-              className="sidebar__trash-icon"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              <path d="M10 11v6M14 11v6" />
-            </svg>
-            <span className="sidebar__trash-label">{c.titleTrash}</span>
-            {trashEntries.length > 0 ? (
-              <span className="sidebar__trash-badge">
-                {trashEntries.length > 99 ? "99+" : trashEntries.length}
-              </span>
-            ) : null}
-          </button>
-        </div>
+        {(() => {
+          /** 递归找名称为「已归档」的第一个合集（任一层级）；找不到入口仍渲染，只是禁用 */
+          const archivedColRef: { value: Collection | null } = { value: null };
+          walkCollections(collections, (col) => {
+            if (archivedColRef.value) return;
+            if (col.name === "已归档") archivedColRef.value = col;
+          });
+          const archivedCol = archivedColRef.value;
+          const archivedCount = archivedCol
+            ? countCollectionSubtreeCards(archivedCol)
+            : 0;
+          const archivedActive =
+            !!archivedCol &&
+            !trashViewActive &&
+            !searchActive &&
+            !remindersViewActive &&
+            !calendarDay &&
+            !allNotesViewActive &&
+            !attachmentsViewActive &&
+            !connectionsViewActive &&
+            activeId === archivedCol.id;
+          return (
+            <div className="sidebar__tail-row">
+              <div
+                className="sidebar__trash sidebar__tail-row-item"
+                aria-label={c.archivedAria}
+              >
+                <button
+                  type="button"
+                  className={
+                    "sidebar__trash-hit" +
+                    (archivedActive ? " is-active" : "") +
+                    (archivedCol ? "" : " is-disabled")
+                  }
+                  disabled={!archivedCol}
+                  title={
+                    archivedCol
+                      ? undefined
+                      : "尚无命名为「已归档」的合集"
+                  }
+                  onClick={() => {
+                    if (!archivedCol) return;
+                    closeCardFullPage();
+                    setTrashViewActive(false);
+                    setRemindersViewActive(false);
+                    setSearchQuery("");
+                    setSearchBarOpen(false);
+                    setCalendarDay(null);
+                    setAllNotesViewActive(false);
+                    setAttachmentsViewActive(false);
+                    setConnectionsViewActive(false);
+                    setActiveId(archivedCol.id);
+                    expandAncestorsOf(archivedCol.id);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  <svg
+                    className="sidebar__trash-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M21 8v13H3V8" />
+                    <path d="M1 3h22v5H1z" />
+                    <path d="M10 12h4" />
+                  </svg>
+                  <span className="sidebar__trash-label">
+                    {c.titleArchived}
+                  </span>
+                  {archivedCount > 0 ? (
+                    <span className="sidebar__trash-badge">
+                      {archivedCount > 99 ? "99+" : archivedCount}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+
+              <div
+                className="sidebar__trash sidebar__tail-row-item"
+                aria-label={c.trashAria}
+              >
+                <button
+                  type="button"
+                  className={
+                    "sidebar__trash-hit" +
+                    (trashViewActive && !searchActive ? " is-active" : "")
+                  }
+                  onClick={() => {
+                    closeCardFullPage();
+                    setTrashViewActive(true);
+                    setRemindersViewActive(false);
+                    setSearchQuery("");
+                    setSearchBarOpen(false);
+                    setCalendarDay(null);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  <svg
+                    className="sidebar__trash-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  <span className="sidebar__trash-label">{c.titleTrash}</span>
+                  {trashEntries.length > 0 ? (
+                    <span className="sidebar__trash-badge">
+                      {trashEntries.length > 99 ? "99+" : trashEntries.length}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </aside>
 
       <main
@@ -7585,23 +7632,15 @@ export default function App() {
                     aria-hidden
                   />
                 )}
-                {calendarRestByColDisplayed.map(({ col, cards: dayColCards }) => (
-                  <div
-                    key={col.id}
-                    className="timeline__cal-group"
-                  >
-                    <h2 className="timeline__cal-group-title">
-                      「{col.name}」
-                    </h2>
-                    <MasonryShortestColumns
-                      columnCount={timelineColumnCount}
-                    >
-                      {dayColCards.map((card) =>
+                {calendarRestFlat.length > 0 ? (
+                  <MasonryShortestColumns columnCount={timelineColumnCount}>
+                    {calendarRestFlat
+                      .slice(0, calendarRestFlatVisibleCount)
+                      .map(({ col, card }) =>
                         renderNoteTimelineCard(card, col.id)
                       )}
-                    </MasonryShortestColumns>
-                  </div>
-                ))}
+                  </MasonryShortestColumns>
+                ) : null}
                 {calendarRestFlatVisibleCount < calendarRestFlat.length ? (
                   <div
                     ref={calendarRestSentinelRef}

@@ -2474,6 +2474,51 @@
   /* 与上方「文件」区块的 border-bottom 二选一，避免双线 */
 }
 
+/* 侧栏底部「已归档 / 垃圾桶」一排左右分隔 */
+.sidebar__tail-row {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.sidebar__tail-row .sidebar__tail-row-item {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.sidebar__tail-row .sidebar__trash-hit {
+  /* 两个按钮同排时内容收紧，避免 label + 徽章挤不下 */
+  gap: 6px;
+  padding: 8px;
+  font-size: 0.78125rem;
+}
+
+.sidebar__tail-row .sidebar__trash-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__tail-row .sidebar__trash-hit.is-disabled,
+.sidebar__tail-row .sidebar__trash-hit:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.sidebar__tail-row .sidebar__trash-hit.is-disabled:hover,
+.sidebar__tail-row .sidebar__trash-hit:disabled:hover {
+  background: transparent;
+  color: rgba(55, 53, 47, 0.55);
+}
+
 .sidebar__trash-hit {
   display: flex;
   flex-direction: row;
@@ -11326,6 +11371,11 @@ body.app--card-page-open .app {
   padding-left: 8px;
 }
 
+/* 只把「属性」标题行视觉上挪到更左上，不改动下方属性值的布局 */
+.card-page .card-page__props-sidebar-row.sidebar__section-row {
+  transform: translate(-10px, -10px);
+}
+
 /* 属性区与目录区之间的分隔线（展开属性时：面板后接目录） */
 .card-page .card-page__props-panel-inner + .card-page__props-sidebar-row--toc,
 /* 折叠属性时：「属性」标题行后紧接「目录」行 */
@@ -11943,6 +11993,14 @@ body.app--card-page-open .app {
   box-sizing: border-box;
 }
 
+/* 复选框属性：沿用 single-hit 宽度但别在 focus-within 时画满整行的外框 */
+.card-page__tags-panel--checkbox,
+.card-page__tags-panel--checkbox:focus-within {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .card-page__tags-panel--single-hit > .card-page__tags-add-input--prop-field {
   flex: 1 1 auto;
   width: 100%;
@@ -11967,6 +12025,265 @@ body.app--card-page-open .app {
   flex: 0 0 96px;
   width: 96px;
   min-width: 96px;
+}
+
+/* 空值状态：日期未选时，两个输入都变淡，提示"先选日期再选时间"但时间入口始终可见 */
+.card-page__prop-datetime-inline--empty .card-page__tags-add-input--date::-webkit-datetime-edit,
+.card-page__prop-datetime-inline .card-page__tags-add-input--time:disabled {
+  color: rgba(55, 53, 47, 0.32);
+}
+
+.card-page__prop-datetime-inline .card-page__tags-add-input--time:disabled {
+  background: rgba(55, 53, 47, 0.02);
+  cursor: not-allowed;
+}
+
+/* ─── 日期属性弹层 ─────────────────────────────────────────────────────── */
+.date-prop-popover-wrap {
+  display: flex;
+  width: 100%;
+}
+
+.card-page__prop-datetime-popover {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.date-prop-popover-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--card-page-prop-value-h, 40px);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.date-prop-popover-trigger:hover {
+  background: rgba(55, 53, 47, 0.04);
+}
+
+.date-prop-popover-trigger.is-open {
+  background: rgba(55, 53, 47, 0.04);
+  border-color: rgba(55, 53, 47, 0.14);
+}
+
+.date-prop-popover-trigger--empty {
+  color: rgba(55, 53, 47, 0.35);
+}
+
+.date-prop-popover {
+  z-index: 10050;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  color: rgba(55, 53, 47, 0.88);
+  max-width: calc(100vw - 16px);
+}
+
+.date-prop-popover__value {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(55, 53, 47, 0.045);
+  border-radius: 6px;
+  font-size: 13px;
+  color: rgba(35, 131, 226, 1);
+  font-weight: 500;
+}
+
+.date-prop-popover__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 8px;
+}
+
+.date-prop-popover__month {
+  flex: 1 1 auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.date-prop-popover__nav-today,
+.date-prop-popover__nav-arrow {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: rgba(55, 53, 47, 0.65);
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.date-prop-popover__nav-arrow {
+  padding: 4px 8px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.date-prop-popover__nav-today:hover,
+.date-prop-popover__nav-arrow:hover {
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.88);
+}
+
+.date-prop-popover__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 0 2px;
+  color: rgba(55, 53, 47, 0.45);
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.date-prop-popover__weekdays > span {
+  padding: 4px 0;
+}
+
+.date-prop-popover__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 0 2px;
+}
+
+.date-prop-popover__cell {
+  padding: 0;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.88);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.date-prop-popover__cell:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.date-prop-popover__cell.is-outside {
+  color: rgba(55, 53, 47, 0.3);
+}
+
+.date-prop-popover__cell.is-today {
+  color: rgba(35, 131, 226, 1);
+  font-weight: 600;
+}
+
+.date-prop-popover__cell.is-selected {
+  background: rgba(35, 131, 226, 1);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.date-prop-popover__cell.is-selected:hover {
+  background: rgba(35, 131, 226, 0.88);
+}
+
+.date-prop-popover__sep {
+  border: none;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  margin: 10px -10px 10px;
+}
+
+.date-prop-popover__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+}
+
+.date-prop-popover__row-label {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
+.date-prop-popover__row--time {
+  padding-left: 4px;
+}
+
+.date-prop-popover__time-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+  color: rgba(55, 53, 47, 0.88);
+}
+
+.date-prop-popover__toggle {
+  width: 32px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  background: rgba(55, 53, 47, 0.18);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.date-prop-popover__toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.date-prop-popover__toggle.is-on {
+  background: rgba(35, 131, 226, 1);
+}
+
+.date-prop-popover__toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: left 0.12s ease;
+}
+
+.date-prop-popover__toggle.is-on .date-prop-popover__toggle-knob {
+  left: 16px;
+}
+
+.date-prop-popover__clear {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.72);
+  text-align: left;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.date-prop-popover__clear:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.88);
+}
+
+.date-prop-popover__clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .card-page__prop-url-edit-row--tags-plain .card-page__tags-add-input--url-field {
@@ -12290,10 +12607,45 @@ body.app--card-page-open .app {
 }
 
 .card-page__prop-checkbox {
+  /* 极简复选框：仅柔灰描边；勾选时描边内画一个同色钩，不填充方块 */
+  -webkit-appearance: none;
+  appearance: none;
   width: 16px;
   height: 16px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border: 1.6px solid rgba(55, 53, 47, 0.38);
+  border-radius: 4px;
+  background: transparent;
   cursor: pointer;
-  accent-color: rgba(55, 53, 47, 0.85);
+  position: relative;
+  transition: border-color 0.12s ease;
+}
+
+.card-page__prop-checkbox:hover {
+  border-color: rgba(55, 53, 47, 0.62);
+}
+
+.card-page__prop-checkbox:focus-visible {
+  outline: 2px solid rgba(55, 53, 47, 0.22);
+  outline-offset: 1px;
+}
+
+.card-page__prop-checkbox:checked {
+  border-color: rgba(55, 53, 47, 0.62);
+}
+
+.card-page__prop-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 3.2px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border-right: 1.8px solid rgba(55, 53, 47, 0.72);
+  border-bottom: 1.8px solid rgba(55, 53, 47, 0.72);
+  transform: rotate(45deg);
 }
 
 /* 链接/操作按钮 */

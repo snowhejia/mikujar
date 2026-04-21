@@ -244,8 +244,7 @@ function parseCardLinkRefList(v: unknown): CardLinkRef[] {
 /** 将 schema 定义的 cardLink 与已存的 customProps 对齐（兼容旧 text 作者字段） */
 function coerceSchemaPropForEditor(
   field: SchemaField,
-  matchProp: CardProperty | undefined,
-  card: NoteCard
+  matchProp: CardProperty | undefined
 ): CardProperty | undefined {
   if (field.type === "cardLinks") {
     if (!matchProp) return undefined;
@@ -269,18 +268,16 @@ function coerceSchemaPropForEditor(
   if (!matchProp) return undefined;
   if (matchProp.type === "cardLink") return matchProp;
   if (matchProp.type === "text") {
-    const edge = field.cardLinkFromEdge
-      ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)
-      : undefined;
-    const ref = edge ? { colId: edge.colId, cardId: edge.cardId } : null;
     const textVal =
       typeof matchProp.value === "string" ? matchProp.value.trim() : "";
+    // 剪藏作者等场景：若源值是文本，优先展示该文本，避免被历史/误匹配的 creator 边覆盖显示。
+    // 若用户希望采用关联边，可通过“填入关联”显式替换。
     return {
       id: field.id,
       name: field.name,
       type: "cardLink",
-      value: ref,
-      ...(!ref && textVal ? { seedTitle: textVal } : {}),
+      value: null,
+      ...(textVal ? { seedTitle: textVal } : {}),
     };
   }
   return {
@@ -1921,7 +1918,7 @@ export function CardPageView({
 
   function renderSchemaFieldRow(field: SchemaField) {
     const matchProp = customProps.find((p) => p.id === field.id);
-    const editorProp = coerceSchemaPropForEditor(field, matchProp, card);
+    const editorProp = coerceSchemaPropForEditor(field, matchProp);
     const linkFillRef =
       field.type === "cardLink" && field.cardLinkFromEdge
         ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)

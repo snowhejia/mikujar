@@ -11979,6 +11979,31 @@ body.app--card-page-open .app {
   color: rgba(55, 53, 47, 0.32);
 }
 
+/* 已选日期但未加时间：给一个小按钮让用户「+ 时间」 */
+.card-page__prop-datetime-add-time {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  min-height: var(--card-page-prop-value-h, 40px);
+  border: 1px dashed rgba(55, 53, 47, 0.22);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.58);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.1s ease, color 0.1s ease, background 0.1s ease;
+}
+
+.card-page__prop-datetime-add-time:hover {
+  border-color: rgba(55, 53, 47, 0.38);
+  color: rgba(55, 53, 47, 0.85);
+  background: rgba(55, 53, 47, 0.04);
+}
+
+.card-page__prop-datetime-add-time:focus-visible {
+  outline: 2px solid rgba(55, 53, 47, 0.28);
+  outline-offset: 1px;
+}
+
 .card-page__prop-url-edit-row--tags-plain .card-page__tags-add-input--url-field {
   min-height: var(--card-page-prop-value-h, 40px);
 }

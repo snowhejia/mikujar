@@ -14,7 +14,6 @@ import { useAppUiLang } from "../appUiLang";
 import { useAppChrome } from "../i18n/useAppChrome";
 import { noteBodyToHtml } from "../noteEditor/plainHtml";
 import { CardGallery } from "../CardGallery";
-import { CardTagsRow } from "../CardTagsRow";
 import { CardRowInner } from "../CardRowInner";
 import {
   formatCardReminderBesideTime,
@@ -781,12 +780,6 @@ function ConnectionsBoardCard({
               dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
           </div>
-          <CardTagsRow
-            colId={colId}
-            card={card}
-            canEdit={false}
-            onCommit={() => {}}
-          />
         </div>
         {hasGallery ? (
           <CardGallery items={media} uploadPending={false} uploadProgress={null} />

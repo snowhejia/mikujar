@@ -338,18 +338,20 @@ function CardLinksValueEditor({
 
   return (
     <div className="card-page__tags-panel card-page__tags-panel--cardlinks">
-      <div className="card-page__prop-text-edit-row">
-        <input
-          type="text"
-          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-          placeholder="可先填写文字，再补充关联…"
-          defaultValue={seed}
-          onBlur={(e) => onChangeSeedTitle?.(e.target.value.trim() || null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-        />
-      </div>
+      {refs.length === 0 ? (
+        <div className="card-page__prop-text-edit-row">
+          <input
+            type="text"
+            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+            placeholder="可先填写文字，再补充关联…"
+            defaultValue={seed}
+            onBlur={(e) => onChangeSeedTitle?.(e.target.value.trim() || null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
+        </div>
+      ) : null}
       {refs.length > 0 ? (
         <div className="card-page__prop-cardlinks-list">
           {refs.map((ref) => (
@@ -992,21 +994,23 @@ function PropValueEditor({
             </button>
           ) : null}
         </div>
-        <div className="card-page__prop-text-edit-row">
-          <input
-            type="text"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-            placeholder="可先填写文字，再补充关联…"
-            defaultValue={seed}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              onChangeSeedTitle?.(next || null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
-          />
-        </div>
+        {ref == null ? (
+          <div className="card-page__prop-text-edit-row">
+            <input
+              type="text"
+              className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+              placeholder="可先填写文字，再补充关联…"
+              defaultValue={seed}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                onChangeSeedTitle?.(next || null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }

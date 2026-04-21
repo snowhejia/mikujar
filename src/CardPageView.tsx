@@ -1039,32 +1039,24 @@ function PropValueEditor({
               onChangeValue(hasTime ? `${d}T${time || "00:00"}` : d);
             }}
           />
-          {date && hasTime ? (
-            <input
-              type="time"
-              className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
-              value={time}
-              onChange={(e) => {
-                const t = e.target.value;
-                /** 用户清空时间输入 → 退回仅日期存储 */
-                if (!t) {
-                  onChangeValue(date);
-                  return;
-                }
-                onChangeValue(`${date}T${t}`);
-              }}
-            />
-          ) : date ? (
-            <button
-              type="button"
-              className="card-page__prop-datetime-add-time"
-              onClick={() => onChangeValue(`${date}T00:00`)}
-              aria-label="添加时间"
-              title="添加时间"
-            >
-              + 时间
-            </button>
-          ) : null}
+          {/* 时间入口始终可见；没选日期时禁用，选了但还没设时间时留空占位 */}
+          <input
+            type="time"
+            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
+            value={hasTime ? time : ""}
+            disabled={!date}
+            aria-label="时间（可选）"
+            onChange={(e) => {
+              if (!date) return;
+              const t = e.target.value;
+              /** 用户清空时间输入 → 退回仅日期存储 */
+              if (!t) {
+                onChangeValue(date);
+                return;
+              }
+              onChangeValue(`${date}T${t}`);
+            }}
+          />
         </div>
       </div>
     );

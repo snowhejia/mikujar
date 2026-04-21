@@ -153,11 +153,18 @@ function formatDatePropDisplay(raw: unknown): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
-function splitDateTimeLocalParts(raw: unknown): { date: string; time: string } {
+function splitDateTimeLocalParts(raw: unknown): {
+  date: string;
+  time: string;
+  /** 源值是否带 T + HH:MM（true）还是仅 YYYY-MM-DD（false） */
+  hasTime: boolean;
+} {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (DATE_ONLY_RE.test(s)) return { date: s, time: "", hasTime: false };
   const dt = toDateTimeLocalInputValue(raw);
-  if (!dt) return { date: "", time: "00:00" };
-  const [date, time = "00:00"] = dt.split("T");
-  return { date: date || "", time: time || "00:00" };
+  if (!dt) return { date: "", time: "", hasTime: false };
+  const [date, time = ""] = dt.split("T");
+  return { date: date || "", time: time || "00:00", hasTime: Boolean(time) };
 }
 
 function hasDraggedFiles(dt: DataTransfer | null): boolean {
@@ -1005,30 +1012,45 @@ function PropValueEditor({
   }
 
   if (prop.type === "date") {
-    const { date, time } = splitDateTimeLocalParts(prop.value);
+    const { date, time, hasTime } = splitDateTimeLocalParts(prop.value);
     return (
       <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-        <div className="card-page__prop-datetime-inline">
+        <div
+          className={
+            "card-page__prop-datetime-inline" +
+            (date ? "" : " card-page__prop-datetime-inline--empty")
+          }
+        >
           <input
             type="date"
             className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--date"
             value={date}
             onChange={(e) => {
               const d = e.target.value;
-              onChangeValue(d ? `${d}T${time || "00:00"}` : null);
+              if (!d) {
+                onChangeValue(null);
+                return;
+              }
+              /** 切换日期：保留原本是否带时间的语义；不带时间就只存 YYYY-MM-DD */
+              onChangeValue(hasTime ? `${d}T${time || "00:00"}` : d);
             }}
           />
-          <input
-            type="time"
-            className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
-            value={time}
-            disabled={!date}
-            onChange={(e) => {
-              if (!date) return;
-              const t = e.target.value || "00:00";
-              onChangeValue(`${date}T${t}`);
-            }}
-          />
+          {date ? (
+            <input
+              type="time"
+              className="card-page__tags-add-input card-page__tags-add-input--prop-field card-page__tags-add-input--time"
+              value={hasTime ? time : ""}
+              placeholder="--:--"
+              onChange={(e) => {
+                const t = e.target.value;
+                if (!t) {
+                  onChangeValue(date);
+                  return;
+                }
+                onChangeValue(`${date}T${t}`);
+              }}
+            />
+          ) : null}
         </div>
       </div>
     );

@@ -11969,6 +11969,16 @@ body.app--card-page-open .app {
   min-width: 96px;
 }
 
+/* 空值状态：未选日期时没有时间输入，让日期独占整行并把浏览器默认占位文字调淡一些 */
+.card-page__prop-datetime-inline--empty .card-page__tags-add-input--date {
+  flex: 1 1 100%;
+}
+
+.card-page__prop-datetime-inline--empty
+  .card-page__tags-add-input--date::-webkit-datetime-edit {
+  color: rgba(55, 53, 47, 0.32);
+}
+
 .card-page__prop-url-edit-row--tags-plain .card-page__tags-add-input--url-field {
   min-height: var(--card-page-prop-value-h, 40px);
 }

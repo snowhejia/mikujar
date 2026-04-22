@@ -64,17 +64,14 @@ const SHAPES = {
   },
   donut: {
     color: PALETTE.blue,
+    // 双层甜甜圈：外环（evenodd 挖洞）+ 中心实点，和 ring 区分
     body: (
       <g>
-        <circle
-          cx="12"
-          cy="12"
-          r="8.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
+        <path
+          fillRule="evenodd"
+          d="M 12 2.5 A 9.5 9.5 0 1 0 12 21.5 A 9.5 9.5 0 1 0 12 2.5 Z M 12 7.5 A 4.5 4.5 0 1 1 12 16.5 A 4.5 4.5 0 1 1 12 7.5 Z"
         />
-        <circle cx="12" cy="12" r="1.8" />
+        <circle cx="12" cy="12" r="2" />
       </g>
     ),
   },
@@ -93,16 +90,16 @@ const SHAPES = {
   },
   arch: {
     color: PALETTE.pink,
-    body: <path d="M6 21 V12 A 6 6 0 0 1 18 12 V21 Z" />,
+    // 矮胖的实心墓碑：明显的方底 + 圆顶，和 rainbow 的空心高弧区分
+    body: <path d="M4 21 V13 A 8 8 0 0 1 20 13 V21 Z" />,
   },
   petal: {
     color: PALETTE.pink,
+    // 圆角十字：两条胶囊交叉，避免和 quad 的 4 圆成串搞混
     body: (
       <g>
-        <circle cx="12" cy="5.8" r="3.8" />
-        <circle cx="12" cy="18.2" r="3.8" />
-        <circle cx="5.8" cy="12" r="3.8" />
-        <circle cx="18.2" cy="12" r="3.8" />
+        <rect x="9" y="2" width="6" height="20" rx="3" />
+        <rect x="2" y="9" width="20" height="6" rx="3" />
       </g>
     ),
   },
@@ -158,18 +155,21 @@ const SHAPES = {
   },
   rainbow: {
     color: PALETTE.pink,
+    // 瘦高空心拱桥：高度到顶，圆弧很薄，和 arch 完全不会混
     body: (
-      <path d="M4 19 A 8 8 0 0 1 20 19 L 16 19 A 4 4 0 0 0 8 19 Z" />
+      <path d="M3 21 V13 A 9 9 0 0 1 21 13 V21 H17 V13 A 5 5 0 0 0 7 13 V21 Z" />
     ),
   },
   dots: {
     color: PALETTE.orange,
+    // 五点小花：4 外加 1 中心小圆，和 petal/quad/bloom 都明显不同
     body: (
       <g>
-        <circle cx="8" cy="8" r="3" />
-        <circle cx="16" cy="8" r="3" />
-        <circle cx="8" cy="16" r="3" />
-        <circle cx="16" cy="16" r="3" />
+        <circle cx="12" cy="5" r="2.4" />
+        <circle cx="12" cy="19" r="2.4" />
+        <circle cx="5" cy="12" r="2.4" />
+        <circle cx="19" cy="12" r="2.4" />
+        <circle cx="12" cy="12" r="2.4" />
       </g>
     ),
   },
@@ -197,14 +197,11 @@ const SHAPES = {
   },
   ring: {
     color: PALETTE.red,
+    // 纯空心圆：没有中心点，刻意区别于 donut
     body: (
-      <circle
-        cx="12"
-        cy="12"
-        r="8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="4"
+      <path
+        fillRule="evenodd"
+        d="M 12 3 A 9 9 0 1 0 12 21 A 9 9 0 1 0 12 3 Z M 12 7 A 5 5 0 1 1 12 17 A 5 5 0 1 1 12 7 Z"
       />
     ),
   },

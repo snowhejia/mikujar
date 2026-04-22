@@ -5954,13 +5954,13 @@ div.card__text--readonly:not(.card__text--preview) {
   display: none !important;
 }
 
-/* 笔记设置·时间线折叠：卡片高度仍按「顶栏+三行格」预算，正文只完整展示两行（第三行不露出，避免半行裁切） */
+/* 笔记设置·时间线折叠：卡片高度按「顶栏 + 三行正文 + 下内边距」预算，正文完整展示三行 */
 .card__text-editor--fold-body-3 .ProseMirror {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   word-break: break-word;
 }
 
@@ -5976,18 +5976,20 @@ div.card__text--readonly:not(.card__text--preview) {
 .card.card--timeline-fold-body > .card__inner:not(.card__inner--split),
 .card.card--timeline-fold-body
   > .card__inner.card__inner--split:not(.card__inner--mobile-gallery-stack) {
-  height: calc(var(--note-line-height) * 4.5);
-  min-height: calc(var(--note-line-height) * 4.5);
-  max-height: calc(var(--note-line-height) * 4.5);
+  /* 顶栏 1 行 + 正文 3 行 = 4 行的内容；再加极小 buffer 避免子像素取整裁掉第 3 行。
+     不再留半行空白，避免出现「最后一道横线后一大块空白」的视感。 */
+  height: calc(var(--note-line-height) * 4 + 8px);
+  min-height: calc(var(--note-line-height) * 4 + 8px);
+  max-height: calc(var(--note-line-height) * 4 + 8px);
   overflow: hidden;
   align-items: stretch;
 }
 
 .card.card--timeline-fold-body
   > .card__inner.card__inner--split.card__inner--mobile-gallery-stack {
-  height: calc(var(--note-line-height) * 4.5 + 108px);
-  min-height: calc(var(--note-line-height) * 4.5 + 108px);
-  max-height: calc(var(--note-line-height) * 4.5 + 108px);
+  height: calc(var(--note-line-height) * 4 + 8px + 108px);
+  min-height: calc(var(--note-line-height) * 4 + 8px + 108px);
+  max-height: calc(var(--note-line-height) * 4 + 8px + 108px);
   overflow: hidden;
 }
 
@@ -5995,6 +5997,8 @@ div.card__text--readonly:not(.card__text--preview) {
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
+  /* 折叠模式不要留半行底部 padding，让顶栏 + 3 行正文贴紧卡片下边缘 */
+  padding-bottom: 0;
 }
 
 .card.card--timeline-fold-body .card__gallery {
@@ -6025,8 +6029,8 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .card.card--timeline-fold-body .card__text-dbltap-host {
-  /* 与 line-clamp:2 一致，避免容器高于两行时露出第三行半行 */
-  max-height: calc(2 * var(--note-line-height));
+  /* 与 line-clamp:3 一致，避免容器高于三行时露出第四行半行 */
+  max-height: calc(3 * var(--note-line-height));
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -6705,14 +6709,27 @@ div.card__text--readonly:not(.card__text--preview) {
     font-size: 0.75rem;
   }
 
+  /* 手机侧栏整栏统一滚动；笔记分区内部不再抢占剩余高度，按内容撑开即可 */
   .sidebar__notes-section {
-    flex: 1 1 0;
+    flex: 0 0 auto;
   }
 
   .sidebar__notes-section-main {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     min-height: 0;
     max-height: none;
+    overflow: visible;
+  }
+
+  .sidebar__notes-section-main > .sidebar__collections {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .sidebar__file-subtypes--notes-scroll {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
   }
 
   .sidebar__tree-row {

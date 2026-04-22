@@ -811,9 +811,6 @@ export default function App() {
   });
   const [attachmentsViewActive, setAttachmentsViewActive] = useState(() => {
     try {
-      if (typeof window !== "undefined" && matchesMobileChromeMedia()) {
-        return false;
-      }
       if (getAppDataMode() === "local") {
         const k = activeCollectionStorageKey("local", null);
         return (
@@ -1088,14 +1085,13 @@ export default function App() {
     return () => mq.removeEventListener("change", onMq);
   }, []);
 
-  /** 窄屏无「笔记探索 / 文件」入口：从桌面切入窄屏或误入对应态时回到全部笔记 */
+  /** 窄屏无「笔记探索」入口（文件保留，手机端也要能进「文件」视图） */
   useEffect(() => {
     if (!narrowUi) return;
-    if (!connectionsViewActive && !attachmentsViewActive) return;
+    if (!connectionsViewActive) return;
     setConnectionsViewActive(false);
-    setAttachmentsViewActive(false);
     setAllNotesViewActive(true);
-  }, [narrowUi, connectionsViewActive, attachmentsViewActive]);
+  }, [narrowUi, connectionsViewActive]);
 
   useEffect(() => {
     const mq = window.matchMedia(TABLET_WIDE_TOUCH_MEDIA);
@@ -1853,19 +1849,11 @@ export default function App() {
           setAttachmentsViewActive(false);
         }
       } else if (raw === PERSISTED_WORKSPACE_ALL_ATTACHMENTS) {
-        if (matchesMobileChromeMedia()) {
-          setAttachmentsViewActive(false);
-          setAllNotesViewActive(true);
-          setRemindersViewActive(false);
-          setConnectionsViewActive(false);
-          setConnectionsPrimed(false);
-        } else {
-          setAttachmentsViewActive(true);
-          setAllNotesViewActive(false);
-          setRemindersViewActive(false);
-          setConnectionsViewActive(false);
-          setConnectionsPrimed(false);
-        }
+        setAttachmentsViewActive(true);
+        setAllNotesViewActive(false);
+        setRemindersViewActive(false);
+        setConnectionsViewActive(false);
+        setConnectionsPrimed(false);
       }
       if (savedAttachmentFilter) {
         setAttachmentsFilterKey(savedAttachmentFilter);
@@ -6124,6 +6112,9 @@ export default function App() {
                 setCalendarDay(null);
                 setSearchQuery("");
                 setSearchBarOpen(false);
+                setAllNotesViewActive(false);
+                setRemindersViewActive(false);
+                setConnectionsViewActive(false);
                 setAttachmentsFilterKey("all");
                 setAttachmentsViewActive(true);
                 setMobileNavOpen(false);
@@ -6151,6 +6142,9 @@ export default function App() {
                   setCalendarDay(null);
                   setSearchQuery("");
                   setSearchBarOpen(false);
+                  setAllNotesViewActive(false);
+                  setRemindersViewActive(false);
+                  setConnectionsViewActive(false);
                   setAttachmentsFilterKey("all");
                   setAttachmentsViewActive(true);
                   setMobileNavOpen(false);
@@ -6202,6 +6196,9 @@ export default function App() {
                         setCalendarDay(null);
                         setSearchQuery("");
                         setSearchBarOpen(false);
+                        setAllNotesViewActive(false);
+                        setRemindersViewActive(false);
+                        setConnectionsViewActive(false);
                         setAttachmentsFilterKey(fk);
                         setAttachmentsViewActive(true);
                         setMobileNavOpen(false);

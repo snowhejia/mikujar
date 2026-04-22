@@ -447,11 +447,7 @@ export function CardGallery({
   }
 
   const openCurrentLightbox = () => {
-    const item = items[safeI];
-    if (item && onOpenFileCard && attachmentHasLinkedFileCard?.(item)) {
-      onOpenFileCard(item);
-      return;
-    }
+    /** 点击附件直接进大图预览；跳到文件卡只通过右键菜单 */
     setLightbox({ index: safeI });
   };
 

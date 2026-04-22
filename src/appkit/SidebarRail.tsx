@@ -95,7 +95,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
   },
   {
     key: "topic",
-    icon: "petal",
+    icon: "quad",
     labelKey: "railTopic",
     availabilityKey: "topic",
     color: "#D98A3A", // 琥珀 · amber

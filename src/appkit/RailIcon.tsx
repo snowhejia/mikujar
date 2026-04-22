@@ -252,6 +252,13 @@ const SHAPES = {
       </g>
     ),
   },
+  house: {
+    color: PALETTE.red,
+    // 胖小屋：三角屋顶 + 圆角屋身，实心填色
+    body: (
+      <path d="M12 2 L1.8 10.8 H4.5 V19.8 A 2 2 0 0 0 6.5 21.8 H17.5 A 2 2 0 0 0 19.5 19.8 V10.8 H22.2 Z" />
+    ),
+  },
 } satisfies Record<string, ShapeDef>;
 
 export type RailIconKey = keyof typeof SHAPES;

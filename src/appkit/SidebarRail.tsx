@@ -73,7 +73,7 @@ type RailItemDef = {
 export const RAIL_ITEMS: RailItemDef[] = [
   {
     key: "overview",
-    icon: "twinkle",
+    icon: "house",
     labelKey: "railOverview",
     color: "#DE4A2C", // 红 · coral
     group: "content",

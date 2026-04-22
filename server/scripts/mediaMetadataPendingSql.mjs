@@ -9,7 +9,8 @@
 export function mediaNeedsWorkExists(tableAlias, mediaColumn) {
   return `EXISTS (
   SELECT 1 FROM jsonb_array_elements(COALESCE(${tableAlias}.${mediaColumn}, '[]'::jsonb)) elem
-  WHERE COALESCE(NULLIF(trim(elem->>'url'), ''), '') <> ''
+  WHERE jsonb_typeof(elem) = 'object'
+  AND COALESCE(NULLIF(trim(elem->>'url'), ''), '') <> ''
   AND (
     (
       (elem->>'kind' IN ('image', 'video'))
@@ -25,8 +26,11 @@ export function mediaNeedsWorkExists(tableAlias, mediaColumn) {
     OR (
       (elem->>'kind' = 'video')
       AND NOT (
-        jsonb_typeof(elem->'durationSec') = 'number'
-        AND (elem->>'durationSec')::double precision >= 0
+        CASE
+          WHEN jsonb_typeof(elem->'durationSec') = 'number'
+          THEN (elem->>'durationSec')::double precision >= 0
+          ELSE false
+        END
       )
       AND NOT (
         COALESCE(elem->>'durationSec', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
@@ -35,11 +39,14 @@ export function mediaNeedsWorkExists(tableAlias, mediaColumn) {
     OR (
       (elem->>'kind' IN ('image', 'video', 'audio', 'file'))
       AND NOT (
-        (
-          jsonb_typeof(elem->'sizeBytes') = 'number'
-          AND (elem->>'sizeBytes')::numeric >= 0
-          AND (elem->>'sizeBytes')::numeric = floor((elem->>'sizeBytes')::numeric)
-        )
+        CASE
+          WHEN jsonb_typeof(elem->'sizeBytes') = 'number'
+          THEN (
+            (elem->>'sizeBytes')::numeric >= 0
+            AND (elem->>'sizeBytes')::numeric = floor((elem->>'sizeBytes')::numeric)
+          )
+          ELSE false
+        END
         OR (COALESCE(elem->>'sizeBytes', '') ~ '^[0-9]+$')
       )
     )

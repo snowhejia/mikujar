@@ -75,7 +75,7 @@ import {
   saveTimelineFoldBodyThreeLines,
 } from "./timelineFoldBodyStorage";
 import {
-  readSidebarSectionsCollapsed,
+  defaultSidebarSectionCollapseState,
   sidebarSectionsCollapseStorageKey,
   writeSidebarSectionsCollapsed,
   type SidebarSectionCollapseState,
@@ -586,20 +586,14 @@ export default function App() {
     [dataMode, currentUser?.id]
   );
 
+  // rail 承担顶层切换后，每个分区被选中即视为展开；不再读回历史持久化的折叠状态
   const [sidebarSectionCollapsed, setSidebarSectionCollapsed] =
     useState<SidebarSectionCollapseState>(() =>
-      readSidebarSectionsCollapsed(
-        sidebarSectionsCollapseStorageKey(
-          dataMode,
-          currentUser?.id ?? null
-        )
-      )
+      defaultSidebarSectionCollapseState()
     );
 
   useEffect(() => {
-    setSidebarSectionCollapsed(
-      readSidebarSectionsCollapsed(sidebarSectionsKey)
-    );
+    setSidebarSectionCollapsed(defaultSidebarSectionCollapseState());
   }, [sidebarSectionsKey]);
 
   useEffect(() => {

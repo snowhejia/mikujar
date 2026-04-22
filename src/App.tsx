@@ -75,7 +75,7 @@ import {
   saveTimelineFoldBodyThreeLines,
 } from "./timelineFoldBodyStorage";
 import {
-  readSidebarSectionsCollapsed,
+  defaultSidebarSectionCollapseState,
   sidebarSectionsCollapseStorageKey,
   writeSidebarSectionsCollapsed,
   type SidebarSectionCollapseState,
@@ -190,6 +190,8 @@ import {
   datesWithNoteAddedOn,
   datesWithReminderOn,
   favoriteCollectionsStorageKey,
+  recentCollectionsStorageKey,
+  RECENT_COLLECTIONS_LIMIT,
   findCardInTree,
   findCollectionById,
   readCollapsedFolderIdsFromStorage,
@@ -199,12 +201,14 @@ import {
   PERSISTED_WORKSPACE_ALL_NOTES,
   PERSISTED_WORKSPACE_ALL_ATTACHMENTS,
   PERSISTED_WORKSPACE_CONNECTIONS,
+  PERSISTED_WORKSPACE_OVERVIEW,
   PERSISTED_WORKSPACE_REMINDERS,
   formatCalendarDayTitle,
   initTimelineColumnPreferenceIfNeeded,
   insertChildCollection,
   INITIAL_WORKSPACE,
   loadFavoriteCollectionIds,
+  loadRecentCollectionIds,
   loadTrashedNoteEntries,
   localDateString,
   LOOSE_NOTES_COLLECTION_ID,
@@ -240,6 +244,7 @@ import {
   removeBidirectionalRelated,
   removeCollectionFromTree,
   saveFavoriteCollectionIds,
+  saveRecentCollectionIds,
   saveTrashedNoteEntries,
   SidebarWorkspaceIdentity,
   splitPinnedCards,
@@ -283,6 +288,8 @@ import {
   presetCatalogBaseIdForPresetTypeId,
   type PresetTypeGroup,
 } from "./notePresetTypesCatalog";
+import { SidebarRail, type RailKey } from "./appkit/SidebarRail";
+import { SidebarOverviewPanel } from "./appkit/SidebarOverviewPanel";
 
 /** 时间线虚拟列表：每批挂载卡片数（全部笔记 / 单合集 / 日历 / 搜索等共用） */
 const TIMELINE_VIRTUAL_BATCH = 40;
@@ -292,13 +299,13 @@ const CONNECTIONS_EDGE_BATCH = 500;
 const FILE_PRESET_SUBTYPE_ITEMS =
   PRESET_OBJECT_TYPES_GROUPS.find((g) => g.baseId === "file")?.children ?? [];
 
-/** 侧栏文件子类型圆点（与 preset 色相一致，与合集树圆点同级） */
+/** 侧栏文件子类型圆点：从大地色系里挑相邻 5 色，与 rail / 合集默认色一致 */
 const FILE_SUBTYPE_SIDEBAR_DOT: Record<string, string> = {
-  file_image: "#db2777",
-  file_video: "#7c3aed",
-  file_audio: "#0284c7",
-  file_document: "#57534e",
-  file_other: "#78716c",
+  file_image: "#E88368", // salmon
+  file_video: "#B57A9A", // mauve
+  file_audio: "#4C6C9A", // navy
+  file_document: "#7F8F4F", // olive
+  file_other: "#9FAD72", // sage
 };
 
 /** 侧栏「主题」子类型（与对象类型目录一致） */
@@ -344,7 +351,6 @@ function sidebarFilesSectionHasChildCollections(
 
 /** 侧栏中单独分区的 catalog 顶层 id（启用对应预设时显示；未启用则整块隐藏） */
 const SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS = [
-  "work",
   "task",
   "project",
   "expense",
@@ -563,6 +569,11 @@ export default function App() {
     [currentUser?.id]
   );
 
+  const recentCollectionsKey = useMemo(
+    () => recentCollectionsStorageKey(currentUser?.id ?? null),
+    [currentUser?.id]
+  );
+
   const trashStorageKey = useMemo(
     () => trashCardsStorageKey(dataMode, currentUser?.id ?? null),
     [dataMode, currentUser?.id]
@@ -584,20 +595,14 @@ export default function App() {
     [dataMode, currentUser?.id]
   );
 
+  // rail 承担顶层切换后，每个分区被选中即视为展开；不再读回历史持久化的折叠状态
   const [sidebarSectionCollapsed, setSidebarSectionCollapsed] =
     useState<SidebarSectionCollapseState>(() =>
-      readSidebarSectionsCollapsed(
-        sidebarSectionsCollapseStorageKey(
-          dataMode,
-          currentUser?.id ?? null
-        )
-      )
+      defaultSidebarSectionCollapseState()
     );
 
   useEffect(() => {
-    setSidebarSectionCollapsed(
-      readSidebarSectionsCollapsed(sidebarSectionsKey)
-    );
+    setSidebarSectionCollapsed(defaultSidebarSectionCollapseState());
   }, [sidebarSectionsKey]);
 
   useEffect(() => {
@@ -649,10 +654,12 @@ export default function App() {
   const mainHeaderRef = useRef<HTMLElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const allNotesLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const overviewLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const collectionRestSentinelRef = useRef<HTMLDivElement | null>(null);
   const calendarRestSentinelRef = useRef<HTMLDivElement | null>(null);
   const searchNotesSentinelRef = useRef<HTMLDivElement | null>(null);
   const allNotesViewSessionRef = useRef(false);
+  const overviewViewSessionRef = useRef(false);
   const collectionTimelineSessionRef = useRef<string | undefined>(undefined);
   const calendarDayRestSessionRef = useRef<string | null>(null);
   const searchTimelineSessionRef = useRef("");
@@ -738,6 +745,9 @@ export default function App() {
   const [favoriteCollectionIds, setFavoriteCollectionIds] = useState<
     Set<string>
   >(() => new Set());
+  const [recentCollectionIds, setRecentCollectionIds] = useState<string[]>(
+    () => []
+  );
   const [trashEntries, setTrashEntries] = useState<TrashedNoteEntry[]>([]);
   const [trashViewActive, setTrashViewActive] = useState(false);
   const [allNotesViewActive, setAllNotesViewActive] = useState(() => {
@@ -754,6 +764,9 @@ export default function App() {
     return false;
   });
   const [allNotesVisibleCount, setAllNotesVisibleCount] = useState(
+    TIMELINE_VIRTUAL_BATCH
+  );
+  const [overviewVisibleCount, setOverviewVisibleCount] = useState(
     TIMELINE_VIRTUAL_BATCH
   );
   const [collectionRestVisibleCount, setCollectionRestVisibleCount] = useState(
@@ -1371,7 +1384,6 @@ export default function App() {
           if (base === "file") n.files = false;
           if (base === "clip") n.clip = false;
           if (base === "topic") n.topic = false;
-          if (base === "work") n.work = false;
           if (base === "task") n.task = false;
           if (base === "project") n.project = false;
           if (base === "expense") n.expense = false;
@@ -1549,6 +1561,10 @@ export default function App() {
     showRemoteLoading,
     blockMainEdgeSwipe,
   });
+
+  useEffect(() => {
+    setRecentCollectionIds(loadRecentCollectionIds(recentCollectionsKey));
+  }, [recentCollectionsKey]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -1737,10 +1753,13 @@ export default function App() {
     ) {
       return null;
     }
+    // 概览模式：activeId 为空时 active 会兜底到第一张合集，这里不应给 active 建面包屑
+    if (!activeId) return null;
     if (!active?.id) return null;
     return findCollectionPathFromRoot(collections, active.id);
   }, [
     collections,
+    activeId,
     active?.id,
     searchQuery,
     trashViewActive,
@@ -1826,7 +1845,13 @@ export default function App() {
       const savedAttachmentFilter =
         readPersistedAttachmentsFilterKey(attachmentFilterStoreKey);
 
-      if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
+      if (raw === PERSISTED_WORKSPACE_OVERVIEW) {
+        setAllNotesViewActive(false);
+        setRemindersViewActive(false);
+        setConnectionsViewActive(false);
+        setAttachmentsViewActive(false);
+        setActiveId("");
+      } else if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
         setAllNotesViewActive(true);
         setRemindersViewActive(false);
         setConnectionsViewActive(false);
@@ -1897,6 +1922,11 @@ export default function App() {
         );
       } else if (aid) {
         localStorage.setItem(activeCollectionKey, aid);
+      } else {
+        localStorage.setItem(
+          activeCollectionKey,
+          PERSISTED_WORKSPACE_OVERVIEW
+        );
       }
     } catch {
       /* ignore */
@@ -4161,14 +4191,15 @@ export default function App() {
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
       const preferTop = readNewNotePlacement() === "top";
-      /** 全部笔记 / 提醒：直接落到「笔记」preset 合集根本身（其子合集如「已归档」不作为默认）；缺失时回退未归类 */
+      /** 全部笔记 / 提醒 / 概览：直接落到「笔记」preset 合集根本身（其子合集如「已归档」不作为默认）；缺失时回退未归类 */
       const resolveDefaultNoteTargetColId = (): string => {
         const noteRoot = findCollectionByPresetType(collections, "note");
         return noteRoot?.id ?? LOOSE_NOTES_COLLECTION_ID;
       };
+      const trimmedActiveId = activeId.trim();
       let targetColId =
         targetColIdOverride?.trim() ||
-        (allNotesViewActive || remindersViewActive
+        (allNotesViewActive || remindersViewActive || !trimmedActiveId
           ? resolveDefaultNoteTargetColId()
           : active?.id?.trim() ?? "");
       /** 无选中用户合集时写入未归类（不在 UI 中展示该虚拟合集名） */
@@ -4289,6 +4320,7 @@ export default function App() {
       remindersViewActive,
       calendarDay,
       active?.id,
+      activeId,
       searchQuery,
       dataMode,
       allNotesViewActive,
@@ -4682,10 +4714,15 @@ export default function App() {
         afterLocalInsert: afterLocal,
       });
       if (!cardId) return;
+      const trimmedActiveId = activeId.trim();
+      const noteRootId =
+        findCollectionByPresetType(collections, "note")?.id ?? "";
       const targetColId =
         allNotesViewActive || remindersViewActive
           ? LOOSE_NOTES_COLLECTION_ID
-          : active?.id?.trim() || LOOSE_NOTES_COLLECTION_ID;
+          : trimmedActiveId
+            ? active?.id?.trim() || LOOSE_NOTES_COLLECTION_ID
+            : noteRootId || LOOSE_NOTES_COLLECTION_ID;
       setMobileNavOpen(false);
       queueMicrotask(() => {
         setCardPageCard({ colId: targetColId, cardId });
@@ -4693,8 +4730,10 @@ export default function App() {
     })();
   }, [
     active?.id,
+    activeId,
     allNotesViewActive,
     appendNoteCardWithHtml,
+    collections,
     newNotePlacement,
     remindersViewActive,
     scrollTimelineToBottom,
@@ -5272,6 +5311,367 @@ export default function App() {
     [collections]
   );
 
+  /**
+   * 左侧 rail 活动项。基于现有状态派生，不引入新的持久化 state：
+   *   trash/reminders/connections/calendar 视图标志 → 对应 key
+   *   activeId 命中「已归档」合集 → "archived"
+   *   activeId 命中 topic / clip / work … 子树 → 对应 key
+   *   attachmentsViewActive 或文件子类型 activeId → "files"
+   *   allNotesViewActive 或 notes 子树 activeId → "notes"
+   *   否则 → "overview"
+   */
+  const archivedColId = useMemo(() => {
+    let found: string | null = null;
+    walkCollections(collections, (col) => {
+      if (found) return;
+      if (col.name === "已归档") found = col.id;
+    });
+    return found;
+  }, [collections]);
+
+  const presetCatalogRootIds = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const baseId of SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS) {
+      const root = findCollectionByPresetType(collections, baseId);
+      m[baseId] = root?.id ?? null;
+    }
+    return m;
+  }, [collections]);
+
+  const activeIdInSubtree = useCallback(
+    (rootId: string | null | undefined): boolean => {
+      if (!rootId || !activeId) return false;
+      if (rootId === activeId) return true;
+      let hit = false;
+      walkCollections(collections, (col) => {
+        if (hit) return;
+        if (col.id !== rootId) return;
+        walkCollections([col], (inner) => {
+          if (inner.id === activeId) hit = true;
+        });
+      });
+      return hit;
+    },
+    [activeId, collections]
+  );
+
+  const railKey: RailKey = useMemo(() => {
+    if (trashViewActive) return "trash";
+    if (remindersViewActive) return "reminders";
+    if (connectionsViewActive) return "connections";
+    if (calendarDay != null) return "calendar";
+    if (archivedColId && activeId === archivedColId) return "archived";
+    if (activeIdInSubtree(topicNavRootCol?.id)) return "topic";
+    if (activeIdInSubtree(clipParentCol?.id)) return "clip";
+    for (const baseId of SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS) {
+      if (activeIdInSubtree(presetCatalogRootIds[baseId])) {
+        return baseId as RailKey;
+      }
+    }
+    if (attachmentsViewActive) return "files";
+    if (
+      activeIdInSubtree(findCollectionByPresetType(collections, "file")?.id)
+    ) {
+      return "files";
+    }
+    if (allNotesViewActive) return "notes";
+    if (activeIdInSubtree(noteNavRootCol?.id)) return "notes";
+    return "overview";
+  }, [
+    trashViewActive,
+    remindersViewActive,
+    connectionsViewActive,
+    calendarDay,
+    archivedColId,
+    activeId,
+    attachmentsViewActive,
+    allNotesViewActive,
+    topicNavRootCol?.id,
+    clipParentCol?.id,
+    presetCatalogRootIds,
+    noteNavRootCol?.id,
+    collections,
+    activeIdInSubtree,
+  ]);
+
+  const railAvailability = useMemo(
+    () => ({
+      notes: true,
+      files: Boolean(findCollectionByPresetType(collections, "file")),
+      topic: Boolean(topicNavRootCol),
+      clip: Boolean(clipParentCol),
+      task: Boolean(presetCatalogRootIds.task),
+      project: Boolean(presetCatalogRootIds.project),
+      expense: Boolean(presetCatalogRootIds.expense),
+      account: Boolean(presetCatalogRootIds.account),
+      archived: Boolean(archivedColId),
+    }),
+    [
+      collections,
+      topicNavRootCol,
+      clipParentCol,
+      presetCatalogRootIds,
+      archivedColId,
+    ]
+  );
+
+  const handleRailPick = useCallback(
+    (key: RailKey) => {
+      closeCardFullPage();
+      setSearchQuery("");
+      setSearchBarOpen(false);
+      setMobileNavOpen(false);
+      // 共同清空：所有 *ViewActive + calendarDay；具体分支再按需重置
+      setTrashViewActive(false);
+      setRemindersViewActive(false);
+      setConnectionsViewActive(false);
+      setAttachmentsViewActive(false);
+      setAllNotesViewActive(false);
+      setCalendarDay(null);
+
+      if (key === "overview") {
+        setActiveId("");
+        return;
+      }
+      if (key === "notes") {
+        setAllNotesViewActive(true);
+        if (!activeIdInSubtree(noteNavRootCol?.id)) {
+          setActiveId("");
+        }
+        return;
+      }
+      if (key === "files") {
+        const fileRoot = findCollectionByPresetType(collections, "file");
+        if (fileRoot && !activeIdInSubtree(fileRoot.id)) {
+          for (const item of FILE_PRESET_SUBTYPE_ITEMS) {
+            const col = findCollectionByPresetType(collections, item.id);
+            if (col) {
+              setActiveId(col.id);
+              expandAncestorsOf(col.id);
+              return;
+            }
+          }
+          setActiveId(fileRoot.id);
+          expandAncestorsOf(fileRoot.id);
+        }
+        return;
+      }
+      if (key === "topic" && topicNavRootCol) {
+        setActiveId(topicNavRootCol.id);
+        expandAncestorsOf(topicNavRootCol.id);
+        return;
+      }
+      if (key === "clip" && clipParentCol) {
+        setActiveId(clipParentCol.id);
+        expandAncestorsOf(clipParentCol.id);
+        return;
+      }
+      if (
+        key === "task" ||
+        key === "project" ||
+        key === "expense" ||
+        key === "account"
+      ) {
+        const rootId = presetCatalogRootIds[key];
+        if (rootId) {
+          setActiveId(rootId);
+          expandAncestorsOf(rootId);
+        }
+        return;
+      }
+      if (key === "calendar") {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        setCalendarDay(`${yyyy}-${mm}-${dd}`);
+        return;
+      }
+      if (key === "reminders") {
+        setRemindersViewActive(true);
+        setActiveId("");
+        return;
+      }
+      if (key === "connections") {
+        setConnectionsViewActive(true);
+        setConnectionsPrimed(true);
+        setActiveId("");
+        return;
+      }
+      if (key === "archived" && archivedColId) {
+        setActiveId(archivedColId);
+        expandAncestorsOf(archivedColId);
+        return;
+      }
+      if (key === "trash") {
+        setTrashViewActive(true);
+        setActiveId("");
+        return;
+      }
+    },
+    [
+      closeCardFullPage,
+      setSearchQuery,
+      setSearchBarOpen,
+      setMobileNavOpen,
+      setTrashViewActive,
+      setRemindersViewActive,
+      setConnectionsViewActive,
+      setAttachmentsViewActive,
+      setAllNotesViewActive,
+      setCalendarDay,
+      setActiveId,
+      setConnectionsPrimed,
+      activeIdInSubtree,
+      noteNavRootCol?.id,
+      collections,
+      topicNavRootCol,
+      clipParentCol,
+      presetCatalogRootIds,
+      archivedColId,
+      expandAncestorsOf,
+    ]
+  );
+
+  /** 合集 id → 合集对象，供 LRU / 收藏按 id 查找 */
+  const collectionsById = useMemo(() => {
+    const m = new Map<string, Collection>();
+    walkCollections(collections, (c) => {
+      if (c.id !== LOOSE_NOTES_COLLECTION_ID) m.set(c.id, c);
+    });
+    return m;
+  }, [collections]);
+
+  /**
+   * 当 activeId 指向一个真实合集时，把它 MRU 提到「最近合集」队首。
+   * 跳过 "" / 未归类 / 已不在树上的 id。
+   */
+  useEffect(() => {
+    const id = activeId;
+    if (!id) return;
+    if (!collectionsById.has(id)) return;
+    setRecentCollectionIds((prev) => {
+      if (prev[0] === id) return prev;
+      const next = [id, ...prev.filter((x) => x !== id)].slice(
+        0,
+        RECENT_COLLECTIONS_LIMIT
+      );
+      saveRecentCollectionIds(recentCollectionsKey, next);
+      return next;
+    });
+  }, [activeId, collectionsById, recentCollectionsKey]);
+
+  /** 概览主侧栏「最近合集」：按 MRU 顺序列出仍存在的合集 */
+  const recentCollectionsForOverview = useMemo(() => {
+    const out: Collection[] = [];
+    for (const id of recentCollectionIds) {
+      const col = collectionsById.get(id);
+      if (col) out.push(col);
+    }
+    return out;
+  }, [recentCollectionIds, collectionsById]);
+
+  /** 概览主侧栏「收藏」：按稳定顺序（遍历树）列出被标星的合集 */
+  const favoriteCollectionsForOverview = useMemo(() => {
+    if (favoriteCollectionIds.size === 0) return [];
+    const out: Collection[] = [];
+    walkCollections(collections, (c) => {
+      if (favoriteCollectionIds.has(c.id)) out.push(c);
+    });
+    return out;
+  }, [favoriteCollectionIds, collections]);
+
+  /**
+   * 概览主区「所有卡片」：不限形态（含 note / file / task / person …），
+   * 按 card.id 去重；一张卡在多合集出现时仅按第一次遇到的 placement 展示。
+   * 按 addedOn desc + minutesOfDay desc 排序，与「全部笔记」一致。
+   */
+  const overviewAllCards = useMemo(() => {
+    const entries: { col: Collection; card: NoteCard }[] = [];
+    const seen = new Set<string>();
+    walkCollections(collections, (col) => {
+      for (const card of col.cards) {
+        if (seen.has(card.id)) continue;
+        seen.add(card.id);
+        entries.push({ col, card });
+      }
+    });
+    entries.sort((a, b) => {
+      const dateA = a.card.addedOn ?? "";
+      const dateB = b.card.addedOn ?? "";
+      if (dateB !== dateA) return dateB.localeCompare(dateA);
+      return (b.card.minutesOfDay ?? 0) - (a.card.minutesOfDay ?? 0);
+    });
+    return entries;
+  }, [collections]);
+
+  const overviewDisplayed = useMemo(
+    () => overviewAllCards.slice(0, overviewVisibleCount),
+    [overviewAllCards, overviewVisibleCount]
+  );
+
+  /** 进入概览时把 visibleCount 校准到当前总数的首批 */
+  useEffect(() => {
+    if (railKey !== "overview") {
+      overviewViewSessionRef.current = false;
+      return;
+    }
+    const cap = overviewAllCards.length;
+    const justEntered = !overviewViewSessionRef.current;
+    overviewViewSessionRef.current = true;
+    setOverviewVisibleCount((prev) => {
+      if (cap === 0) return 0;
+      if (justEntered) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      if (prev === 0) return Math.min(TIMELINE_VIRTUAL_BATCH, cap);
+      return Math.min(prev, cap);
+    });
+  }, [railKey, overviewAllCards.length]);
+
+  /** 概览滚动接近底部时增批 */
+  useEffect(() => {
+    if (railKey !== "overview") return;
+    const root = timelineRef.current;
+    const target = overviewLoadMoreSentinelRef.current;
+    if (!root || !target) return;
+    if (overviewVisibleCount >= overviewAllCards.length) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0];
+        if (!hit?.isIntersecting) return;
+        setOverviewVisibleCount((n) => {
+          const total = overviewAllCards.length;
+          if (n >= total) return n;
+          return Math.min(n + TIMELINE_VIRTUAL_BATCH, total);
+        });
+      },
+      { root, rootMargin: "520px 0px", threshold: 0 }
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [railKey, overviewVisibleCount, overviewAllCards.length]);
+
+  /** rail 是否展开显示文字；持久化到 localStorage */
+  const RAIL_EXPANDED_KEY = "ui:rail-expanded";
+  const [railExpanded, setRailExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(RAIL_EXPANDED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const handleToggleRailExpanded = useCallback(() => {
+    setRailExpanded((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(RAIL_EXPANDED_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
   const {
     onCollectionRowDragStart,
     onCollectionRowDragEnd,
@@ -5699,7 +6099,8 @@ export default function App() {
         (showMobileSidebarBrowseChrome ? " app--mobile-nav-open" : "") +
         (tabletSplitNav ? " app--tablet-split-nav" : "") +
         (timelineColumnCount > 1 ? " app--masonry" : "") +
-        (connectionsViewActive ? " app--connections-board" : "")
+        (connectionsViewActive ? " app--connections-board" : "") +
+        (railExpanded ? " app--rail-expanded" : "")
       }
     >
       {showRemoteLoading ? (
@@ -5727,6 +6128,13 @@ export default function App() {
         className="app__mobile-backdrop"
         aria-hidden
         onClick={() => setMobileNavOpen(false)}
+      />
+      <SidebarRail
+        activeKey={railKey}
+        onPick={handleRailPick}
+        availability={railAvailability}
+        expanded={railExpanded}
+        onToggleExpanded={handleToggleRailExpanded}
       />
       <aside
         className="sidebar"
@@ -5871,6 +6279,15 @@ export default function App() {
 
         {/* 「卡片探索」模块暂时隐藏；保留事件与状态不删，方便后续再开 */}
 
+        {railKey === "overview" ? (
+          <SidebarOverviewPanel
+            onPick={handleRailPick}
+            favoriteCollections={favoriteCollectionsForOverview}
+            recentCollections={recentCollectionsForOverview}
+          />
+        ) : null}
+
+        {railKey === "calendar" ? (
         <div
           className={
             "sidebar__calendar-section" +
@@ -5922,7 +6339,9 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
+        {railKey === "notes" ? (
         <div
           className={
             "sidebar__notes-section" +
@@ -6124,7 +6543,9 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
+        {railKey === "files" ? (
         <div
           className={
             "sidebar__files-section" +
@@ -6332,8 +6753,9 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
-        {topicNavRootCol ? (
+        {railKey === "topic" && topicNavRootCol ? (
           <div
             className={
               "sidebar__topic-section" +
@@ -6440,9 +6862,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {renderPresetCatalogSidebarSection("work")}
-
-        {clipParentCol ? (
+        {railKey === "clip" && clipParentCol ? (
           <div
             className={
               "sidebar__clip-section" +
@@ -6549,12 +6969,30 @@ export default function App() {
           </div>
         ) : null}
 
-        {renderPresetCatalogSidebarSection("task")}
-        {renderPresetCatalogSidebarSection("project")}
-        {renderPresetCatalogSidebarSection("expense")}
-        {renderPresetCatalogSidebarSection("account")}
+        {railKey === "task" ? renderPresetCatalogSidebarSection("task") : null}
+        {railKey === "project"
+          ? renderPresetCatalogSidebarSection("project")
+          : null}
+        {railKey === "expense"
+          ? renderPresetCatalogSidebarSection("expense")
+          : null}
+        {railKey === "account"
+          ? renderPresetCatalogSidebarSection("account")
+          : null}
 
-        {(() => {
+        {railKey === "reminders" ? (
+          <div className="sidebar__empty-hint" role="note">
+            {c.railReminders}
+          </div>
+        ) : null}
+        {railKey === "connections" ? (
+          <div className="sidebar__empty-hint" role="note">
+            {c.railConnections}
+          </div>
+        ) : null}
+
+        {railKey === "archived" || railKey === "trash"
+          ? (() => {
           /** 递归找名称为「已归档」的第一个合集（任一层级）；找不到入口仍渲染，只是禁用 */
           const archivedColRef: { value: Collection | null } = { value: null };
           walkCollections(collections, (col) => {
@@ -6577,6 +7015,7 @@ export default function App() {
             activeId === archivedCol.id;
           return (
             <div className="sidebar__tail-row">
+              {railKey === "archived" ? (
               <div
                 className="sidebar__trash sidebar__tail-row-item"
                 aria-label={c.archivedAria}
@@ -6636,7 +7075,9 @@ export default function App() {
                   ) : null}
                 </button>
               </div>
+              ) : null}
 
+              {railKey === "trash" ? (
               <div
                 className="sidebar__trash sidebar__tail-row-item"
                 aria-label={c.trashAria}
@@ -6682,9 +7123,11 @@ export default function App() {
                   ) : null}
                 </button>
               </div>
+              ) : null}
             </div>
           );
-        })()}
+        })()
+          : null}
       </aside>
 
       <main
@@ -6863,6 +7306,8 @@ export default function App() {
                           ? c.titleReminders
                           : calendarDay
                             ? formatCalendarDayTitle(calendarDay, appUiLang)
+                            : railKey === "overview"
+                              ? c.railOverview
                             : mainHeadingCollectionPath &&
                                 mainHeadingCollectionPath.length > 1
                               ? (
@@ -7728,6 +8173,25 @@ export default function App() {
                 {calendarRestFlatVisibleCount < calendarRestFlat.length ? (
                   <div
                     ref={calendarRestSentinelRef}
+                    className="timeline__all-notes-sentinel"
+                    aria-hidden
+                  />
+                ) : null}
+              </>
+            )
+          ) : railKey === "overview" ? (
+            overviewAllCards.length === 0 ? (
+              <div className="timeline__empty">{c.emptyGlobal}</div>
+            ) : (
+              <>
+                <MasonryShortestColumns columnCount={timelineColumnCount}>
+                  {overviewDisplayed.map(({ col, card }) =>
+                    renderNoteTimelineCard(card, col.id)
+                  )}
+                </MasonryShortestColumns>
+                {overviewVisibleCount < overviewAllCards.length ? (
+                  <div
+                    ref={overviewLoadMoreSentinelRef}
                     className="timeline__all-notes-sentinel"
                     aria-hidden
                   />

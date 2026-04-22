@@ -326,6 +326,26 @@ export type AppChrome = {
   pullRefreshGuide: string;
   pullRefreshRelease: string;
   pullRefreshRunning: string;
+  /** 左侧窄 rail（主导航）相关文案 */
+  railOverview: string;
+  railNotes: string;
+  railFiles: string;
+  railTopic: string;
+  railClip: string;
+  railTask: string;
+  railProject: string;
+  railExpense: string;
+  railAccount: string;
+  railCalendar: string;
+  railReminders: string;
+  railConnections: string;
+  railArchived: string;
+  railTrash: string;
+  railAriaNav: string;
+  /** rail 右侧分割线上的展开/收起切换按钮 */
+  railExpand: string;
+  railCollapse: string;
+  overviewRecentCollectionsHeading: string;
 };
 
 const zh: AppChrome = {
@@ -644,6 +664,24 @@ const zh: AppChrome = {
   pullRefreshGuide: "下拉刷新",
   pullRefreshRelease: "松开以刷新",
   pullRefreshRunning: "正在刷新…",
+  railOverview: "概览",
+  railNotes: "笔记",
+  railFiles: "文件",
+  railTopic: "主题",
+  railClip: "剪藏",
+  railTask: "任务",
+  railProject: "项目",
+  railExpense: "开支",
+  railAccount: "账户",
+  railCalendar: "日历",
+  railReminders: "提醒",
+  railConnections: "连接",
+  railArchived: "已归档",
+  railTrash: "回收站",
+  railAriaNav: "主导航",
+  railExpand: "展开主导航",
+  railCollapse: "收起主导航",
+  overviewRecentCollectionsHeading: "最近合集",
 };
 
 const en: AppChrome = {
@@ -972,6 +1010,24 @@ const en: AppChrome = {
   pullRefreshGuide: "Pull down to refresh",
   pullRefreshRelease: "Release to refresh",
   pullRefreshRunning: "Refreshing…",
+  railOverview: "Overview",
+  railNotes: "Notes",
+  railFiles: "Files",
+  railTopic: "Topics",
+  railClip: "Clips",
+  railTask: "Task",
+  railProject: "Project",
+  railExpense: "Expense",
+  railAccount: "Account",
+  railCalendar: "Calendar",
+  railReminders: "Reminders",
+  railConnections: "Connections",
+  railArchived: "Archived",
+  railTrash: "Trash",
+  railAriaNav: "Primary nav",
+  railExpand: "Expand primary nav",
+  railCollapse: "Collapse primary nav",
+  overviewRecentCollectionsHeading: "Recent collections",
 };
 
 export function getAppChrome(lang: LoginUiLang): AppChrome {

@@ -212,6 +212,40 @@ const ICON_LIBRARY = {
       <path d="M12 2 C 12 6 8 7 8 11 C 8 8.5 6 8 6 8 C 6 14 3 14 3 18 C 3 21 6 22 9 22 L 15 22 C 18 22 21 21 21 18 C 21 13 16 12 16 8 C 16 10 15 10.5 14 10 C 15 7 13 5 12 2 Z" />
     ),
   },
+  calendar: {
+    labelZh: "日历",
+    labelEn: "Calendar",
+    body: (
+      <g>
+        <rect x="3" y="5" width="18" height="16" rx="2" fill="none" strokeWidth="1.8" />
+        <path d="M3 10 H21" strokeWidth="1.8" />
+        <rect x="7" y="2.5" width="1.8" height="5" rx="0.6" />
+        <rect x="15.2" y="2.5" width="1.8" height="5" rx="0.6" />
+      </g>
+    ),
+  },
+  link: {
+    labelZh: "连接",
+    labelEn: "Link",
+    body: (
+      <g fill="none" strokeWidth="2">
+        <path d="M10 14 A 4 4 0 0 1 10 8 L13 5 A 4 4 0 0 1 19 11 L17.5 12.5" />
+        <path d="M14 10 A 4 4 0 0 1 14 16 L11 19 A 4 4 0 0 1 5 13 L6.5 11.5" />
+      </g>
+    ),
+  },
+  trash: {
+    labelZh: "垃圾桶",
+    labelEn: "Trash",
+    body: (
+      <g>
+        <path d="M5 7 H19 L18 21 H6 Z" fill="none" strokeWidth="1.8" />
+        <path d="M3 6.5 H21" strokeWidth="2" />
+        <path d="M9 4 H15 V6.5 H9 Z" />
+        <path d="M10 10 V18 M14 10 V18" fill="none" strokeWidth="1.4" />
+      </g>
+    ),
+  },
 } satisfies Record<string, IconDef>;
 
 export type CollectionIconKey = keyof typeof ICON_LIBRARY;

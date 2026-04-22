@@ -1572,10 +1572,10 @@
     system-ui,
     sans-serif;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
   line-height: 1.2;
-  color: rgba(55, 53, 47, 0.86);
+  color: rgba(55, 53, 47, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1587,8 +1587,8 @@
   text-rendering: optimizeLegibility;
 }
 .rail__item.is-active .rail__label {
-  color: rgba(55, 53, 47, 0.95);
-  font-weight: 600;
+  color: rgba(55, 53, 47, 0.82);
+  font-weight: 700;
 }
 /* 收起态下浮层 tooltip 已去掉；hover/focus 时由 button[title] 走浏览器默认提示 */
 

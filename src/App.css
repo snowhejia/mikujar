@@ -8710,26 +8710,20 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .collection-template-modal__shape-row {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  max-width: 360px;
-}
-
-@media (max-width: 560px) {
-  .collection-template-modal__shape-row {
-    grid-template-columns: repeat(6, 1fr);
-  }
 }
 
 .collection-template-modal__shape-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1 / 1;
-  width: 100%;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1.5px solid transparent;
   background: transparent;
   cursor: pointer;

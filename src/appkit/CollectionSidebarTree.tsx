@@ -259,7 +259,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
                 className="sidebar__dot"
                 shape={c.iconShape}
                 color={toContrastyGlyphColor(c.dotColor)}
-                size={10}
+                size={13}
               />
             ) : null}
             {editingCollectionId === c.id ? (

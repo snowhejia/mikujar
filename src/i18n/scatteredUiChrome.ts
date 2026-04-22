@@ -265,7 +265,7 @@ const zh: ScatteredUiChrome = {
   uiMoveCollectionUnderConfirm: "移动",
   uiMoveCollectionUnderNoTargets: "没有其他可作为父级的合集。",
   errMoveCollectionUnder: "现在移不过去喔…换个目标或刷新再试？",
-  uiCollectionEditTemplateMenu: "合集设置…",
+  uiCollectionEditTemplateMenu: "合集设置",
   errCollectionTemplateSync: "合集设置没能同步到云端…可检查网络后重试。",
   uiDeleteCollectionDialogTitle: "删除合集",
   uiDeleteCollectionWithSubtree: (name) =>
@@ -433,7 +433,7 @@ const en: ScatteredUiChrome = {
   uiMoveCollectionUnderNoTargets: "No other collection can be a parent.",
   errMoveCollectionUnder:
     "Couldn’t move right now. Try another target or refresh.",
-  uiCollectionEditTemplateMenu: "Collection settings…",
+  uiCollectionEditTemplateMenu: "Collection settings",
   errCollectionTemplateSync:
     "Couldn’t sync collection settings. Check the network and try again.",
   uiDeleteCollectionDialogTitle: "Delete collection",

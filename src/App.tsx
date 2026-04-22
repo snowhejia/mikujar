@@ -2635,7 +2635,7 @@ export default function App() {
                     className="sidebar__dot"
                     shape={col.iconShape}
                     color={toContrastyGlyphColor(col.dotColor)}
-                    size={10}
+                    size={13}
                   />
                 ) : null}
                 {isEditing ? (
@@ -6236,6 +6236,10 @@ export default function App() {
                 const fk = presetFileSubtypeIdToAttachmentFilterKey(item.id);
                 if (!fk) return null;
                 const subtypeCol = findCollectionByPresetType(collections, item.id);
+                /** 用户没启用该子类型时，右键菜单退到父级「文件」合集，至少图标/颜色可改 */
+                const ctxTargetCol =
+                  subtypeCol ??
+                  findCollectionByPresetType(collections, "file");
                 const label =
                   appUiLang === "en" ? item.nameEn : item.nameZh;
                 const subtypeActive =
@@ -6259,15 +6263,16 @@ export default function App() {
                         (subtypeActive ? " is-active" : "")
                       }
                       onContextMenu={(e) => {
-                        if (!canEdit || !subtypeCol) return;
+                        if (!canEdit || !ctxTargetCol) return;
                         e.preventDefault();
                         setCollectionCtxMenu({
                           x: e.clientX,
                           y: e.clientY,
-                          id: subtypeCol.id,
-                          name: subtypeCol.name,
+                          id: ctxTargetCol.id,
+                          /** 菜单里仍显示用户点的那个子类型名（图片/视频…） */
+                          name: label,
                           hasChildren:
-                            (subtypeCol.children?.length ?? 0) > 0,
+                            (ctxTargetCol.children?.length ?? 0) > 0,
                         });
                       }}
                       onClick={() => {
@@ -6297,7 +6302,7 @@ export default function App() {
                                 : FILE_SUBTYPE_SIDEBAR_DOT[item.id]) ??
                                 "rgba(55, 53, 47, 0.35)"
                             )}
-                            size={10}
+                            size={13}
                           />
                         ) : null}
                         <span className="sidebar__name">{label}</span>

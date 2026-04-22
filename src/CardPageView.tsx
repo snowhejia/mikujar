@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
   type ReactNode,
 } from "react";
 import type { Dispatch, SetStateAction } from "react";
@@ -22,12 +23,14 @@ import {
   findCardInTree,
   isFileCard,
   LOOSE_NOTES_COLLECTION_ID,
+  walkCollectionsWithPath,
 } from "./appkit/collectionModel";
 import { mergedTemplateSchemaFieldsForPlacements } from "./appkit/schemaTemplateFields";
 import { DatePropPopover } from "./appkit/DatePropPopover";
 import { formatByteSize } from "./noteStats";
 import { migrateCustomPropsList } from "./noteCardCustomProps";
 import type {
+  AutoLinkRule,
   CardLinkRef,
   CardProperty,
   CardPropertyOption,
@@ -224,6 +227,213 @@ function parseCardLinkRefList(v: unknown): CardLinkRef[] {
   return dedupeCardLinkRefs(parsed);
 }
 
+function normalizeSchemaPropNameKey(name: string | undefined): string {
+  return String(name || "")
+    .trim()
+    .toLowerCase();
+}
+
+function schemaFieldIdentityKey(field: SchemaField): string {
+  return `${field.type}::${normalizeSchemaPropNameKey(field.name)}`;
+}
+
+function propHasMeaningfulValue(prop: CardProperty): boolean {
+  if (prop.type === "cardLinks") return parseCardLinkRefList(prop.value).length > 0;
+  if (prop.type === "cardLink") {
+    return (
+      parseCardLinkRef(prop.value) != null ||
+      Boolean(cardLinkSeedTitleText(prop))
+    );
+  }
+  if (prop.type === "choice") return Array.isArray(prop.value) && prop.value.length > 0;
+  if (prop.type === "collectionLink") return collectionLinkIds(prop.value).length > 0;
+  if (prop.type === "checkbox") return prop.value === true;
+  if (typeof prop.value === "string") return prop.value.trim().length > 0;
+  return prop.value != null;
+}
+
+function resolveCardLinkCreateTarget(
+  fieldId: string,
+  rules: AutoLinkRule[] | null | undefined
+): {
+  targetCollectionId?: string;
+  targetPresetTypeId?: string;
+  targetObjectKind?: string;
+} | null {
+  if (!fieldId.trim() || !Array.isArray(rules) || rules.length === 0) return null;
+  for (const rule of rules) {
+    const multiTargets = Array.isArray(rule.targets) ? rule.targets : [];
+    for (const target of multiTargets) {
+      if (target.syncSchemaFieldId !== fieldId) continue;
+      return {
+        ...(target.targetCollectionId?.trim()
+          ? { targetCollectionId: target.targetCollectionId.trim() }
+          : {}),
+        ...(target.targetPresetTypeId?.trim()
+          ? { targetPresetTypeId: target.targetPresetTypeId.trim() }
+          : {}),
+        ...(target.targetObjectKind?.trim()
+          ? { targetObjectKind: target.targetObjectKind.trim() }
+          : {}),
+      };
+    }
+    if (rule.syncSchemaFieldId !== fieldId) continue;
+    return {
+      ...(rule.targetCollectionId?.trim()
+        ? { targetCollectionId: rule.targetCollectionId.trim() }
+        : {}),
+      ...(rule.targetPresetTypeId?.trim()
+        ? { targetPresetTypeId: rule.targetPresetTypeId.trim() }
+        : {}),
+      ...(rule.targetObjectKind?.trim()
+        ? { targetObjectKind: rule.targetObjectKind.trim() }
+        : {}),
+    };
+  }
+  return null;
+}
+
+function mergeLegacyNamedPropsIntoSchema(
+  props: CardProperty[],
+  schemaFields: SchemaField[]
+): CardProperty[] {
+  if (props.length === 0 || schemaFields.length === 0) return props;
+  const schemaById = new Map(schemaFields.map((f) => [f.id, f] as const));
+  const schemaByName = new Map<string, SchemaField>();
+  for (const field of schemaFields) {
+    const key = normalizeSchemaPropNameKey(field.name);
+    if (!key || schemaByName.has(key)) continue;
+    schemaByName.set(key, field);
+  }
+
+  let changed = false;
+  const next: CardProperty[] = [];
+  const indexById = new Map<string, number>();
+
+  function upsert(prop: CardProperty) {
+    const idx = indexById.get(prop.id);
+    if (idx == null) {
+      indexById.set(prop.id, next.length);
+      next.push(prop);
+    } else {
+      next[idx] = prop;
+    }
+  }
+
+  function mergeIntoSchemaProp(
+    target: CardProperty | undefined,
+    legacy: CardProperty,
+    field: SchemaField
+  ): CardProperty | undefined {
+    const base: CardProperty =
+      target ??
+      ({
+        id: field.id,
+        name: field.name,
+        type: field.type as CardPropertyType,
+        value: field.type === "checkbox" ? false : null,
+        ...(field.options ? { options: field.options } : {}),
+      } as CardProperty);
+
+    if (field.type === "cardLink") {
+      if (parseCardLinkRef(base.value) != null || cardLinkSeedTitleText(base)) {
+        return base;
+      }
+      if (legacy.type === "cardLink" && parseCardLinkRef(legacy.value)) {
+        return {
+          ...base,
+          value: legacy.value as CardProperty["value"],
+        };
+      }
+      if (legacy.type === "text") {
+        const seed = typeof legacy.value === "string" ? legacy.value.trim() : "";
+        if (seed) {
+          return { ...base, seedTitle: seed };
+        }
+      }
+      return target ? base : undefined;
+    }
+
+    if (field.type === "cardLinks") {
+      if (parseCardLinkRefList(base.value).length > 0 || cardLinkSeedTitleText(base)) {
+        return base;
+      }
+      if (legacy.type === "cardLinks") {
+        const refs = parseCardLinkRefList(legacy.value);
+        if (refs.length > 0) return { ...base, value: refs };
+      }
+      if (legacy.type === "text") {
+        const seed = typeof legacy.value === "string" ? legacy.value.trim() : "";
+        if (seed) return { ...base, seedTitle: seed };
+      }
+      return target ? base : undefined;
+    }
+
+    if (!propHasMeaningfulValue(base) && legacy.type === field.type) {
+      return {
+        ...base,
+        value: legacy.value,
+        ...(legacy.options ? { options: legacy.options } : {}),
+      };
+    }
+    return target ? base : undefined;
+  }
+
+  for (const prop of props) {
+    if (schemaById.has(prop.id)) {
+      upsert(prop);
+      continue;
+    }
+    const field = schemaByName.get(normalizeSchemaPropNameKey(prop.name));
+    if (!field) {
+      upsert(prop);
+      continue;
+    }
+    const existing =
+      indexById.get(field.id) != null ? next[indexById.get(field.id)!] : undefined;
+    const merged = mergeIntoSchemaProp(existing, prop, field);
+    if (merged) upsert(merged);
+    changed = true;
+  }
+
+  return changed ? next : props;
+}
+
+function normalizeCustomPropsAgainstSchema(
+  props: CardProperty[],
+  schemaFields: SchemaField[],
+  collections: Collection[]
+): CardProperty[] {
+  if (props.length === 0 || schemaFields.length === 0) return props;
+  const schemaById = new Map(schemaFields.map((f) => [f.id, f] as const));
+  let changed = false;
+  const next = props.map((prop) => {
+    const field = schemaById.get(prop.id);
+    if (!field) return prop;
+    if (field.type === "text" && prop.type === "cardLink") {
+      const ref = parseCardLinkRef(prop.value);
+      const seed = cardLinkSeedTitleText(prop);
+      const text =
+        seed ||
+        (ref ? cardLinkDisplayLabel(collections, ref) : "") ||
+        (typeof prop.value === "string" ? prop.value.trim() : "");
+      changed = true;
+      return {
+        id: prop.id,
+        name: field.name,
+        type: "text" as CardPropertyType,
+        value: text || null,
+        ...(prop.options ? { options: prop.options } : {}),
+      };
+    }
+    if (prop.type !== field.type) {
+      return { ...prop, name: field.name };
+    }
+    return prop;
+  });
+  return changed ? next : props;
+}
+
 /** 将 schema 定义的 cardLink 与已存的 customProps 对齐（兼容旧 text 作者字段） */
 function coerceSchemaPropForEditor(
   field: SchemaField,
@@ -284,6 +494,12 @@ function cardLinkDisplayLabel(
 /** 剪藏扩展等在关联写入前写入的昵称，需在 UI 展示（value 仍为 null 时） */
 function cardLinkSeedTitleText(prop: CardProperty): string {
   return typeof prop.seedTitle === "string" ? prop.seedTitle.trim() : "";
+}
+
+function collectionPathDisplayLabel(path: string, colName: string): string {
+  const cleanPath = path.trim();
+  if (!cleanPath) return colName.trim();
+  return cleanPath.endsWith(colName) ? cleanPath : `${cleanPath} / ${colName}`;
 }
 
 function CardLinksValueEditor({
@@ -563,6 +779,13 @@ export interface CardPageViewProps {
   onOpenFileCard?: (item: NoteMediaItem) => boolean;
   /** 打开属性面板中链到的人物卡（如作者 → person） */
   onOpenLinkedCard?: (targetColId: string, targetCardId: string) => void;
+  /** 属性面板：cardLink 搜索无结果时直接创建目标卡片 */
+  onCreateLinkedCard?: (params: {
+    title: string;
+    targetCollectionId?: string;
+    targetPresetTypeId?: string;
+    targetObjectKind?: string;
+  }) => Promise<{ colId: string; cardId: string } | null>;
   /** 云端：自动建卡请求成功后拉取合集树（刷新 custom_props / 关联） */
   onAfterRemoteAutoLink?: () => Promise<void>;
   /** 全页删除当前卡片（移入回收站） */
@@ -578,6 +801,8 @@ function PropValueEditor({
   collections,
   hideCollectionDots = false,
   linkFillRef = null,
+  cardLinkCreateTarget = null,
+  onCreateLinkedCard,
   onOpenLinkedCard,
 }: {
   prop: CardProperty;
@@ -589,9 +814,94 @@ function PropValueEditor({
   hideCollectionDots?: boolean;
   /** cardLink：可从图谱边一键填入（如 creator） */
   linkFillRef?: { colId: string; cardId: string } | null;
+  cardLinkCreateTarget?: {
+    targetCollectionId?: string;
+    targetPresetTypeId?: string;
+    targetObjectKind?: string;
+  } | null;
+  onCreateLinkedCard?: (params: {
+    title: string;
+    targetCollectionId?: string;
+    targetPresetTypeId?: string;
+    targetObjectKind?: string;
+  }) => Promise<{ colId: string; cardId: string } | null>;
   onOpenLinkedCard?: (colId: string, cardId: string) => void;
 }) {
   const ui = useAppChrome();
+  const { lang } = useAppUiLang();
+  const [cardLinkPickerOpen, setCardLinkPickerOpen] = useState(false);
+  const [cardLinkQuery, setCardLinkQuery] = useState("");
+  const [cardLinkCreateBusy, setCardLinkCreateBusy] = useState(false);
+  const cardLinkPickerRef = useRef<HTMLDivElement>(null);
+
+  const cardLinkOptions = useMemo(() => {
+    const q = cardLinkQuery.trim().toLowerCase();
+    const seen = new Set<string>();
+    const out: Array<{
+      colId: string;
+      cardId: string;
+      title: string;
+      path: string;
+    }> = [];
+    for (const { col, path } of walkCollectionsWithPath(collections, [])) {
+      for (const card of col.cards ?? []) {
+        const title = cardHeadlinePlain(card).trim() || card.id;
+        const key = `${col.id}\t${card.id}`;
+        if (seen.has(key)) continue;
+        if (q) {
+          const hay = `${title}\n${path}`.toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
+        seen.add(key);
+        out.push({ colId: col.id, cardId: card.id, title, path });
+      }
+    }
+    return out.slice(0, 80);
+  }, [collections, cardLinkQuery]);
+
+  useEffect(() => {
+    if (!cardLinkPickerOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (cardLinkPickerRef.current?.contains(e.target as Node)) return;
+      setCardLinkPickerOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [cardLinkPickerOpen]);
+
+  async function handleCreateLinkedCard() {
+    const title = cardLinkQuery.trim();
+    if (!title || !onCreateLinkedCard || cardLinkCreateBusy) return;
+    setCardLinkCreateBusy(true);
+    try {
+      const created = await onCreateLinkedCard({
+        title,
+        ...(cardLinkCreateTarget?.targetCollectionId
+          ? { targetCollectionId: cardLinkCreateTarget.targetCollectionId }
+          : {}),
+        ...(cardLinkCreateTarget?.targetPresetTypeId
+          ? { targetPresetTypeId: cardLinkCreateTarget.targetPresetTypeId }
+          : {}),
+        ...(cardLinkCreateTarget?.targetObjectKind
+          ? { targetObjectKind: cardLinkCreateTarget.targetObjectKind }
+          : {}),
+      });
+      if (!created) {
+        window.alert(
+          lang === "en"
+            ? "Could not create the linked card right now."
+            : "暂时无法创建这张关联卡片。"
+        );
+        return;
+      }
+      onChangeValue({ colId: created.colId, cardId: created.cardId });
+      onChangeSeedTitle?.(title);
+      setCardLinkPickerOpen(false);
+      setCardLinkQuery("");
+    } finally {
+      setCardLinkCreateBusy(false);
+    }
+  }
 
   if (!canEdit) {
     if (prop.type === "checkbox") {
@@ -710,22 +1020,27 @@ function PropValueEditor({
           </div>
         );
       }
-      const label = cardLinkDisplayLabel(collections, ref);
+      const linkLabel = cardLinkDisplayLabel(collections, ref);
       return (
         <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-          {onOpenLinkedCard ? (
-            <button
-              type="button"
-              className="card-page__tags-hit-btn card-page__prop-author-link"
-              onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
-            >
-              {label}
-            </button>
-          ) : (
-            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
-              {label}
+          <div className="card-page__prop-cardlink-row">
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel card-page__prop-cardlink-text">
+              {seed || "—"}
             </span>
-          )}
+            {onOpenLinkedCard ? (
+              <button
+                type="button"
+                className="card-page__tags-hit-btn card-page__prop-author-link card-page__prop-cardlink-side"
+                onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
+              >
+                {linkLabel}
+              </button>
+            ) : (
+              <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel card-page__prop-cardlink-side">
+                {linkLabel}
+              </span>
+            )}
+          </div>
         </div>
       );
     }
@@ -900,7 +1215,7 @@ function PropValueEditor({
   if (prop.type === "cardLink") {
     const ref = parseCardLinkRef(prop.value);
     const seed = cardLinkSeedTitleText(prop);
-    const label = ref ? cardLinkDisplayLabel(collections, ref) : "";
+    const linkLabel = ref ? cardLinkDisplayLabel(collections, ref) : "";
     const showFillFromEdge =
       Boolean(
         linkFillRef?.colId &&
@@ -912,27 +1227,130 @@ function PropValueEditor({
     return (
       <div className="card-page__tags-panel card-page__tags-panel--single-hit">
         <div className="card-page__prop-cardlink-row">
+          <div className="card-page__prop-text-edit-row card-page__prop-cardlink-main">
+            <input
+              type="text"
+              className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+              placeholder="填写文字…"
+              defaultValue={seed}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                onChangeSeedTitle?.(next || null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </div>
           {ref && onOpenLinkedCard ? (
             <button
               type="button"
-              className="card-page__tags-hit-btn card-page__prop-author-link card-page__prop-cardlink-main"
+              className="card-page__tags-hit-btn card-page__prop-author-link card-page__prop-cardlink-side"
               onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
             >
-              {label}
+              {linkLabel}
             </button>
           ) : ref ? (
-            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
-              {label}
-            </span>
-          ) : seed ? (
-            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
-              {seed}
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel card-page__prop-cardlink-side">
+              {linkLabel}
             </span>
           ) : (
-            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel card-page__prop-cardlink-side">
               —
             </span>
           )}
+          <div
+            className="card-page__prop-cardlink-picker"
+            ref={cardLinkPickerRef}
+          >
+            <button
+              type="button"
+              className="card-page__prop-cardlink-pick"
+              onClick={() =>
+                setCardLinkPickerOpen((v) => {
+                  const next = !v;
+                  if (!next) setCardLinkQuery("");
+                  return next;
+                })
+              }
+            >
+              {lang === "en" ? "Select card" : "选择卡片"}
+            </button>
+            {cardLinkPickerOpen ? (
+              <div className="card-page__tags-dropdown card-page__prop-cardlink-dropdown">
+                <input
+                  type="text"
+                  className="card-page__tags-add-input card-page__prop-cardlink-search"
+                  value={cardLinkQuery}
+                  onChange={(e) => setCardLinkQuery(e.target.value)}
+                  placeholder={lang === "en" ? "Search cards…" : "搜索卡片…"}
+                  autoFocus
+                />
+                {cardLinkOptions.length > 0 ? (
+                  cardLinkOptions.map((opt) => (
+                    <button
+                      key={`${opt.colId}-${opt.cardId}`}
+                      type="button"
+                      className={
+                        "card-page__tags-dropdown-item" +
+                        (ref &&
+                        ref.colId === opt.colId &&
+                        ref.cardId === opt.cardId
+                          ? " is-active"
+                          : "")
+                      }
+                      onClick={() => {
+                        onChangeValue({
+                          colId: opt.colId,
+                          cardId: opt.cardId,
+                        });
+                        setCardLinkPickerOpen(false);
+                        setCardLinkQuery("");
+                      }}
+                    >
+                      <span className="card-page__prop-cardlink-option-main">
+                        {opt.title}
+                      </span>
+                      <span className="card-page__prop-cardlink-option-sub">
+                        {opt.path}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <>
+                    <div className="card-page__tags-dropdown-empty">
+                      {lang === "en" ? "No matching cards." : "没有匹配的卡片。"}
+                    </div>
+                    {cardLinkQuery.trim() && onCreateLinkedCard ? (
+                      <button
+                        type="button"
+                        className="card-page__tags-dropdown-item"
+                        onClick={() => {
+                          void handleCreateLinkedCard();
+                        }}
+                        disabled={cardLinkCreateBusy}
+                      >
+                        <span className="card-page__prop-cardlink-option-main">
+                          {cardLinkCreateBusy
+                            ? lang === "en"
+                              ? "Creating..."
+                              : "创建中..."
+                            : lang === "en"
+                              ? `Create "${cardLinkQuery.trim()}"`
+                              : `创建“${cardLinkQuery.trim()}”`}
+                        </span>
+                        <span className="card-page__prop-cardlink-option-sub">
+                          {lang === "en"
+                            ? "Create and link a new card directly"
+                            : "直接新建卡片并写入当前关联"}
+                        </span>
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
           {ref ? (
             <button
               type="button"
@@ -959,23 +1377,6 @@ function PropValueEditor({
             </button>
           ) : null}
         </div>
-        {ref == null ? (
-          <div className="card-page__prop-text-edit-row">
-            <input
-              type="text"
-              className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-              placeholder="可先填写文字，再补充关联…"
-              defaultValue={seed}
-              onBlur={(e) => {
-                const next = e.target.value.trim();
-                onChangeSeedTitle?.(next || null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              }}
-            />
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -1090,6 +1491,7 @@ export function CardPageView({
   onCreateFileCardFromAttachment,
   onOpenFileCard,
   onOpenLinkedCard,
+  onCreateLinkedCard,
   onAfterRemoteAutoLink,
   onDeleteCard,
 }: CardPageViewProps) {
@@ -1140,7 +1542,7 @@ export function CardPageView({
   const [propsPanelOpen, setPropsPanelOpen] = useState(true);
   const [effectiveSchema, setEffectiveSchema] = useState<{
     fields: SchemaField[];
-    autoLinkRules: unknown[];
+    autoLinkRules: AutoLinkRule[];
   } | null | undefined>(undefined);
   const [tocPanelOpen, setTocPanelOpen] = useState(true);
   const [tocActiveIndex, setTocActiveIndex] = useState(0);
@@ -1148,6 +1550,12 @@ export function CardPageView({
   const [rerunAutoLinkMessage, setRerunAutoLinkMessage] = useState<
     string | null
   >(null);
+  const [propLinkTargetMenu, setPropLinkTargetMenu] = useState<{
+    propId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [propLinkTargetQuery, setPropLinkTargetQuery] = useState("");
   const mediaMetaPersistAttemptedRef = useRef<Set<string>>(new Set());
 
   const PROPS_WIDTH_KEY = "mikujar-card-page-props-width";
@@ -1161,6 +1569,14 @@ export function CardPageView({
   });
   const dragStartX = useRef<number>(0);
   const dragStartWidth = useRef<number>(0);
+  const cardLinkTargetCollectionOptions = useMemo(
+    () =>
+      walkCollectionsWithPath(collections, []).map(({ col, path }) => ({
+        id: col.id,
+        label: collectionPathDisplayLabel(path, col.name),
+      })),
+    [collections]
+  );
 
   const onDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1777,6 +2193,32 @@ export function CardPageView({
   }, [showTypePicker]);
 
   useEffect(() => {
+    if (!propLinkTargetMenu) return;
+    const onDown = (e: PointerEvent) => {
+      const menu = document.querySelector("[data-prop-link-target-menu]");
+      if (menu?.contains(e.target as Node)) return;
+      setPropLinkTargetMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPropLinkTargetMenu(null);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [propLinkTargetMenu]);
+
+  const filteredCardLinkTargetCollectionOptions = useMemo(() => {
+    const q = propLinkTargetQuery.trim().toLowerCase();
+    if (!q) return cardLinkTargetCollectionOptions;
+    return cardLinkTargetCollectionOptions.filter((opt) =>
+      opt.label.toLowerCase().includes(q)
+    );
+  }, [cardLinkTargetCollectionOptions, propLinkTargetQuery]);
+
+  useEffect(() => {
     if (!attachMenu) return;
     const onDown = (e: PointerEvent) => {
       const el = document.querySelector("[data-attachment-ctx-menu]");
@@ -1816,13 +2258,21 @@ export function CardPageView({
         ? effectiveSchema.fields
         : [];
     const map = new Map<string, SchemaField>();
-    for (const f of fallbackSchemaFields) {
-      if (!f?.id?.trim()) continue;
-      map.set(f.id, f);
-    }
+    const identitySeen = new Set<string>();
     for (const f of remoteFields) {
       if (!f?.id?.trim()) continue;
       map.set(f.id, f);
+      const ident = schemaFieldIdentityKey(f);
+      if (ident !== `${f.type}::`) identitySeen.add(ident);
+    }
+    for (const f of fallbackSchemaFields) {
+      if (!f?.id?.trim()) continue;
+      const ident = schemaFieldIdentityKey(f);
+      if (!map.has(f.id) && ident !== `${f.type}::` && identitySeen.has(ident)) {
+        continue;
+      }
+      map.set(f.id, f);
+      if (ident !== `${f.type}::`) identitySeen.add(ident);
     }
     const fields =
       map.size > 0
@@ -1853,8 +2303,85 @@ export function CardPageView({
     );
   }, [effectiveSchema, fallbackSchemaFields, card, lang]);
 
+  useEffect(() => {
+    const raw = card.customProps ?? [];
+    const migrated = migrateCustomPropsList(raw);
+    const normalized = normalizeCustomPropsAgainstSchema(
+      migrated,
+      schemaFieldsForPanel,
+      collections
+    );
+    const merged = mergeLegacyNamedPropsIntoSchema(
+      normalized,
+      schemaFieldsForPanel
+    );
+    if (JSON.stringify(raw) === JSON.stringify(merged)) return;
+    setCardCustomProps(card.id, merged);
+  }, [
+    card.id,
+    customPropsKey,
+    schemaFieldsForPanel,
+    collections,
+    setCardCustomProps,
+  ]);
+
   function updateCustomProps(next: CardProperty[]) {
     setCardCustomProps(card.id, migrateCustomPropsList(next));
+  }
+
+  function upsertCardLinkTargetForProp(
+    propId: string,
+    meta: { name: string; type: CardPropertyType; options?: CardPropertyOption[] },
+    targetCollectionId?: string
+  ) {
+    const nextTargetId = targetCollectionId?.trim() ?? "";
+    const found = customProps.find((p) => p.id === propId);
+    if (found) {
+      updateCustomProps(
+        customProps.map((p) =>
+          p.id === propId
+            ? {
+                ...p,
+                name: meta.name,
+                type: meta.type,
+                options: meta.options,
+                ...(nextTargetId
+                  ? { targetCollectionId: nextTargetId }
+                  : { targetCollectionId: undefined }),
+              }
+            : p
+        )
+      );
+      return;
+    }
+    updateCustomProps([
+      ...customProps,
+      {
+        id: propId,
+        name: meta.name,
+        type: meta.type,
+        value: null,
+        options: meta.options,
+        ...(nextTargetId ? { targetCollectionId: nextTargetId } : {}),
+      },
+    ]);
+  }
+
+  function openPropLinkTargetMenu(
+    event:
+      | ReactMouseEvent<HTMLElement>
+      | SyntheticEvent<HTMLElement, MouseEvent>,
+    propId: string
+  ) {
+    const native = event.nativeEvent;
+    event.preventDefault();
+    event.stopPropagation();
+    setPropLinkTargetQuery("");
+    setPropLinkTargetMenu({
+      propId,
+      x: native.clientX,
+      y: native.clientY,
+    });
   }
 
   async function handleRerunAutoLink() {
@@ -1969,6 +2496,21 @@ export function CardPageView({
   function renderSchemaFieldRow(field: SchemaField) {
     const matchProp = customProps.find((p) => p.id === field.id);
     const editorProp = coerceSchemaPropForEditor(field, matchProp);
+    const cardLinkCreateTarget =
+      field.type === "cardLink"
+        ? resolveCardLinkCreateTarget(field.id, effectiveSchema?.autoLinkRules)
+        : null;
+    const linkedTargetLabel =
+      field.type === "cardLink"
+        ? (
+            cardLinkTargetCollectionOptions.find(
+              (opt) => opt.id === (matchProp?.targetCollectionId?.trim() ?? "")
+            )?.label ??
+            (lang === "en"
+              ? "Follow current card collection"
+              : "跟随当前卡片合集")
+          )
+        : "";
     const linkFillRef =
       field.type === "cardLink" && field.cardLinkFromEdge
         ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)
@@ -1978,8 +2520,29 @@ export function CardPageView({
         key={`schema-${field.id}`}
         className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
       >
-        <div className="card-page__prop-label-wrap">
+        <div
+          className={
+            "card-page__prop-label-wrap" +
+            (field.type === "cardLink"
+              ? " card-page__prop-label-wrap--link-target"
+              : "")
+          }
+          title={
+            field.type === "cardLink"
+              ? `${lang === "en" ? "Choose linked card target collection" : "选择这个关联字段的目标合集"}\n${linkedTargetLabel}`
+              : undefined
+          }
+        >
           <span className="card-page__prop-label">{field.name}</span>
+          {field.type === "cardLink" ? (
+            <button
+              type="button"
+              className="card-page__prop-target-hint card-page__prop-target-hint--button"
+              onClick={(e) => openPropLinkTargetMenu(e, field.id)}
+            >
+              {lang === "en" ? "Target" : "目标"}
+            </button>
+          ) : null}
         </div>
         <div className="card-page__prop-content">
           {editorProp ? (
@@ -1989,6 +2552,8 @@ export function CardPageView({
               collections={collections}
               hideCollectionDots={hideCollectionDots}
               linkFillRef={linkFillRef}
+              cardLinkCreateTarget={cardLinkCreateTarget}
+              onCreateLinkedCard={onCreateLinkedCard}
               onOpenLinkedCard={onOpenLinkedCard}
               onChangeSeedTitle={(seed) => {
                 const baseId = editorProp.id;
@@ -2092,6 +2657,108 @@ export function CardPageView({
     );
   }
 
+  function renderPropLinkTargetMenu() {
+    if (!propLinkTargetMenu || !canEdit) return null;
+    const activeProp = customProps.find((p) => p.id === propLinkTargetMenu.propId);
+    const activeSchemaField = schemaFieldsForPanel.find(
+      (f) => f.id === propLinkTargetMenu.propId && f.type === "cardLink"
+    );
+    const activeMeta = activeProp
+      ? {
+          id: activeProp.id,
+          name: activeProp.name,
+          type: activeProp.type,
+          options: activeProp.options,
+        }
+      : activeSchemaField
+        ? {
+            id: activeSchemaField.id,
+            name: activeSchemaField.name,
+            type: activeSchemaField.type as CardPropertyType,
+            options: activeSchemaField.options,
+          }
+        : null;
+    if (!activeMeta || activeMeta.type !== "cardLink") return null;
+    const currentTargetId = activeProp?.targetCollectionId?.trim() ?? "";
+    return createPortal(
+      <div
+        className="card-page__prop-target-menu"
+        data-prop-link-target-menu
+        style={{
+          left: Math.min(propLinkTargetMenu.x, window.innerWidth - 280),
+          top: Math.min(propLinkTargetMenu.y, window.innerHeight - 320),
+        }}
+      >
+        <div className="card-page__prop-target-menu-title">
+          {lang === "en" ? "Linked card target" : "关联卡目标合集"}
+        </div>
+        <div className="card-page__prop-target-menu-search-wrap">
+          <input
+            type="text"
+            className="card-page__tags-add-input card-page__prop-target-menu-search"
+            value={propLinkTargetQuery}
+            onChange={(e) => setPropLinkTargetQuery(e.target.value)}
+            placeholder={
+              lang === "en" ? "Search collections..." : "搜索合集..."
+            }
+            autoFocus
+          />
+        </div>
+        <button
+          type="button"
+          className={
+            "card-page__tags-dropdown-item" +
+            (!currentTargetId ? " is-active" : "")
+          }
+          onClick={() => {
+            upsertCardLinkTargetForProp(activeMeta.id, activeMeta, undefined);
+            setPropLinkTargetQuery("");
+            setPropLinkTargetMenu(null);
+          }}
+        >
+          <span className="card-page__prop-cardlink-option-main">
+            {lang === "en"
+              ? "Follow current card collection"
+              : "跟随当前卡片合集"}
+          </span>
+          <span className="card-page__prop-cardlink-option-sub">
+            {lang === "en"
+              ? "Use the default creation target"
+              : "沿用默认建卡目标"}
+          </span>
+        </button>
+        <div className="card-page__prop-target-menu-list">
+          {filteredCardLinkTargetCollectionOptions.length > 0 ? (
+            filteredCardLinkTargetCollectionOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={
+                  "card-page__tags-dropdown-item" +
+                  (currentTargetId === opt.id ? " is-active" : "")
+                }
+                onClick={() => {
+                  upsertCardLinkTargetForProp(activeMeta.id, activeMeta, opt.id);
+                  setPropLinkTargetQuery("");
+                  setPropLinkTargetMenu(null);
+                }}
+              >
+                <span className="card-page__prop-cardlink-option-main">
+                  {opt.label}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="card-page__tags-dropdown-empty">
+              {lang === "en" ? "No matching collections." : "没有匹配的合集。"}
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
   function renderPropsFieldsBlock() {
     const isFile = isFileCard(card);
     const titleField =
@@ -2176,16 +2843,49 @@ export function CardPageView({
                 !(isFile && hiddenFileMetaPropIds.has(prop.id))
             )
             .map((prop) => (
+            (() => {
+              const linkedTargetLabel =
+                prop.type === "cardLink"
+                  ? (
+                      cardLinkTargetCollectionOptions.find(
+                        (opt) => opt.id === (prop.targetCollectionId?.trim() ?? "")
+                      )?.label ??
+                      (lang === "en"
+                        ? "Follow current card collection"
+                        : "跟随当前卡片合集")
+                    )
+                  : "";
+              return (
             <div
               key={prop.id}
               className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
             >
-              <div className="card-page__prop-label-wrap">
+              <div
+                className={
+                  "card-page__prop-label-wrap" +
+                  (prop.type === "cardLink"
+                    ? " card-page__prop-label-wrap--link-target"
+                    : "")
+                }
+                title={
+                  prop.type === "cardLink"
+                    ? `${lang === "en" ? "Right-click to choose linked card target collection" : "右键选择这个关联属性的目标合集"}\n${linkedTargetLabel}`
+                    : undefined
+                }
+                onContextMenuCapture={(e) => {
+                  if (prop.type !== "cardLink") return;
+                  openPropLinkTargetMenu(e, prop.id);
+                }}
+              >
                 {canEdit ? (
                   <input
                     type="text"
                     className="card-page__prop-name-input"
                     defaultValue={prop.name}
+                    onContextMenuCapture={(e) => {
+                      if (prop.type !== "cardLink") return;
+                      openPropLinkTargetMenu(e, prop.id);
+                    }}
                     onBlur={(e) => {
                       const name = e.target.value.trim() || prop.name;
                       updateCustomProps(
@@ -2202,6 +2902,15 @@ export function CardPageView({
                 ) : (
                   <span className="card-page__prop-label">{prop.name}</span>
                 )}
+                {prop.type === "cardLink" ? (
+                  <button
+                    type="button"
+                    className="card-page__prop-target-hint card-page__prop-target-hint--button"
+                    onClick={(e) => openPropLinkTargetMenu(e, prop.id)}
+                  >
+                    {lang === "en" ? "Target" : "目标"}
+                  </button>
+                ) : null}
               </div>
               <div className="card-page__prop-content">
                 <PropValueEditor
@@ -2210,6 +2919,12 @@ export function CardPageView({
                   collections={collections}
                   hideCollectionDots={hideCollectionDots}
                   linkFillRef={null}
+                  cardLinkCreateTarget={
+                    prop.type === "cardLink" && prop.targetCollectionId?.trim()
+                      ? { targetCollectionId: prop.targetCollectionId.trim() }
+                      : null
+                  }
+                  onCreateLinkedCard={onCreateLinkedCard}
                   onOpenLinkedCard={onOpenLinkedCard}
                   onChangeSeedTitle={(seed) =>
                     updateCustomProps(
@@ -2249,7 +2964,11 @@ export function CardPageView({
                 </button>
               )}
             </div>
+          );
+            })()
           ))}
+
+        {renderPropLinkTargetMenu()}
 
         {(globalThis as { __MIKUJAR_SHOW_CARD_RERUN_AUTO_LINK__?: boolean })
           .__MIKUJAR_SHOW_CARD_RERUN_AUTO_LINK__ === true &&

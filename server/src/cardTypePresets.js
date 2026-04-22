@@ -405,9 +405,8 @@ export const PRESET_TREE = [
             {
               id: "sf-xhs-author",
               name: "作者",
-              type: "cardLink",
+              type: "text",
               order: 2,
-              cardLinkFromEdge: "creator",
             },
             { id: "sf-xhs-date", name: "发布日期", type: "date", order: 3 },
             {
@@ -421,21 +420,7 @@ export const PRESET_TREE = [
               ],
             },
           ],
-          autoLinkRules: [
-            {
-              ruleId: "xhs-auto-graph",
-              trigger: "on_create",
-              targets: [
-                {
-                  targetKey: "creator",
-                  targetObjectKind: "person",
-                  linkType: "creator",
-                  targetPresetTypeId: "person",
-                  syncSchemaFieldId: "sf-xhs-author",
-                },
-              ],
-            },
-          ],
+          autoLinkRules: [],
         },
       },
       {
@@ -446,28 +431,13 @@ export const PRESET_TREE = [
             {
               id: "sf-bili-author",
               name: "UP 主",
-              type: "cardLink",
+              type: "text",
               order: 2,
-              cardLinkFromEdge: "creator",
             },
             { id: "sf-bili-date", name: "发布日期", type: "date", order: 3 },
             { id: "sf-bili-duration", name: "时长", type: "number", order: 4, readonly: true },
           ],
-          autoLinkRules: [
-            {
-              ruleId: "bili-auto-graph",
-              trigger: "on_create",
-              targets: [
-                {
-                  targetKey: "creator",
-                  targetObjectKind: "person",
-                  linkType: "creator",
-                  targetPresetTypeId: "person",
-                  syncSchemaFieldId: "sf-bili-author",
-                },
-              ],
-            },
-          ],
+          autoLinkRules: [],
         },
       },
       {
@@ -736,4 +706,85 @@ export async function findPresetTypeIdBySlug(userId, slug, client) {
     [userId, slug]
   );
   return res.rows[0]?.id || null;
+}
+
+/**
+ * 按最新 PRESET_TREE 刷新所有用户的预设 card_types。
+ * 调用方负责事务（传入 client）。
+ */
+export async function refreshPresetCardTypesForAllUsers(client) {
+  if (!client) throw new Error("refreshPresetCardTypesForAllUsers: client required");
+  const flat = flattenPresets(PRESET_TREE);
+  const users = (await client.query(`SELECT id FROM users`)).rows;
+  let updated = 0;
+  let inserted = 0;
+
+  for (const u of users) {
+    const userId = u.id;
+    const slugToId = new Map();
+
+    for (const node of flat.filter((n) => n.parentSlug === null)) {
+      const existing = await client.query(
+        `SELECT id FROM card_types WHERE user_id = $1 AND preset_slug = $2`,
+        [userId, node.slug]
+      );
+      if (existing.rowCount > 0) {
+        const id = existing.rows[0].id;
+        slugToId.set(node.slug, id);
+        await client.query(
+          `UPDATE card_types
+              SET name = $2, kind = $3, schema_json = $4::jsonb,
+                  is_preset = true, parent_type_id = NULL, sort_order = $5
+            WHERE id = $1`,
+          [id, node.name, node.kind, JSON.stringify(node.schema), node.sortOrder]
+        );
+        updated += 1;
+      } else {
+        const id = newTypeId();
+        slugToId.set(node.slug, id);
+        await client.query(
+          `INSERT INTO card_types (id, user_id, parent_type_id, kind, name, schema_json, is_preset, preset_slug, sort_order)
+           VALUES ($1,$2,NULL,$3,$4,$5::jsonb,true,$6,$7)`,
+          [id, userId, node.kind, node.name, JSON.stringify(node.schema), node.slug, node.sortOrder]
+        );
+        inserted += 1;
+      }
+    }
+
+    for (const node of flat.filter((n) => n.parentSlug !== null)) {
+      const parentId = slugToId.get(node.parentSlug);
+      if (!parentId) continue;
+      const existing = await client.query(
+        `SELECT id FROM card_types WHERE user_id = $1 AND preset_slug = $2`,
+        [userId, node.slug]
+      );
+      if (existing.rowCount > 0) {
+        await client.query(
+          `UPDATE card_types
+              SET name = $2, kind = $3, schema_json = $4::jsonb,
+                  is_preset = true, parent_type_id = $5, sort_order = $6
+            WHERE id = $1`,
+          [
+            existing.rows[0].id,
+            node.name,
+            node.kind,
+            JSON.stringify(node.schema),
+            parentId,
+            node.sortOrder,
+          ]
+        );
+        updated += 1;
+      } else {
+        const id = newTypeId();
+        await client.query(
+          `INSERT INTO card_types (id, user_id, parent_type_id, kind, name, schema_json, is_preset, preset_slug, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6::jsonb,true,$7,$8)`,
+          [id, userId, parentId, node.kind, node.name, JSON.stringify(node.schema), node.slug, node.sortOrder]
+        );
+        inserted += 1;
+      }
+    }
+  }
+
+  return { users: users.length, updated, inserted };
 }

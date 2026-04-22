@@ -60,6 +60,8 @@ export type CardProperty = {
   type: CardPropertyType;
   value: string | number | boolean | string[] | CardLinkRef | CardLinkRef[] | null;
   options?: CardPropertyOption[];
+  /** cardLink 自定义属性：新建关联卡时优先放入该合集；空值表示沿用默认逻辑 */
+  targetCollectionId?: string;
   /**
    * 可选：`cardLink` 尚未指向卡片时，供服务端自动关联（如人物卡）生成初始标题。
    * 浏览器剪藏扩展写入；合并关联引用后仍可保留或手动清理。

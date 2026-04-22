@@ -28,6 +28,7 @@ import {
   migrateAttachmentsApi,
   migrateRelatedRefsJsonApi,
   migrateClipTaggedNotesApi,
+  refreshPresetCardTypesApi,
   backfillMediaThumbnailsApi,
   type BackfillMediaThumbnailsResult,
   fetchMeNotePrefs,
@@ -104,32 +105,9 @@ const CUSTOM_SCHEMA_TYPE_OPTIONS: SchemaField["type"][] = [
 
 type NoteSettingsPanel = "general" | "objectTypes" | "autoLink";
 
-const CLIP_PRESET_CUSTOM_RULE_IDS = new Set(["xhs-auto-graph", "bili-auto-graph"]);
+const CLIP_PRESET_CUSTOM_RULE_IDS = new Set<string>();
 
-const CLIP_PRESET_CUSTOM_RULE_TEMPLATES: AutoLinkRule[] = [
-  {
-    ruleId: "xhs-auto-graph",
-    trigger: "on_save",
-    sourcePresetTypeId: "post_xhs",
-    targetObjectKind: "person",
-    targetPresetTypeId: "person",
-    syncSchemaFieldId: "sf-xhs-author",
-    linkType: "creator",
-    labelZh: "小红书作者自动关联人物卡",
-    labelEn: "XHS creator auto-link to Person",
-  },
-  {
-    ruleId: "bili-auto-graph",
-    trigger: "on_save",
-    sourcePresetTypeId: "post_bilibili",
-    targetObjectKind: "person",
-    targetPresetTypeId: "person",
-    syncSchemaFieldId: "sf-bili-author",
-    linkType: "creator",
-    labelZh: "B 站 UP 主自动关联人物卡",
-    labelEn: "Bilibili uploader auto-link to Person",
-  },
-];
+const CLIP_PRESET_CUSTOM_RULE_TEMPLATES: AutoLinkRule[] = [];
 
 function flattenCollectionsForPicker(
   cols: Collection[] | undefined,
@@ -442,6 +420,14 @@ export function NoteSettingsModal({
     updated: number;
     failed: number;
   } | null>(null);
+  const [refreshPresetCardTypesLoading, setRefreshPresetCardTypesLoading] =
+    useState(false);
+  const [refreshPresetCardTypesResult, setRefreshPresetCardTypesResult] =
+    useState<{
+      users: number;
+      updated: number;
+      inserted: number;
+    } | null>(null);
   const [purgeBlankBusy, setPurgeBlankBusy] = useState(false);
   const [backfillThumbsLoading, setBackfillThumbsLoading] = useState(false);
   const [backfillThumbsResult, setBackfillThumbsResult] =
@@ -855,6 +841,19 @@ export function NoteSettingsModal({
       await onCollectionsChange?.();
     } finally {
       setSyncBuiltinSchemaLoading(false);
+    }
+  }
+
+  async function handleRefreshPresetCardTypes() {
+    if (dataMode !== "remote") return;
+    setRefreshPresetCardTypesLoading(true);
+    setRefreshPresetCardTypesResult(null);
+    try {
+      const res = await refreshPresetCardTypesApi();
+      setRefreshPresetCardTypesResult(res);
+      await onCollectionsChange?.();
+    } finally {
+      setRefreshPresetCardTypesLoading(false);
     }
   }
 
@@ -1920,6 +1919,40 @@ export function NoteSettingsModal({
               {syncBuiltinSchemaLoading
                 ? c.noteSettingsSyncBuiltinSchemaBusy
                 : c.noteSettingsSyncBuiltinSchemaBtn}
+            </button>
+          </div>
+        ) : null}
+
+        {showRerunAndMigrationTools && dataMode === "remote" ? (
+          <div className="note-settings-modal__migrate-section">
+            <p className="note-settings-modal__label">
+              {lang === "en" ? "Refresh Cloud Preset Types" : "刷新云端预设类型"}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {lang === "en"
+                ? "Apply the latest built-in preset schema to cloud card types. Use this after changing default preset fields or auto-create rules."
+                : "把当前代码里的内置预设 schema 同步到云端 card_types。修改了默认字段或自动建卡规则后，可点这里执行一次迁移。"}
+            </p>
+            {refreshPresetCardTypesResult ? (
+              <p className="note-settings-modal__migrate-result">
+                {lang === "en"
+                  ? `Done: ${refreshPresetCardTypesResult.users} users, ${refreshPresetCardTypesResult.updated} updated, ${refreshPresetCardTypesResult.inserted} inserted.`
+                  : `完成：处理 ${refreshPresetCardTypesResult.users} 个用户，更新 ${refreshPresetCardTypesResult.updated} 条预设类型，新增 ${refreshPresetCardTypesResult.inserted} 条。`}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={refreshPresetCardTypesLoading}
+              onClick={() => void handleRefreshPresetCardTypes()}
+            >
+              {refreshPresetCardTypesLoading
+                ? lang === "en"
+                  ? "Refreshing…"
+                  : "刷新中…"
+                : lang === "en"
+                  ? "Refresh Preset Types"
+                  : "刷新预设类型"}
             </button>
           </div>
         ) : null}

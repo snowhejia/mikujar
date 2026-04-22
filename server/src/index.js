@@ -99,7 +99,8 @@ import {
   broadcastCollectionsChanged,
   subscribeCollectionsSync,
 } from "./syncFanout.js";
-import { pingDb, closePool, query as dbQuery } from "./db.js";
+import { pingDb, closePool, query as dbQuery, getPool } from "./db.js";
+import { refreshPresetCardTypesForAllUsers } from "./cardTypePresets.js";
 import {
   completeRegistration,
   sendRegistrationCode,
@@ -1097,6 +1098,21 @@ function v2GoneRoute(_req, res) {
 app.post("/api/admin/migrate-attachments", collectionsWriterMw, v2GoneRoute);
 app.post("/api/admin/migrate-related-refs-json", collectionsWriterMw, v2GoneRoute);
 app.post("/api/admin/migrate-clip-tagged-notes", collectionsWriterMw, v2GoneRoute);
+app.post("/api/admin/refresh-preset-card-types", collectionsWriterMw, async (_req, res) => {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const out = await refreshPresetCardTypesForAllUsers(client);
+    await client.query("COMMIT");
+    res.json(out);
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: e.message || "Refresh preset card types failed" });
+  } finally {
+    client.release();
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 「补缩略图」：对当前用户缺 thumbnailUrl / durationSec / sizeBytes 的附件

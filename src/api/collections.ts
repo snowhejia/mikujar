@@ -504,6 +504,26 @@ export async function fetchCardEffectiveSchema(cardId: string): Promise<{
   }
 }
 
+/** GET /api/preset-collection/:presetTypeId — 查询某个预设类型对应的合集 id */
+export async function fetchPresetCollectionIdApi(
+  presetTypeId: string
+): Promise<string | null> {
+  const base = apiBase();
+  const pid = presetTypeId.trim();
+  if (!pid) return null;
+  try {
+    const r = await fetch(
+      `${base}/api/preset-collection/${encodeURIComponent(pid)}`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    const data = (await r.json()) as { id?: string } | null;
+    return typeof data?.id === "string" && data.id.trim() ? data.id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** POST /api/admin/enable-preset-type — 启用预设类型合集（幂等） */
 export async function enablePresetTypeApi(data: {
   presetTypeId: string;
@@ -569,6 +589,32 @@ export async function migrateRelatedRefsJsonApi(): Promise<{
     );
     if (!r.ok) return null;
     return (await r.json()) as { withJson: number; migrated: number };
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/admin/refresh-preset-card-types — 用最新预设定义刷新云端 preset card_types */
+export async function refreshPresetCardTypesApi(): Promise<{
+  users: number;
+  updated: number;
+  inserted: number;
+} | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/admin/refresh-preset-card-types`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut(),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as {
+      users: number;
+      updated: number;
+      inserted: number;
+    };
   } catch {
     return null;
   }

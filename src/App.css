@@ -12231,7 +12231,7 @@ body.app--card-page-open .app {
 .card-page__prop-cardlink-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   width: 100%;
   min-width: 0;
@@ -12241,6 +12241,79 @@ body.app--card-page-open .app {
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
+}
+
+.card-page__prop-cardlink-side {
+  flex: 0 1 120px;
+  min-width: 0;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-page__prop-cardlink-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.card-page__prop-cardlink-pick {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(55, 53, 47, 0.08);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  color: rgba(55, 53, 47, 0.78);
+}
+
+.card-page__prop-cardlink-pick:hover {
+  background: rgba(55, 53, 47, 0.12);
+}
+
+.card-page__prop-cardlink-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(320px, calc(100vw - 48px));
+  box-sizing: border-box;
+}
+
+.card-page__prop-cardlink-search {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.card-page__tags-panel--single-hit .card-page__prop-cardlink-row {
+  min-height: var(--card-page-prop-value-h, 40px);
+}
+
+.card-page__prop-cardlink-option-main,
+.card-page__prop-cardlink-option-sub {
+  display: block;
+  min-width: 0;
+}
+
+.card-page__prop-cardlink-option-main {
+  font-size: 0.875rem;
+  color: rgba(55, 53, 47, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-page__prop-cardlink-option-sub {
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-page__prop-cardlink-clear {
@@ -12908,6 +12981,12 @@ body.app--card-page-open .app {
   min-width: 0;
 }
 
+.card-page__prop-label-wrap--link-target {
+  flex-basis: 126px;
+  gap: 6px;
+  cursor: context-menu;
+}
+
 .card-page__prop-name-input {
   flex: 1 1 auto;
   font-size: 0.875rem;
@@ -12922,6 +13001,61 @@ body.app--card-page-open .app {
 
 .card-page__prop-name-input:focus {
   color: rgba(55, 53, 47, 0.85);
+}
+
+.card-page__prop-target-menu {
+  position: fixed;
+  z-index: 1200;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(320px, calc(100vh - 24px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 252, 247, 0.98);
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.card-page__prop-target-menu-title {
+  padding: 10px 12px 6px;
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.card-page__prop-target-menu-search-wrap {
+  padding: 0 10px 8px;
+}
+
+.card-page__prop-target-menu-search {
+  width: 100%;
+}
+
+.card-page__prop-target-menu-list {
+  overflow: auto;
+  padding-bottom: 6px;
+}
+
+.card-page__prop-target-hint {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: rgba(55, 53, 47, 0.42);
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 999px;
+  padding: 3px 6px;
+  background: rgba(55, 53, 47, 0.04);
+}
+
+.card-page__prop-target-hint--button {
+  cursor: pointer;
+}
+
+.card-page__prop-target-hint--button:hover {
+  color: rgba(55, 53, 47, 0.72);
+  background: rgba(55, 53, 47, 0.08);
 }
 
 /* 属性值区域 */
@@ -13431,6 +13565,7 @@ body.app--card-page-open .app {
 .card-page__prop-type-picker {
   position: relative;
   flex-shrink: 0;
+  z-index: 20;
 }
 
 /* 属性类型选择浮层 */
@@ -13449,7 +13584,17 @@ body.app--card-page-open .app {
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
-  z-index: 200;
+  z-index: 1000;
+  isolation: isolate;
+}
+
+.card-page__prop-type-menu::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  z-index: -1;
 }
 
 .card-page__prop-type-option {

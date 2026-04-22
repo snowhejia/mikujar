@@ -20,6 +20,7 @@ import {
   addCardPlacementApi,
   updateCardApi,
   fetchCollectionsFromApi,
+  fetchPresetCollectionIdApi,
   createFileCardForNoteMediaApi,
   removeCardFromCollectionApi,
   fetchMeNotePrefs,
@@ -5880,6 +5881,108 @@ export default function App() {
     return c ? { colId: cardPageCard.colId, card: c } : null;
   }, [cardPageCard, collections]);
 
+  const createLinkedCardFromProperty = useCallback(
+    async (params: {
+      title: string;
+      targetCollectionId?: string;
+      targetPresetTypeId?: string;
+      targetObjectKind?: string;
+    }): Promise<{ colId: string; cardId: string } | null> => {
+      if (!canEdit || !cardPageCardLive) return null;
+      const title = params.title.trim();
+      if (!title) return null;
+
+      let targetColId = params.targetCollectionId?.trim() ?? "";
+      if (!targetColId && params.targetPresetTypeId?.trim()) {
+        const localMatch = findCollectionByPresetType(
+          collections,
+          params.targetPresetTypeId.trim()
+        );
+        targetColId = localMatch?.id ?? "";
+      }
+      if (
+        !targetColId &&
+        dataMode === "remote" &&
+        params.targetPresetTypeId?.trim()
+      ) {
+        targetColId =
+          (await fetchPresetCollectionIdApi(params.targetPresetTypeId.trim())) ??
+          "";
+      }
+      if (!targetColId || !findCollectionById(collections, targetColId)) {
+        targetColId = cardPageCardLive.colId;
+      }
+
+      const now = new Date();
+      const minutesOfDay = now.getHours() * 60 + now.getMinutes();
+      const provisionalId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const newCard: NoteCard = {
+        id: provisionalId,
+        text: noteBodyToHtml(title),
+        minutesOfDay,
+        addedOn: localDateString(now),
+        ...(params.targetObjectKind?.trim()
+          ? { objectKind: params.targetObjectKind.trim() }
+          : {}),
+      };
+
+      flushSync(() => {
+        setCollections((prev) =>
+          mapCollectionById(prev, targetColId, (col) => ({
+            ...col,
+            cards: [newCard, ...col.cards],
+          }))
+        );
+      });
+
+      if (dataMode === "local") {
+        return { colId: targetColId, cardId: provisionalId };
+      }
+
+      const created = await createCardApi(targetColId, newCard, {
+        insertAtStart: true,
+      });
+      if (!created) {
+        flushSync(() => {
+          setCollections((prev) =>
+            mapCollectionById(prev, targetColId, (col) => ({
+              ...col,
+              cards: col.cards.filter((c) => c.id !== provisionalId),
+            }))
+          );
+        });
+        return null;
+      }
+
+      if (created.id !== provisionalId) {
+        flushSync(() => {
+          setCollections((prev) =>
+            mapCollectionById(prev, targetColId, (col) => ({
+              ...col,
+              cards: col.cards.map((c) =>
+                c.id === provisionalId ? { ...created } : c
+              ),
+            }))
+          );
+        });
+      } else {
+        flushSync(() => {
+          setCollections((prev) =>
+            mapCollectionById(prev, targetColId, (col) => ({
+              ...col,
+              cards: col.cards.map((c) =>
+                c.id === provisionalId ? { ...created } : c
+              ),
+            }))
+          );
+        });
+      }
+
+      return { colId: targetColId, cardId: created.id };
+    },
+    [canEdit, cardPageCardLive, collections, dataMode]
+  );
+
   useLayoutEffect(() => {
     let k = "note";
     if (allNotesViewActive || remindersViewActive) {
@@ -7779,6 +7882,7 @@ export default function App() {
               onOpenLinkedCard={(targetColId, targetCardId) =>
                 setCardPageCard({ colId: targetColId, cardId: targetCardId })
               }
+              onCreateLinkedCard={createLinkedCardFromProperty}
               onAfterRemoteAutoLink={
                 dataMode === "remote" && canEdit
                   ? async () => {

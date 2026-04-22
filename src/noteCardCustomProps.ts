@@ -64,6 +64,17 @@ export function migrateCustomPropsList(props: CardProperty[]): CardProperty[] {
         x = { ...x, value: null };
       }
     }
+    if (x.type === "cardLink") {
+      const targetCollectionId =
+        typeof x.targetCollectionId === "string"
+          ? x.targetCollectionId.trim()
+          : "";
+      if (targetCollectionId !== (x.targetCollectionId ?? "")) {
+        x = targetCollectionId
+          ? { ...x, targetCollectionId }
+          : { ...x, targetCollectionId: undefined };
+      }
+    }
     if (x.type === "cardLinks" && Array.isArray(x.value)) {
       const seen = new Set<string>();
       const cleaned: CardLinkRef[] = [];

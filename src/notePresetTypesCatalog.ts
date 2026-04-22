@@ -502,9 +502,8 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
           {
             id: "sf-xhs-author",
             name: "作者",
-            type: "cardLink",
+            type: "text",
             order: 2,
-            cardLinkFromEdge: "creator",
           },
           { id: "sf-xhs-date", name: "发布日期", type: "date", order: 3 },
           {
@@ -518,29 +517,7 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
             ],
           },
         ],
-        autoLinkRules: [
-          {
-            ruleId: "xhs-auto-graph",
-            trigger: "on_create",
-            targets: [
-              {
-                targetKey: "creator",
-                targetObjectKind: "person",
-                linkType: "creator",
-                targetPresetTypeId: "person",
-                syncSchemaFieldId: "sf-xhs-author",
-              },
-              {
-                targetKey: "source",
-                targetObjectKind: "clip_bookmark",
-                linkType: "source",
-                targetPresetTypeId: "clip_bookmark",
-              },
-            ],
-            labelZh: "自动关联作者与链接对象",
-            labelEn: "Auto-link creator and URL card",
-          },
-        ],
+        autoLinkRules: [],
       },
       {
         id: "post_bilibili",
@@ -552,36 +529,13 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
           {
             id: "sf-bili-author",
             name: "UP 主",
-            type: "cardLink",
+            type: "text",
             order: 2,
-            cardLinkFromEdge: "creator",
           },
           { id: "sf-bili-date", name: "发布日期", type: "date", order: 3 },
           { id: "sf-bili-duration", name: "时长", type: "number", order: 4, readonly: true },
         ],
-        autoLinkRules: [
-          {
-            ruleId: "bili-auto-graph",
-            trigger: "on_create",
-            targets: [
-              {
-                targetKey: "creator",
-                targetObjectKind: "person",
-                linkType: "creator",
-                targetPresetTypeId: "person",
-                syncSchemaFieldId: "sf-bili-author",
-              },
-              {
-                targetKey: "source",
-                targetObjectKind: "clip_bookmark",
-                linkType: "source",
-                targetPresetTypeId: "clip_bookmark",
-              },
-            ],
-            labelZh: "自动关联 UP 主与链接对象",
-            labelEn: "Auto-link uploader and URL card",
-          },
-        ],
+        autoLinkRules: [],
       },
       {
         id: "clip_wechat",

@@ -14,7 +14,8 @@
 
 .app {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  /* 左侧窄 rail（56px） + 主侧栏（260px） + 主内容 */
+  grid-template-columns: 56px 260px 1fr;
   /* 单行占满视口高度，避免右侧笔记撑高整行导致侧栏被拉长 */
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
@@ -1466,6 +1467,100 @@
   cursor: grabbing;
 }
 
+/* —— 左侧 rail（纯图标主导航） —— */
+.rail {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 12px;
+  border-right: 1px solid rgba(55, 53, 47, 0.07);
+  background: #f6f6f4;
+  overflow-y: auto;
+  overflow-x: visible;
+  scrollbar-width: none;
+}
+.rail::-webkit-scrollbar {
+  display: none;
+}
+.rail__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+.rail__rule {
+  width: 28px;
+  border: none;
+  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  margin: 6px 0;
+}
+.rail__item {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.62);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.rail__item:hover {
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.88);
+}
+.rail__item:focus-visible {
+  outline: 2px solid rgba(35, 131, 226, 0.5);
+  outline-offset: 1px;
+}
+.rail__item.is-active {
+  color: rgba(55, 53, 47, 0.92);
+  background: rgba(55, 53, 47, 0.08);
+}
+.rail__item.is-active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgba(35, 131, 226, 0.82);
+}
+.rail__icon {
+  display: block;
+}
+.rail__tip {
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: rgba(55, 53, 47, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease 0.28s;
+  z-index: 40;
+}
+.rail__item:hover .rail__tip,
+.rail__item:focus-visible .rail__tip {
+  opacity: 1;
+}
+
 /* —— 侧边栏（Notion 式：浅底、分区小标题、圆角选中、彩色圆点） —— */
 .sidebar {
   position: relative;
@@ -1483,6 +1578,62 @@
   padding: 10px 8px 16px;
   border-right: 1px solid rgba(55, 53, 47, 0.09);
   background: #fbfbfa;
+}
+
+/* —— 概览主侧栏（rail 选中 overview 时展示） —— */
+.sidebar__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 4px 10px;
+}
+.sidebar__overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar__overview-heading {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.5);
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+}
+.sidebar__overview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sidebar__overview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.82);
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+  min-height: 30px;
+}
+.sidebar__overview-row:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+.sidebar__overview-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar__overview-icon {
+  flex: 0 0 auto;
+}
+.sidebar__empty-hint {
+  padding: 12px 10px;
+  color: rgba(55, 53, 47, 0.42);
+  font-size: 0.85rem;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -6841,6 +6992,11 @@ div.card__text--readonly:not(.card__text--preview) {
     --mobile-dock-pad-y: 8px;
     --mobile-dock-inner-max-h: 56px;
     --scroll-to-bottom-size: 44px;
+  }
+
+  /* 移动端窄屏：phase 1 先藏 rail，保持原抽屉交互；phase 2 再迁移到底部 tab bar */
+  .rail {
+    display: none;
   }
 
   /* 小屏 .app 被改成 block，会盖掉 .app--boot 的 flex，加载态需重新居中 */

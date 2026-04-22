@@ -262,7 +262,10 @@ export type CollectionIconShape =
   | "music"
   | "cloud"
   | "skull"
-  | "fire";
+  | "fire"
+  | "calendar"
+  | "link"
+  | "trash";
 
 export type Collection = {
   id: string;

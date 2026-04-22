@@ -3959,6 +3959,7 @@ export default function App() {
       files: File[]
     ): Promise<NoteMediaItem[]> => {
       const out: NoteMediaItem[] = [];
+      const uploadWarnings: string[] = [];
       if (files.length === 0) return out;
       setUploadBusyCardId(cardId);
       setUploadCardProgress(null);
@@ -4015,6 +4016,24 @@ export default function App() {
           );
           addMediaItemToCard(colId, cardId, item);
           out.push(item);
+          if (Array.isArray(r.warnings)) {
+            for (const w of r.warnings) {
+              if (w.code === "thumbnail_missing") {
+                uploadWarnings.push(file.name || w.name || "");
+              }
+            }
+          }
+        }
+        if (uploadWarnings.length > 0) {
+          const names = [...new Set(uploadWarnings.filter(Boolean))];
+          const detail = names.slice(0, 3).join("、");
+          const more =
+            names.length > 3 ? `\n…以及另外 ${names.length - 3} 个文件。` : "";
+          window.alert(
+            `${c.warnUploadThumbMissing(uploadWarnings.length)}${
+              detail ? `\n${detail}` : ""
+            }${more}`
+          );
         }
         return out;
       } catch (err) {
@@ -4027,7 +4046,14 @@ export default function App() {
         setUploadCardProgress(null);
       }
     },
-    [addMediaItemToCard, dataMode, c.errLocalFolder, c.errBrowserBlob, c.errUpload]
+    [
+      addMediaItemToCard,
+      dataMode,
+      c.errLocalFolder,
+      c.errBrowserBlob,
+      c.errUpload,
+      c.warnUploadThumbMissing,
+    ]
   );
 
   const beginCardMediaUpload = useCallback(

@@ -22,6 +22,7 @@ export type AppChrome = {
   errLocalFolder: string;
   errBrowserBlob: string;
   errUpload: string;
+  warnUploadThumbMissing: (n: number) => string;
   /** 附件右键「创建文件卡」失败 */
   errCreateFileCard: string;
   errRenameSync: string;
@@ -376,6 +377,8 @@ const zh: AppChrome = {
   errBrowserBlob:
     "浏览器怀里塞不下这个附件…换张小一点的或用桌面版更稳喔～",
   errUpload: "附件上传翻车啦，再试一次？",
+  warnUploadThumbMissing: (n: number) =>
+    `有 ${n} 个附件上传成功了，但缩略图没生成；可稍后再点一次“补缩略图”。`,
   errCreateFileCard: "创建文件卡没成功，稍后再试？",
   errRenameSync: "名字没同步上…刷新一下可能变回旧的喔～",
   errCreateCol: "新合集没建成功…看看网络或登录后再试？",
@@ -713,6 +716,8 @@ const en: AppChrome = {
   errLocalFolder: "Couldn’t save to the local folder. Retry?",
   errBrowserBlob: "File too large for the browser — use a smaller file or the desktop app.",
   errUpload: "Upload failed. Try again?",
+  warnUploadThumbMissing: (n: number) =>
+    `${n} uploaded file(s) are missing thumbnails. You can run “Backfill thumbnails” later.`,
   errCreateFileCard: "Couldn’t create file card. Try again?",
   errRenameSync: "Name didn’t sync — refresh may show the old one.",
   errCreateCol: "Couldn’t create collection. Check network or sign in.",

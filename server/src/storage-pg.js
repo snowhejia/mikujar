@@ -1013,9 +1013,37 @@ function normalizeIncomingMediaItem(raw) {
       : typeof bytesRaw === "string" && /^\d+$/.test(bytesRaw.trim())
         ? Number(bytesRaw.trim())
         : null;
+  const durationRaw = raw.durationSec;
+  const durationSec =
+    (kind === "audio" || kind === "video") &&
+    typeof durationRaw === "number" &&
+    Number.isFinite(durationRaw) &&
+    durationRaw >= 0 &&
+    durationRaw <= 86400000
+      ? Math.round(durationRaw)
+      : null;
+  const widthRaw = raw.widthPx;
+  const heightRaw = raw.heightPx;
+  const widthPx =
+    (kind === "image" || kind === "video") &&
+    typeof widthRaw === "number" &&
+    Number.isFinite(widthRaw) &&
+    widthRaw > 0 &&
+    widthRaw <= 32767
+      ? Math.round(widthRaw)
+      : null;
+  const heightPx =
+    (kind === "image" || kind === "video") &&
+    typeof heightRaw === "number" &&
+    Number.isFinite(heightRaw) &&
+    heightRaw > 0 &&
+    heightRaw <= 32767
+      ? Math.round(heightRaw)
+      : null;
   return {
     url,
     slug,
+    kind,
     name: typeof raw.name === "string" ? raw.name : "",
     thumbnailUrl: typeof raw.thumbnailUrl === "string" ? raw.thumbnailUrl : "",
     coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl : "",
@@ -1026,7 +1054,94 @@ function normalizeIncomingMediaItem(raw) {
           ? raw.coverThumbUrl
           : "",
     bytes,
+    durationSec,
+    widthPx,
+    heightPx,
   };
+}
+
+function derivedFileCardPropsFromMediaItem(item) {
+  const props = [];
+  if (
+    item.kind === "video" &&
+    typeof item.durationSec === "number" &&
+    Number.isFinite(item.durationSec) &&
+    item.durationSec >= 0
+  ) {
+    props.push({
+      id: "sf-vid-duration-sec",
+      name: "时长（秒）",
+      type: "number",
+      value: Math.round(item.durationSec),
+    });
+  } else if (
+    item.kind === "audio" &&
+    typeof item.durationSec === "number" &&
+    Number.isFinite(item.durationSec) &&
+    item.durationSec >= 0
+  ) {
+    props.push({
+      id: "sf-aud-duration-sec",
+      name: "时长（秒）",
+      type: "number",
+      value: Math.round(item.durationSec),
+    });
+  }
+  if (
+    (item.kind === "image" || item.kind === "video") &&
+    typeof item.widthPx === "number" &&
+    Number.isFinite(item.widthPx) &&
+    item.widthPx > 0 &&
+    typeof item.heightPx === "number" &&
+    Number.isFinite(item.heightPx) &&
+    item.heightPx > 0
+  ) {
+    const value = `${Math.round(item.widthPx)}x${Math.round(item.heightPx)}`;
+    props.push({
+      id: "sf-file-resolution",
+      name: "分辨率",
+      type: "text",
+      value,
+    });
+    if (item.kind === "video") {
+      props.push({
+        id: "sf-vid-resolution",
+        name: "分辨率",
+        type: "text",
+        value,
+      });
+    }
+  }
+  return props;
+}
+
+async function mergeFileCardDerivedProps(q, fileCardId, item) {
+  const nextProps = derivedFileCardPropsFromMediaItem(item);
+  if (nextProps.length === 0) return;
+  const cur = await q(`SELECT custom_props FROM cards WHERE id = $1`, [fileCardId]);
+  const arr = Array.isArray(cur.rows[0]?.custom_props)
+    ? cur.rows[0].custom_props.slice()
+    : [];
+  let changed = false;
+  for (const np of nextProps) {
+    const existing = arr.find((x) => x?.id === np.id);
+    if (!existing) {
+      arr.push(np);
+      changed = true;
+    } else if (
+      existing.value === null ||
+      existing.value === undefined ||
+      existing.value === ""
+    ) {
+      Object.assign(existing, np);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  await q(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+    fileCardId,
+    JSON.stringify(arr),
+  ]);
 }
 
 function newCardId(prefix = "card") {
@@ -1079,6 +1194,7 @@ async function insertFileCard(q, userId, item) {
       item.bytes,
     ]
   );
+  await mergeFileCardDerivedProps(q, fileCardId, item);
   return fileCardId;
 }
 
@@ -1134,6 +1250,7 @@ async function syncMediaAttachments(q, userId, noteCardId, mediaArr) {
           it.bytes,
         ]
       );
+      await mergeFileCardDerivedProps(q, fileCardId, it);
     } else {
       fileCardId = await insertFileCard(q, userId, it);
     }

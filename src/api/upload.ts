@@ -59,6 +59,11 @@ export type UploadMediaResult = {
   /** 图片或视频像素宽（与 heightPx 成对） */
   widthPx?: number;
   heightPx?: number;
+  warnings?: Array<{
+    code: "thumbnail_missing";
+    kind: NoteMediaKind;
+    name?: string;
+  }>;
 };
 
 export type UploadCardMediaOptions = {
@@ -141,6 +146,7 @@ async function finalizeAfterUpload(
   durationSec?: number;
   widthPx?: number;
   heightPx?: number;
+  warnings?: UploadMediaResult["warnings"];
 }> {
   let coverUrl: string | undefined;
   let durationSec: number | undefined;
@@ -175,6 +181,7 @@ async function finalizeAfterUpload(
   }
 
   let thumbnailUrl: string | undefined;
+  const warnings: UploadMediaResult["warnings"] = [];
   if (kind === "video") {
     try {
       const fin = await fetch(
@@ -279,7 +286,7 @@ async function finalizeAfterUpload(
     }
   }
 
-  return { coverUrl, thumbnailUrl, durationSec, widthPx, heightPx };
+  return { coverUrl, thumbnailUrl, durationSec, widthPx, heightPx, warnings };
 }
 
 /**
@@ -477,6 +484,7 @@ export async function uploadCardMedia(
 
   const { coverUrl, thumbnailUrl, durationSec, widthPx, heightPx } =
     await finalizeAfterUpload(base, key, kind);
+  const outWarnings: NonNullable<UploadMediaResult["warnings"]> = [];
 
   /** 若服务端 finalize-video 没返回 thumbnailUrl（多半是没装 ffmpeg / 报错），
    *  在浏览器里自己截第一帧并 PUT 上去，至少保证新视频有个能缓存的缩略图。 */
@@ -491,6 +499,16 @@ export async function uploadCardMedia(
     } catch {
       /* 忽略：上传失败不阻塞主流程 */
     }
+  }
+  const shouldWarnMissingThumb =
+    (kind === "image" || kind === "video") ||
+    (kind === "file" && /\.pdf$/i.test(file.name || ""));
+  if (shouldWarnMissingThumb && !effectiveThumbnailUrl) {
+    outWarnings.push({
+      code: "thumbnail_missing",
+      kind,
+      name: file.name || undefined,
+    });
   }
 
   const out: UploadMediaResult = {
@@ -520,6 +538,7 @@ export async function uploadCardMedia(
     out.widthPx = wPx;
     out.heightPx = hPx;
   }
+  if (outWarnings.length > 0) out.warnings = outWarnings;
   return out;
 }
 

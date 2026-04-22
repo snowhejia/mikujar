@@ -1689,6 +1689,35 @@
   font-size: 0.85rem;
 }
 
+.sidebar__overview-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+.sidebar__overview-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 8px;
+  border-left: 3px solid rgba(55, 53, 47, 0.15);
+  background: rgba(55, 53, 47, 0.04);
+}
+.sidebar__overview-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(55, 53, 47, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+.sidebar__overview-stat-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(55, 53, 47, 0.55);
+  letter-spacing: 0.02em;
+}
+
 .sidebar::-webkit-scrollbar {
   display: none;
 }

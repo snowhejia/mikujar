@@ -20,6 +20,17 @@ function lookupRailItem(key: RailKey) {
   return RAIL_ITEMS.find((it) => it.key === key);
 }
 
+export type OverviewStats = {
+  /** 笔记（note preset 子树 + 未归类）的卡片总数 */
+  notes: number;
+  /** 整棵树里 isFileCard 的卡片数 */
+  files: number;
+  /** 合集节点数（排除虚拟未归类） */
+  collections: number;
+  /** 当前全部待办条目 */
+  reminders: number;
+};
+
 export type SidebarOverviewPanelProps = {
   onPick: (key: RailKey, opts?: { collectionId?: string }) => void;
   /** 扁平化的顶层合集列表（只取前 N 个展示，作为「最近合集」占位） */
@@ -28,6 +39,7 @@ export type SidebarOverviewPanelProps = {
     files: boolean;
     archived: boolean;
   };
+  stats: OverviewStats;
 };
 
 /**
@@ -37,8 +49,25 @@ export type SidebarOverviewPanelProps = {
 export function SidebarOverviewPanel(
   props: SidebarOverviewPanelProps
 ): ReactNode {
-  const { onPick, recentCollections, availability } = props;
+  const { onPick, recentCollections, availability, stats } = props;
   const ui = useAppChrome();
+
+  const statCards = [
+    { key: "notes" as const, label: ui.overviewStatNotes, value: stats.notes, color: "#E88368" },
+    { key: "files" as const, label: ui.overviewStatFiles, value: stats.files, color: "#7F8F4F" },
+    {
+      key: "collections" as const,
+      label: ui.overviewStatCollections,
+      value: stats.collections,
+      color: "#8CB1D9",
+    },
+    {
+      key: "reminders" as const,
+      label: ui.overviewStatReminders,
+      value: stats.reminders,
+      color: "#B57A9A",
+    },
+  ];
 
   const make = (key: RailKey, label: string, show: boolean): QuickLink | null => {
     const src = lookupRailItem(key);
@@ -57,6 +86,24 @@ export function SidebarOverviewPanel(
 
   return (
     <div className="sidebar__overview" role="listbox" aria-label={ui.railOverview}>
+      <div className="sidebar__overview-section">
+        <div className="sidebar__overview-heading">
+          {ui.overviewStatsHeading}
+        </div>
+        <div className="sidebar__overview-stats">
+          {statCards.map((s) => (
+            <div
+              key={s.key}
+              className="sidebar__overview-stat"
+              style={{ borderLeftColor: s.color }}
+            >
+              <span className="sidebar__overview-stat-value">{s.value}</span>
+              <span className="sidebar__overview-stat-label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="sidebar__overview-section">
         <div className="sidebar__overview-heading">
           {ui.overviewQuickLinksHeading}

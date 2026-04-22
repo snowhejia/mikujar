@@ -348,6 +348,11 @@ export type AppChrome = {
   railCollapse: string;
   overviewQuickLinksHeading: string;
   overviewRecentCollectionsHeading: string;
+  overviewStatsHeading: string;
+  overviewStatNotes: string;
+  overviewStatFiles: string;
+  overviewStatCollections: string;
+  overviewStatReminders: string;
 };
 
 const zh: AppChrome = {
@@ -686,6 +691,11 @@ const zh: AppChrome = {
   railCollapse: "收起主导航",
   overviewQuickLinksHeading: "快速入口",
   overviewRecentCollectionsHeading: "最近合集",
+  overviewStatsHeading: "数据统计",
+  overviewStatNotes: "笔记",
+  overviewStatFiles: "文件",
+  overviewStatCollections: "合集",
+  overviewStatReminders: "待办",
 };
 
 const en: AppChrome = {
@@ -1034,6 +1044,11 @@ const en: AppChrome = {
   railCollapse: "Collapse primary nav",
   overviewQuickLinksHeading: "Quick links",
   overviewRecentCollectionsHeading: "Recent collections",
+  overviewStatsHeading: "At a glance",
+  overviewStatNotes: "Notes",
+  overviewStatFiles: "Files",
+  overviewStatCollections: "Collections",
+  overviewStatReminders: "To-dos",
 };
 
 export function getAppChrome(lang: LoginUiLang): AppChrome {

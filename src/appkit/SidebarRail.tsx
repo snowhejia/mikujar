@@ -180,7 +180,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
   },
   {
     key: "trash",
-    icon: "wave",
+    icon: "crescent",
     labelKey: "railTrash",
     color: "#E3A0AB", // 粉 · rose
     group: "system",

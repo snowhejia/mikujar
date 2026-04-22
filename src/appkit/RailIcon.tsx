@@ -241,6 +241,16 @@ const SHAPES = {
       <path d="M12 1.5 C 13 7 14 10 16 11 C 18 11.5 20.5 12 22.5 12 C 20.5 12 18 12.5 16 13 C 14 14 13 17 12 22.5 C 11 17 10 14 8 13 C 6 12.5 3.5 12 1.5 12 C 3.5 12 6 11.5 8 11 C 10 10 11 7 12 1.5 Z" />
     ),
   },
+  crescent: {
+    color: PALETTE.pink,
+    // 胖月牙：外大圆减去偏右的内圆，开口朝右
+    body: (
+      <path
+        fillRule="evenodd"
+        d="M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2 Z M 15 5.5 A 7.5 7.5 0 1 1 15 18.5 A 7.5 7.5 0 1 1 15 5.5 Z"
+      />
+    ),
+  },
 } satisfies Record<string, ShapeDef>;
 
 export type RailIconKey = keyof typeof SHAPES;

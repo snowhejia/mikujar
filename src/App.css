@@ -8691,6 +8691,110 @@ div.card__text--readonly:not(.card__text--preview) {
   gap: 10px;
 }
 
+/* ── 合集设置：形状 / 颜色 分节 ─────────────────────────────── */
+.collection-template-modal__section {
+  margin-top: 14px;
+}
+
+.collection-template-modal__section-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.55);
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+.collection-template-modal__shape-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collection-template-modal__shape-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.collection-template-modal__shape-btn:hover {
+  border-color: rgba(55, 53, 47, 0.3);
+  background: rgba(55, 53, 47, 0.04);
+}
+
+.collection-template-modal__shape-btn.is-active {
+  border-color: rgba(35, 131, 226, 0.9);
+  background: rgba(35, 131, 226, 0.08);
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.12);
+}
+
+.collection-template-modal__color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.collection-template-modal__color-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px rgba(55, 53, 47, 0.12);
+  cursor: pointer;
+  transition:
+    border-color 0.1s ease,
+    transform 0.1s ease,
+    box-shadow 0.12s ease;
+}
+
+.collection-template-modal__color-swatch:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 1px rgba(55, 53, 47, 0.28);
+}
+
+.collection-template-modal__color-swatch.is-active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.75);
+}
+
+.collection-template-modal__color-input {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  margin-left: 2px;
+  border: 1px dashed rgba(55, 53, 47, 0.24);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  /* 抹平 WebKit 原生 color 选择器里巨大的色块内边距 */
+}
+
+.collection-template-modal__color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.collection-template-modal__color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.collection-template-modal__color-input::-moz-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
 /* ── Attachment migration section ──────────────────────────── */
 
 .note-settings-modal__migrate-section {

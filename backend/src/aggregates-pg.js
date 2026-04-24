@@ -187,9 +187,9 @@ export async function getOverviewSummary(userIdIn, { todayYmd, weekStartYmd }) {
       [userId]
     ),
 
-    /* 7. 最近 6 段带封面的音频（file_audio 卡 + cover_url） */
+    /* 7. 最近 6 段带封面的音频（file_audio 卡 + cover_url + custom_props 里的 duration） */
     query(
-      `SELECT c.id AS card_id, c.body, f.url AS url,
+      `SELECT c.id AS card_id, c.body, c.custom_props, f.url AS url,
               f.cover_url, f.cover_thumb_url, f.thumb_url, f.original_name,
               ${PRIMARY_PLACEMENT_SQL} AS collection_id
          FROM cards c
@@ -257,16 +257,29 @@ export async function getOverviewSummary(userIdIn, { todayYmd, weekStartYmd }) {
       thumbUrl: r.thumb_url,
       name: r.original_name,
     })),
-    recentAudio: audioRes.rows.map((r) => ({
-      cardId: r.card_id,
-      collectionId: r.collection_id,
-      url: r.url,
-      coverUrl: r.cover_url,
-      coverThumbUrl: r.cover_thumb_url,
-      thumbUrl: r.thumb_url,
-      name: r.original_name,
-      displayName: r.original_name || extractTitle(r.body, 60) || "（未命名）",
-    })),
+    recentAudio: audioRes.rows.map((r) => {
+      /* 从 custom_props 里挖 sf-aud-duration-sec（客户端 assembleCardRow 也是这么还原的）*/
+      let durationSec = null;
+      const cp = Array.isArray(r.custom_props) ? r.custom_props : [];
+      for (const p of cp) {
+        if (p && p.id === "sf-aud-duration-sec") {
+          const v = Number(p.value);
+          if (Number.isFinite(v) && v >= 0) durationSec = Math.round(v);
+          break;
+        }
+      }
+      return {
+        cardId: r.card_id,
+        collectionId: r.collection_id,
+        url: r.url,
+        coverUrl: r.cover_url,
+        coverThumbUrl: r.cover_thumb_url,
+        thumbUrl: r.thumb_url,
+        name: r.original_name,
+        durationSec,
+        displayName: r.original_name || extractTitle(r.body, 60) || "（未命名）",
+      };
+    }),
   };
 }
 

@@ -71,6 +71,7 @@ export type OverviewAudioItem = {
   coverThumbUrl: string | null;
   thumbUrl: string | null;
   name: string | null;
+  durationSec: number | null;
   displayName: string;
 };
 

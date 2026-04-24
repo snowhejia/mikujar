@@ -6415,6 +6415,9 @@ export default function App() {
             coverUrl: row.coverUrl ?? undefined,
             thumbnailUrl: row.thumbUrl ?? row.coverThumbUrl ?? undefined,
             name: row.name ?? undefined,
+            ...(typeof row.durationSec === "number"
+              ? { durationSec: row.durationSec }
+              : {}),
           };
           const card: NoteCard =
             col.cards.find((c) => c.id === row.cardId) ?? {

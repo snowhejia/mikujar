@@ -265,6 +265,7 @@ import {
   walkCollections,
 } from "./appkit";
 import { useLazyEndpointsProbe } from "./appkit/useLazyEndpointsProbe";
+import { useServerSearch } from "./appkit/useServerSearch";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
   findLinkedFileCardForNoteMedia,
@@ -278,6 +279,7 @@ import {
   isNoteForAllNotesView,
   mergeServerTreeWithLocalExtraCards,
   removeCardPlacementFromTree,
+  walkCollectionsWithPath,
 } from "./appkit/collectionModel";
 import { mergedTemplateSchemaFieldsForCollection } from "./appkit/schemaTemplateFields";
 import {
@@ -2777,11 +2779,58 @@ export default function App() {
     });
   }, [searchActive]);
 
+  /* flag on 时走 /api/search；flag off 或未就绪则保留本地 buildSearchResults 结果 */
+  const serverSearchResult = useServerSearch(searchTrim);
+  const localSearchResult = useMemo(
+    () => buildSearchResults(collections, searchTrim),
+    [collections, searchTrim]
+  );
   const { collectionMatches: searchCollectionMatches, groupedCards: searchGroupedCards } =
-    useMemo(
-      () => buildSearchResults(collections, searchTrim),
-      [collections, searchTrim]
-    );
+    useMemo(() => {
+      if (!serverSearchResult) return localSearchResult;
+      /* 把服务端返回的轻量行 hydrate 成本地 UI 期望的 {col, path, cards} 形状。
+         当前 collections 仍然是全树（boot 还没迁到 meta-only），所以 col + card
+         都能在本地找到；找不到的跳过（权限过滤 / SSE 未同步等边角）。 */
+      const pathByColId = new Map<string, string>();
+      for (const { col, path } of walkCollectionsWithPath(collections, [])) {
+        pathByColId.set(col.id, path);
+      }
+      const collectionMatches: { col: Collection; path: string }[] = [];
+      const cardHits: { col: Collection; path: string; card: NoteCard }[] = [];
+      const seenColName = new Set<string>();
+      for (const hit of serverSearchResult.collections) {
+        if (seenColName.has(hit.id)) continue;
+        const col = findCollectionById(collections, hit.id);
+        if (!col) continue;
+        seenColName.add(hit.id);
+        collectionMatches.push({ col, path: pathByColId.get(col.id) ?? col.name });
+      }
+      for (const hit of serverSearchResult.cards) {
+        if (!hit.collectionId) continue;
+        const col = findCollectionById(collections, hit.collectionId);
+        if (!col) continue;
+        const card = col.cards.find((c) => c.id === hit.id);
+        if (!card) continue;
+        cardHits.push({
+          col,
+          path: pathByColId.get(col.id) ?? col.name,
+          card,
+        });
+      }
+      const groupMap = new Map<
+        string,
+        { col: Collection; path: string; cards: NoteCard[] }
+      >();
+      for (const h of cardHits) {
+        let g = groupMap.get(h.col.id);
+        if (!g) {
+          g = { col: h.col, path: h.path, cards: [] };
+          groupMap.set(h.col.id, g);
+        }
+        g.cards.push(h.card);
+      }
+      return { collectionMatches, groupedCards: [...groupMap.values()] };
+    }, [serverSearchResult, localSearchResult, collections]);
   const searchHasResults =
     searchCollectionMatches.length > 0 || searchGroupedCards.length > 0;
 

@@ -268,6 +268,7 @@ import { useLazyEndpointsProbe } from "./appkit/useLazyEndpointsProbe";
 import { useServerSearch } from "./appkit/useServerSearch";
 import { useServerReminders } from "./appkit/useServerReminders";
 import { useServerNotesTimeline } from "./appkit/useServerNotesTimeline";
+import { useServerCalendarDots } from "./appkit/useServerCalendarDots";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
   findLinkedFileCardForNoteMedia,
@@ -2028,14 +2029,20 @@ export default function App() {
     [rest, collectionRestVisibleCount]
   );
 
-  const datesWithNotesOnCalendarSet = useMemo(
+  const localDatesWithNotes = useMemo(
     () => datesWithNoteAddedOn(collections),
     [collections]
   );
-  const datesWithRemindersOnCalendarSet = useMemo(
+  const localDatesWithReminders = useMemo(
     () => datesWithReminderOn(collections),
     [collections]
   );
+  /* flag on 时按月懒加载 /api/calendar/days 的高亮集；flag off 或失败走本地 walk */
+  const serverCalendarDots = useServerCalendarDots(calendarViewMonth);
+  const datesWithNotesOnCalendarSet =
+    serverCalendarDots?.notes ?? localDatesWithNotes;
+  const datesWithRemindersOnCalendarSet =
+    serverCalendarDots?.reminders ?? localDatesWithReminders;
 
   /* flag on 时走 /api/reminders?filter=all（分页聚合所有）；失败或 flag off
      走本地 walk。服务端行 hydrate 为本地 ReminderListEntry 形状所需的

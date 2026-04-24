@@ -17,7 +17,7 @@ async function sendViaResendHttp({ to, subject, text, html }) {
   const user = process.env.SMTP_USER?.trim();
   const from =
     process.env.SMTP_FROM?.trim() ||
-    (user ? `"卡片笔记" <${user}>` : `"卡片笔记" <onboarding@resend.dev>`);
+    (user ? `"卡片笔记" <${user}>` : `"卡片笔记" <noreply@cardnote.io>`);
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), 25_000);

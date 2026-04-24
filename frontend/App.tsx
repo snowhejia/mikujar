@@ -5812,7 +5812,54 @@ export default function App() {
       if (!raw) return "";
       return raw.length > 40 ? raw.slice(0, 40) + "…" : raw;
     };
-    const summarizeSubtree = (root: Collection | null | undefined) => {
+    /* 把 server byPresetSlug 里所有以 prefix 开头的 slug 求和（覆盖父类
+       和子类型，比如 prefix="note" 覆盖 note + note_book + note_standard…） */
+    const sumSlugPrefix = (
+      prefix: string
+    ): {
+      total: number;
+      weekNew: number;
+      recent: Array<{ id: string; collectionId: string; title: string }>;
+    } => {
+      const bps = serverOverview?.byPresetSlug;
+      if (!bps) return { total: 0, weekNew: 0, recent: [] };
+      let total = 0;
+      let weekNew = 0;
+      const recentAgg: Array<{
+        id: string;
+        collectionId: string | null;
+        title: string;
+        addedOn: string | null;
+        minutesOfDay: number | null;
+      }> = [];
+      for (const [slug, slice] of Object.entries(bps)) {
+        if (slug !== prefix && !slug.startsWith(prefix + "_")) continue;
+        total += slice.total;
+        weekNew += slice.weekNew;
+        for (const r of slice.recent) recentAgg.push(r);
+      }
+      recentAgg.sort((a, b) => {
+        const da = a.addedOn ?? "";
+        const db = b.addedOn ?? "";
+        if (db !== da) return db.localeCompare(da);
+        return (b.minutesOfDay ?? 0) - (a.minutesOfDay ?? 0);
+      });
+      return {
+        total,
+        weekNew,
+        recent: recentAgg.slice(0, 2).map((r) => ({
+          id: r.id,
+          collectionId: r.collectionId ?? "",
+          title: r.title,
+        })),
+      };
+    };
+
+    const summarizeSubtree = (
+      root: Collection | null | undefined,
+      /** 懒加载模式下用来从 server byPresetSlug 兜底的 slug 前缀 */
+      slugFallback?: string
+    ) => {
       if (!root) {
         return {
           total: 0,
@@ -5836,18 +5883,22 @@ export default function App() {
           entries.push({ card, col, sortKey });
         }
       });
-      /* 懒加载模式：cards[] 还没拉回来，走树得到的 total 为 0，
-         退回到 meta 提供的 totalCardCount。weekNew / recent 在这种
-         情况下仍为 0/空——但至少主数不再误报 0。 */
-      if (total === 0 && typeof root.totalCardCount === "number") {
-        total = root.totalCardCount;
-      }
       entries.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-      const recent = entries.slice(0, 2).map((e) => ({
+      let recent = entries.slice(0, 2).map((e) => ({
         id: e.card.id,
         collectionId: e.col.id,
         title: extractTitle(e.card),
       }));
+      /* 懒加载模式：本地 walk 全空，从 server 数据兜底（count + weekNew + recent）。 */
+      if (total === 0 && typeof root.totalCardCount === "number") {
+        total = root.totalCardCount;
+      }
+      if ((recent.length === 0 || weekNew === 0) && slugFallback) {
+        const s = sumSlugPrefix(slugFallback);
+        if (recent.length === 0) recent = s.recent;
+        if (weekNew === 0) weekNew = s.weekNew;
+        if (total === 0) total = s.total;
+      }
       return { total, weekNew, recent };
     };
 
@@ -5885,11 +5936,17 @@ export default function App() {
           }
         }
         recentAgg.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-        const recent = recentAgg.slice(0, 2).map((e) => ({
+        let recent = recentAgg.slice(0, 2).map((e) => ({
           id: e.card.id,
           collectionId: e.col.id,
           title: extractTitle(e.card),
         }));
+        /* 懒加载兜底 weekNew + recent：从 server 的 note* 系列 slug 求和 */
+        if ((recent.length === 0 || weekNew === 0) && serverOverview?.byPresetSlug) {
+          const s = sumSlugPrefix("note");
+          if (recent.length === 0) recent = s.recent;
+          if (weekNew === 0) weekNew = s.weekNew;
+        }
         out.push({
           key: "preset-notes",
           railKey: "notes",
@@ -5969,7 +6026,7 @@ export default function App() {
 
     // 主题
     if (topicNavRootCol) {
-      const s = summarizeSubtree(topicNavRootCol);
+      const s = summarizeSubtree(topicNavRootCol, "topic");
       out.push({
         key: "preset-topic",
         railKey: "topic",
@@ -5987,7 +6044,7 @@ export default function App() {
 
     // 剪藏：按子类型（objectKind）分桶显示
     if (clipParentCol) {
-      const s = summarizeSubtree(clipParentCol);
+      const s = summarizeSubtree(clipParentCol, "clip");
       const subCounts = new Map<string, number>();
       walkCollections([clipParentCol], (col) => {
         for (const card of col.cards) {
@@ -5995,6 +6052,14 @@ export default function App() {
           if (k) subCounts.set(k, (subCounts.get(k) ?? 0) + 1);
         }
       });
+      /* 懒加载兜底：subCounts 为空时从 server byPresetSlug 取子类 slug 计数 */
+      if (subCounts.size === 0 && serverOverview?.byPresetSlug) {
+        for (const [slug, slice] of Object.entries(serverOverview.byPresetSlug)) {
+          if (slug.startsWith("post_") || slug.startsWith("clip_")) {
+            subCounts.set(slug, slice.total);
+          }
+        }
+      }
       const subLabels: Array<[string, string]> = [
         ["post_xhs", "小红书"],
         ["post_bilibili", "B 站"],
@@ -6035,7 +6100,7 @@ export default function App() {
       if (!rootId) continue;
       const root = collectionsById.get(rootId) ?? null;
       if (!root) continue;
-      const s = summarizeSubtree(root);
+      const s = summarizeSubtree(root, def.baseId);
       // 任务特例：pill 展示今日到期 / 逾期未完成
       let pills: OverviewPill[] = [];
       if (def.baseId === "task") {
@@ -6050,6 +6115,11 @@ export default function App() {
             else if (r < overviewTodayYmd) overdueCount += 1;
           }
         });
+        /* 懒加载兜底：本地 walk 没数据时用 server 的 taskReminders */
+        if (todayCount === 0 && overdueCount === 0 && serverOverview?.taskReminders) {
+          todayCount = serverOverview.taskReminders.today;
+          overdueCount = serverOverview.taskReminders.overdue;
+        }
         if (todayCount > 0) {
           pills.push({ key: "today", label: `今日 ${todayCount}` });
         }
@@ -6199,11 +6269,18 @@ export default function App() {
         const out: import("./appkit/OverviewPhotoAlbum").OverviewPhotoItem[] = [];
         const seen = new Set<string>();
         for (const row of serverOverview.recentImages) {
-          if (!row.url || !row.collectionId) continue;
-          const col = findCollectionById(collections, row.collectionId);
-          if (!col) continue;
-          /* 懒加载模式：col.cards 可能是空；stub 一个仅含 id + media 的
-             最小卡，组件只用它发 onOpenCard(col.id, card.id)，不读别的字段。 */
+          if (!row.url) continue;
+          /* col 找不到就用 stub（让 onOpenCard 能传 collectionId 即可）；
+             card 找不到就用 stub。两层都允许 fallback，避免懒加载下整段空。 */
+          const col: Collection =
+            (row.collectionId
+              ? findCollectionById(collections, row.collectionId) ?? null
+              : null) ?? {
+              id: row.collectionId ?? "",
+              name: "",
+              dotColor: "",
+              cards: [],
+            };
           const card: NoteCard =
             col.cards.find((c) => c.id === row.cardId) ?? {
               id: row.cardId,
@@ -6265,10 +6342,16 @@ export default function App() {
         const out: import("./appkit/OverviewMusicPlayer").OverviewMusicTrack[] = [];
         const seen = new Set<string>();
         for (const row of serverOverview.recentAudio) {
-          if (!row.url || !row.collectionId) continue;
-          const col = findCollectionById(collections, row.collectionId);
-          if (!col) continue;
-          /* 懒加载模式：col.cards 可能为空；stub 最小卡 */
+          if (!row.url) continue;
+          const col: Collection =
+            (row.collectionId
+              ? findCollectionById(collections, row.collectionId) ?? null
+              : null) ?? {
+              id: row.collectionId ?? "",
+              name: "",
+              dotColor: "",
+              cards: [],
+            };
           const mediaItem = {
             kind: "audio" as const,
             url: row.url,

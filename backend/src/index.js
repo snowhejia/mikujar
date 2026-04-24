@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
+import compression from "compression";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import { createHash } from "crypto";
@@ -157,6 +158,9 @@ const app = express();
 if (process.env.TRUST_PROXY === "1") {
   app.set("trust proxy", 1);
 }
+/* gzip/br 压缩响应。大体积 JSON（如 /api/collections 全量拉取）可从 10MB+ 压到 1-2MB。
+   放在 express.json 和 cors 之前，确保所有路由都过。默认 threshold=1KB，不压小响应。 */
+app.use(compression());
 app.use(express.json({ limit: "15mb" }));
 
 const corsOrigin = process.env.CORS_ORIGIN;

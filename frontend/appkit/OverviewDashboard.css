@@ -1,0 +1,1237 @@
+/*
+ * 概览 Dashboard · Sunrise Glow
+ *   - 核心色：#FF9A8B 珊瑚 · #FFC3A0 桃 · #FECF6A 日出黄 · #A1E3FF 天蓝
+ *   - 背景：左下珊瑚柔光 + 右上天蓝柔光 + 115° 斜向 桃→黄→蓝 主渐变
+ *   - 变量名沿用 blue / yellow / butter（保持与既有规则兼容），含义按新调色板重新映射
+ */
+
+/** 概览 rail 激活时：去掉中间 260px 合集侧栏，让 dashboard 主区横向铺满；
+ *  侧栏内容（收藏 / 最近）已在 dashboard 右侧 aside 里展示，不丢信息。
+ *  注意：模板改成 2 列（rail + main），同时 sidebar display:none；否则 main 会落进
+ *  被压成 0 的第 2 列而整屏空白。 */
+.app--overview {
+  grid-template-columns: var(--rail-width) 1fr;
+}
+.app--overview .sidebar {
+  display: none;
+}
+
+/** Dashboard 内所有元素统一 border-box + min-width:0 基线，避免移动端任何一处
+ *  文字把父容器撑爆（flex 孩子默认 min-width:auto 不会收缩） */
+.overview-dashboard *,
+.overview-dashboard *::before,
+.overview-dashboard *::after {
+  box-sizing: border-box;
+}
+
+.overview-dashboard {
+  --ov-bg-cream: #fef6f0;
+  --ov-bg-butter: #fff1d6;      /* 奶油黄底（主渐变中段） */
+  --ov-bg-sky-soft: #e0f4ff;    /* 右上天蓝径向 */
+  --ov-bg-butter-warm: #ffe0b8; /* 桃色径向 */
+  --ov-card-tint: rgba(255, 255, 255, 0.58);
+  --ov-card-stroke: rgba(255, 255, 255, 0.9);
+  /** 主强调：珊瑚粉（Sunrise 核心色，标题 / 装饰） */
+  --ov-accent-blue: #ff9a8b;
+  /** 深一档珊瑚：hot 胶囊背景需要在白字上够对比 */
+  --ov-accent-blue-strong: #e87866;
+  /** 软天蓝（对应 periwinkle 语义：次调、sticker 左 / chip 边） */
+  --ov-accent-periwinkle: #a1e3ff;
+  /** 日出黄（sparkle / 胶囊点缀） */
+  --ov-accent-yellow: #fecf6a;
+  /** 桃 */
+  --ov-accent-butter: #ffc3a0;
+  /** 深桃（等同主珊瑚） */
+  --ov-accent-butter-deep: #ff9a8b;
+  --ov-ink: #3a2630;           /* 暖紫棕墨水，跟珊瑚主调同色系 */
+  --ov-ink-soft: #6e5560;
+  --ov-ink-muted: rgba(58, 38, 48, 0.55);
+  --ov-shadow-lg: 0 18px 44px -18px rgba(232, 120, 102, 0.35);
+  --ov-shadow-sm: 0 8px 22px -12px rgba(232, 120, 102, 0.22);
+
+  position: relative;
+  width: 100%;
+  padding: 10px clamp(14px, 2.2vw, 26px)
+    calc(48px + env(safe-area-inset-bottom, 0px));
+  color: var(--ov-ink);
+  /** 只裁横向溢出（bg 渐变可能溢出），纵向保留让主区正常滚动；
+   *  之前 overflow:hidden + min-height:100% 会把 aside 末端的"最近打开"截掉 */
+  overflow-x: hidden;
+}
+
+/** 概览主区不显示滚动条（但保留滚动行为）。
+ *  用 :has 只对"包含 overview-dashboard 的滚动容器"生效，不影响其他 rail */
+:where(.timeline, main):has(> .overview-dashboard),
+:where(.timeline, main):has(> .overview-dashboard) * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* 旧 Edge / IE */
+}
+:where(.timeline, main):has(> .overview-dashboard)::-webkit-scrollbar,
+:where(.timeline, main):has(> .overview-dashboard) *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.overview-dashboard__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    /* 左下珊瑚柔光 */
+    radial-gradient(
+      ellipse 900px 720px at 0% 100%,
+      rgba(255, 154, 139, 0.55) 0%,
+      rgba(255, 154, 139, 0) 60%
+    ),
+    /* 右上天蓝柔光 */
+    radial-gradient(
+      ellipse 900px 720px at 100% 0%,
+      rgba(161, 227, 255, 0.7) 0%,
+      rgba(161, 227, 255, 0) 60%
+    ),
+    /* 主斜向：桃 → 奶油黄 → 日出黄 → 天蓝，呼应参考 "Sunrise Glow" */
+    linear-gradient(
+      115deg,
+      #ffd5ca 0%,
+      #ffe0b8 28%,
+      #ffecb8 52%,
+      #d5efff 100%
+    );
+}
+
+.overview-dashboard > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Brand strip ─────────────────────────────────────────────────────── */
+
+.overview-dashboard__brand-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(232, 120, 102, 0.2);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-ink);
+  font-weight: 700;
+}
+
+.overview-dashboard__brand-left {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.overview-dashboard__brand-kicker {
+  font-weight: 800;
+}
+
+.overview-dashboard__brand-sub {
+  color: var(--ov-ink-soft);
+  font-weight: 500;
+}
+
+.overview-dashboard__brand-today {
+  color: var(--ov-ink-soft);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+/* ─── Hero ────────────────────────────────────────────────────────────── */
+
+.overview-dashboard__hero {
+  margin-bottom: 18px;
+}
+
+.overview-dashboard__hero-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) 1fr;
+  gap: 24px;
+  align-items: stretch;
+  padding: 4px 0 0;
+  min-height: 260px;
+}
+
+.overview-dashboard__hero-stage {
+  position: relative;
+  height: 260px;
+}
+
+.overview-dashboard__sprinkle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.overview-dashboard__sticker-stack {
+  position: absolute;
+  inset: 0;
+}
+
+.overview-dashboard__sticker {
+  position: absolute;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--ov-shadow-lg);
+  transform-origin: center;
+}
+
+.overview-dashboard__sticker--left {
+  top: 18%;
+  left: 4%;
+  width: 44%;
+  height: 72%;
+  background: var(--ov-accent-butter);
+  transform: rotate(-12deg);
+}
+
+.overview-dashboard__sticker--right {
+  top: 10%;
+  right: 6%;
+  width: 42%;
+  height: 76%;
+  background: #dde7f3; /* 浅蓝米卡 */
+  transform: rotate(10deg);
+}
+
+.overview-dashboard__sticker--front {
+  position: absolute;
+  left: 22%;
+  top: 14%;
+  width: 56%;
+  height: 82%;
+  border-radius: 24px;
+  background: linear-gradient(145deg, var(--ov-accent-periwinkle) 0%, var(--ov-accent-blue) 100%);
+  box-shadow: 0 22px 50px -20px rgba(232, 120, 102, 0.5);
+}
+
+/** 前卡中央的问候 + 昵称：粗 serif 白字，上下堆叠，贴纸感中心焦点 */
+.overview-dashboard__sticker-greeting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 14%;
+  pointer-events: none;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 2px 10px rgba(232, 120, 102, 0.35);
+}
+
+.overview-dashboard__sticker-greeting-kicker {
+  font-size: clamp(10px, 1.2vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.overview-dashboard__sticker-greeting-name {
+  font-family: "DM Serif Display", "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-size: clamp(20px, 2.6vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__design-pill {
+  position: absolute;
+  bottom: 10%;
+  right: 14%;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ov-accent-blue);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow: var(--ov-shadow-sm);
+  pointer-events: none;
+}
+
+/* ─── Hero 右侧：随手一翻 ─────────────────────────────────────────────── */
+
+.overview-dashboard__random {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px 16px;
+  border-radius: 22px;
+  border: 1px solid var(--ov-card-stroke);
+  background: var(--ov-card-tint);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--ov-shadow-sm);
+  /** 固定高度匹配左侧贴纸舞台，正文 flex 撑满 + 行数 clamp，避免长笔记把 hero 撑高 */
+  height: 260px;
+  overflow: hidden;
+}
+
+.overview-dashboard__random-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ov-accent-blue);
+}
+
+.overview-dashboard__random-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.7);
+  border: 1px solid rgba(232, 120, 102, 0.22);
+  color: var(--ov-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.overview-dashboard__random-meta:hover {
+  background: rgba(255, 252, 247, 0.95);
+}
+
+.overview-dashboard__random-meta-col {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__random-meta-dot {
+  opacity: 0.5;
+}
+
+.overview-dashboard__random-meta-date {
+  color: var(--ov-ink-soft);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.overview-dashboard__random-body {
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  font-family: "DM Serif Display", "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-size: clamp(16px, 1.8vw, 22px);
+  line-height: 1.45;
+  color: var(--ov-ink);
+  /** 限制 4 行显示 + 外层 height 双保险，不让长笔记把 hero 撑高 */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.overview-dashboard__random-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.overview-dashboard__random-open,
+.overview-dashboard__random-reroll {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.overview-dashboard__random-empty {
+  font-size: 13px;
+  color: var(--ov-ink-muted);
+  padding: 8px 0 4px;
+}
+
+/* ─── Grid layout ─────────────────────────────────────────────────────── */
+
+.overview-dashboard__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 22px;
+  align-items: start;
+  /** 保证两列都能压到 0 基线，内部 flex 孩子的 min-width:0 才能生效链式传导 */
+  min-width: 0;
+}
+
+.overview-dashboard__types,
+.overview-dashboard__aside {
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .overview-dashboard__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.overview-dashboard__section-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ov-ink);
+}
+
+.overview-dashboard__section-title--onCard {
+  margin-bottom: 10px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+}
+
+/* ─── Type widgets grid ───────────────────────────────────────────────── */
+
+.overview-dashboard__types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.overview-dashboard__widget {
+  --widget-accent: var(--ov-accent-blue);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 14px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 22px;
+  border: 1px solid var(--ov-card-stroke);
+  background: var(--ov-card-tint);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--ov-shadow-sm);
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.2s ease-out,
+    background 0.2s ease-out;
+}
+
+.overview-dashboard__widget:hover {
+  transform: translateY(-3px) rotate(-0.3deg);
+  box-shadow: var(--ov-shadow-lg);
+  background: rgba(255, 252, 247, 0.9);
+}
+
+.overview-dashboard__widget:focus-visible {
+  outline: 2px solid var(--widget-accent);
+  outline-offset: 3px;
+}
+
+.overview-dashboard__widget::after {
+  /* 左上角色条：用该类型的 rail accent 色做彩条，呼应 rail 视觉 */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 3px;
+  border-radius: 0 0 999px 0;
+  background: var(--widget-accent);
+  opacity: 0.75;
+}
+
+.overview-dashboard__widget-star {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  animation: ov-twinkle 3.6s ease-in-out infinite;
+}
+
+.overview-dashboard__widget-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.overview-dashboard__widget-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.overview-dashboard__widget-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ov-ink);
+}
+
+.overview-dashboard__widget-count {
+  font-family: "DM Serif Display", "Fraunces", Georgia, serif;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /** 每张 widget 用自己的 rail 色做大数字，整版看起来是 rail 的暖色彩虹 */
+  color: var(--widget-accent);
+}
+
+.overview-dashboard__widget-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.overview-dashboard__widget-recent {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview-dashboard__widget-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.55);
+  color: var(--ov-ink);
+  font-size: 12.5px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.overview-dashboard__widget-recent-row:hover {
+  background: rgba(255, 252, 247, 0.92);
+}
+
+.overview-dashboard__widget-recent-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--widget-accent);
+  flex: 0 0 auto;
+}
+
+.overview-dashboard__widget-recent-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__widget-empty {
+  font-size: 12px;
+  color: var(--ov-ink-muted);
+  padding: 2px 0 0;
+}
+
+.overview-dashboard__widget-cta {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ─── Pills ───────────────────────────────────────────────────────────── */
+
+.overview-dashboard__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(255, 252, 247, 0.8);
+  color: var(--ov-ink);
+  border: 1px solid rgba(232, 120, 102, 0.18);
+  box-shadow: 0 2px 6px -2px rgba(232, 120, 102, 0.22);
+}
+
+.overview-dashboard__pill--hot {
+  /** 深珊瑚 + 白字，保证在 sunrise 亮色背景上仍够对比 */
+  background: var(--ov-accent-blue-strong);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px -4px rgba(232, 120, 102, 0.55);
+}
+
+.overview-dashboard__pill--ghost {
+  background: transparent;
+  border-color: rgba(232, 120, 102, 0.38);
+  color: var(--ov-accent-blue);
+  box-shadow: none;
+}
+
+.overview-dashboard__widget:hover .overview-dashboard__pill--ghost {
+  background: var(--widget-accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.overview-dashboard__pill--time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Aside (right column) ────────────────────────────────────────────── */
+
+.overview-dashboard__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.overview-dashboard__card {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: 22px;
+  border: 1px solid var(--ov-card-stroke);
+  background: var(--ov-card-tint);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--ov-shadow-sm);
+  /** 兜底：任何超长内容都在卡边界内截断，不污染横向布局 */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.overview-dashboard__card-corner-star {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  animation: ov-twinkle 3.2s ease-in-out 0.3s infinite;
+}
+
+.overview-dashboard__notif-block + .overview-dashboard__notif-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(232, 120, 102, 0.22);
+}
+
+/** 通知卡搬到左栏后，今日 / 待办改成并排双列；窄屏下 fallback 回单列堆叠 */
+.overview-dashboard__card--notif-wide {
+  margin-bottom: 16px;
+}
+
+.overview-dashboard__card--notif-wide .overview-dashboard__notif-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 22px;
+}
+
+.overview-dashboard__card--notif-wide
+  .overview-dashboard__notif-block
+  + .overview-dashboard__notif-block {
+  /** 并排时去掉那条虚线（并不是上下堆叠） */
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+@media (max-width: 720px) {
+  .overview-dashboard__card--notif-wide .overview-dashboard__notif-columns {
+    grid-template-columns: 1fr;
+  }
+  .overview-dashboard__card--notif-wide
+    .overview-dashboard__notif-block
+    + .overview-dashboard__notif-block {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed rgba(232, 120, 102, 0.22);
+  }
+}
+
+.overview-dashboard__notif-heading {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ov-ink-soft);
+  margin-bottom: 8px;
+}
+
+.overview-dashboard__notif-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overview-dashboard__notif-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(255, 252, 247, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  text-align: left;
+  color: var(--ov-ink);
+  font-size: 13px;
+  line-height: 1.3;
+  font: inherit;
+}
+
+.overview-dashboard__notif-list > li {
+  /** column flex 子元素默认 min-width:auto，显式置 0 防内部长行把 <li> 撑宽 */
+  min-width: 0;
+}
+
+.overview-dashboard__notif-row:hover {
+  background: rgba(255, 252, 247, 0.92);
+}
+
+.overview-dashboard__notif-title {
+  flex: 1;
+  /** flex 子项默认 min-width:auto，需显式设 0 才会允许 text-overflow 生效（否则被父 overflow:hidden 剪掉） */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.overview-dashboard__notif-empty {
+  font-size: 12px;
+  color: var(--ov-ink-muted);
+  padding: 2px 0 4px;
+}
+
+/* ─── Music player ────────────────────────────────────────────────────── */
+
+.overview-dashboard__music {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overview-dashboard__music-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-accent-blue);
+}
+
+.overview-dashboard__music-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    var(--ov-accent-butter) 0%,
+    var(--ov-accent-blue) 100%
+  );
+  box-shadow: var(--ov-shadow-sm);
+}
+
+.overview-dashboard__music-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.overview-dashboard__music-cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "DM Serif Display", serif;
+  font-size: 64px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/** 封面右下叠一颗半透明小唱盘，播放时慢转，不播放时静止 */
+.overview-dashboard__music-disc {
+  position: absolute;
+  right: -12px;
+  bottom: -12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #1e1924 18%, rgba(30, 25, 36, 0) 22%),
+    radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0) 40%
+    ),
+    #2a2230;
+  box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.3);
+  opacity: 0.85;
+}
+
+.overview-dashboard__music-disc--spinning {
+  animation: ov-music-spin 5s linear infinite;
+}
+
+@keyframes ov-music-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.overview-dashboard__music-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overview-dashboard__music-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ov-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__music-col {
+  font-size: 11.5px;
+  color: var(--ov-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__music-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(232, 120, 102, 0.16);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.overview-dashboard__music-progress-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--ov-accent-blue) 0%,
+    var(--ov-accent-yellow) 100%
+  );
+  transition: width 0.2s linear;
+}
+
+.overview-dashboard__music-time {
+  font-size: 11px;
+  color: var(--ov-ink-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.overview-dashboard__music-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.overview-dashboard__music-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 120, 102, 0.25);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ov-ink);
+  font-size: 13px;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background 0.18s ease-out,
+    transform 0.12s ease-out;
+}
+
+.overview-dashboard__music-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.overview-dashboard__music-btn:active {
+  transform: scale(0.92);
+}
+
+.overview-dashboard__music-btn--primary {
+  width: 42px;
+  height: 42px;
+  background: var(--ov-accent-blue-strong);
+  border-color: transparent;
+  color: #fff;
+  font-size: 15px;
+  box-shadow: 0 4px 14px -4px rgba(232, 120, 102, 0.55);
+}
+
+.overview-dashboard__music-btn--primary:hover {
+  background: var(--ov-accent-blue);
+}
+
+.overview-dashboard__music-btn--ghost {
+  margin-left: auto;
+  background: transparent;
+  border-color: rgba(232, 120, 102, 0.35);
+  color: var(--ov-accent-blue);
+}
+
+.overview-dashboard__music--empty {
+  gap: 6px;
+}
+
+/* ─── Photo album (通知卡下方横向轮播) ────────────────────────────────── */
+
+.overview-dashboard__album {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.overview-dashboard__album-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.overview-dashboard__album-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-accent-blue);
+}
+
+.overview-dashboard__album-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overview-dashboard__album-btn {
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  font: inherit;
+}
+
+/** 长方形横幅：宽度占满父卡，高度由 aspect-ratio 控制；短屏下给 min-height 兜底 */
+.overview-dashboard__album-banner {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 140px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(
+    120deg,
+    var(--ov-accent-butter) 0%,
+    var(--ov-accent-blue) 100%
+  );
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  box-shadow: var(--ov-shadow-sm);
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.2s ease-out;
+}
+
+.overview-dashboard__album-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ov-shadow-lg);
+}
+
+.overview-dashboard__album-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /** 两段叠加：快速淡入 + 15s 慢速 Ken-Burns 缓缓放大；
+   *  切图时组件以 key 重挂载，两段动画一并重启 */
+  animation:
+    ov-album-fade 0.5s ease-out both,
+    ov-album-zoom 15s ease-out both;
+  transform-origin: 50% 55%;
+}
+
+@keyframes ov-album-fade {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ov-album-zoom {
+  from {
+    transform: scale(1.01);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+/** 底部渐变遮罩 + 文件名 / 合集：读清 */
+.overview-dashboard__album-banner-meta {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 24px 18px 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.overview-dashboard__album-banner-name {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+}
+
+.overview-dashboard__album-banner-col {
+  font-size: 11px;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-dashboard__album-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0 0;
+}
+
+.overview-dashboard__album-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(232, 120, 102, 0.28);
+  transition:
+    background 0.2s,
+    width 0.2s;
+}
+
+.overview-dashboard__album-dot--active {
+  width: 18px;
+  border-radius: 999px;
+  background: var(--ov-accent-blue);
+}
+
+.overview-dashboard__album-dot--tiny {
+  width: 3px;
+  height: 3px;
+  background: rgba(232, 120, 102, 0.2);
+}
+
+.overview-dashboard__album--empty .overview-dashboard__album-banner {
+  display: none;
+}
+
+/* ─── Sticker chips (favorites / recent) ──────────────────────────────── */
+
+.overview-dashboard__stickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.overview-dashboard__sticker-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1.5px solid var(--ov-accent-periwinkle);
+  color: var(--ov-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 14px -8px rgba(232, 120, 102, 0.38);
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.2s ease-out;
+}
+
+.overview-dashboard__sticker-chip:hover {
+  transform: translateY(-2px) rotate(0deg) !important;
+  box-shadow: 0 12px 22px -10px rgba(232, 120, 102, 0.5);
+}
+
+.overview-dashboard__sticker-chip-star {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+}
+
+.overview-dashboard__sticker-chip-label {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────── */
+
+@keyframes ov-twinkle {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(0.6) rotate(18deg);
+    opacity: 0.55;
+  }
+}
+
+/* ─── Responsive tweaks ───────────────────────────────────────────────── */
+
+@media (max-width: 960px) {
+  .overview-dashboard__hero-body {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 8px 0 0;
+    min-height: 0;
+  }
+  .overview-dashboard__hero-stage {
+    height: 200px;
+  }
+  /** 手机堆叠时让随机笔记面板按内容撑高，但 clamp 行数防止超长；取消 260px 硬锁 */
+  .overview-dashboard__random {
+    height: auto;
+    min-height: 200px;
+  }
+  .overview-dashboard__random-body {
+    -webkit-line-clamp: 5;
+  }
+}
+
+@media (max-width: 720px) {
+  .overview-dashboard {
+    padding: 8px clamp(10px, 3vw, 18px) 40px;
+  }
+  .overview-dashboard__hero {
+    margin-bottom: 12px;
+  }
+  .overview-dashboard__brand-strip {
+    gap: 8px;
+    font-size: 10.5px;
+  }
+  /** 窄屏隐藏"本周新增 +N"胶囊，brand-strip 只留 kicker + 日期一行 */
+  .overview-dashboard__brand-left .overview-dashboard__pill--hot {
+    display: none;
+  }
+  .overview-dashboard__brand-today {
+    /** 日期在窄屏尽量单行：字号降一档 + 不换行 */
+    white-space: nowrap;
+    font-size: 10.5px;
+  }
+  /** 相册横幅在窄屏变得更"高"一点，太扁不好看 */
+  .overview-dashboard__album-banner {
+    aspect-ratio: 16 / 7;
+  }
+  /** 音乐封面缩小一档，节省纵向空间 */
+  .overview-dashboard__music-cover {
+    aspect-ratio: 1 / 1;
+    max-height: 220px;
+  }
+  .overview-dashboard__aside {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-dashboard__types-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .overview-dashboard__widget {
+    padding: 12px 12px 10px;
+    gap: 8px;
+  }
+  .overview-dashboard__widget-count {
+    font-size: 32px;
+  }
+  .overview-dashboard__widget-recent {
+    display: none; /** 很窄屏下省略最近 2 条，让格子更紧凑 */
+  }
+  .overview-dashboard__hero-stage {
+    height: 180px;
+  }
+  .overview-dashboard__album-banner {
+    aspect-ratio: 3 / 2;
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 380px) {
+  .overview-dashboard__types-grid {
+    grid-template-columns: 1fr;
+  }
+}

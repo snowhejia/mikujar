@@ -1,0 +1,72 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* 参考 VitePress 默认浅色主题 */
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f6f6f7;
+  --vp-c-bg-soft: #f9f9f9;
+  --vp-c-divider: #e2e2e4;
+  --vp-c-border: rgba(60, 60, 67, 0.14);
+  --vp-c-text-1: #3c3c43;
+  --vp-c-text-2: #67676c;
+  --vp-c-text-3: #a0a0a8;
+  --vp-c-brand-1: #42b883;
+  --vp-c-brand-2: #35d399;
+  --vp-c-brand-soft: rgba(66, 185, 131, 0.12);
+  --vp-c-brand-mute: rgba(66, 185, 131, 0.08);
+  /* 与 public/favicon.svg / landing 粉色卡片图标一致 */
+  --cardnote-logo-jar: #faa4b5;
+  --cardnote-logo-jar-rgb: 250, 164, 181;
+  --cardnote-logo-jar-deep: #e87a90;
+  --cardnote-logo-lid: #f8b77c;
+  --cardnote-logo-lid-deep: #e89856;
+  --cardnote-logo-tile: #ecece8;
+  --vp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --vp-shadow-2: 0 3px 12px rgba(0, 0, 0, 0.07);
+  /* 中文优先正文字体（系统内置，无外链） */
+  --cardnote-font-ui:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    "Noto Sans SC",
+    "Source Han Sans SC",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* 与 body 一致，避免 iOS 底部安全区等露出默认白底与主区灰底分层 */
+html {
+  background: var(--vp-c-bg-soft);
+}
+
+body {
+  font-family: var(--cardnote-font-ui);
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100%;
+}

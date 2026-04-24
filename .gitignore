@@ -1,0 +1,35 @@
+# 依赖
+node_modules/
+**/node_modules/
+
+# 构建产物
+frontend/dist/
+backend/public/assets/
+backend/public/index.html
+backend/public/favicon.svg
+backend/public/legal/
+backend/public/*.jpg
+backend/public/*.png
+
+# 环境变量（含密码、JWT 密钥等，绝对不要提交）
+.env
+.env.*
+!.env.example
+
+# 日志
+*.log
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# TS 增量缓存
+*.tsbuildinfo
+
+# 本地数据库挂载
+backend/pgdata/

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>cardnote · 卡片笔记</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Landing page fonts (cardnote pink glass 原字体栈) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&family=VT323&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <!-- 首屏占位：在 JS 与鉴权请求完成前即可参与 LCP，减轻登录全屏层晚到导致的 Poor LCP -->
+    <style>
+      #app-html-boot {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #f9f9f9;
+        color: #67676c;
+        font-family:
+          system-ui,
+          -apple-system,
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei",
+          sans-serif;
+        font-size: 0.875rem;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app-html-boot .app-html-boot__sub {
+        margin: 0;
+      }
+      #app-html-boot .app-html-boot__spinner {
+        width: 36px;
+        height: 36px;
+        box-sizing: border-box;
+        border-radius: 50%;
+        border: 3px solid rgba(55, 53, 47, 0.12);
+        border-top-color: rgba(37, 99, 235, 0.65);
+        animation: app-html-boot-spin 0.75s linear infinite;
+      }
+      @keyframes app-html-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="app-html-boot">
+        <span class="app-html-boot__spinner" aria-hidden="true"></span>
+        <p class="app-html-boot__sub">正在加载…</p>
+      </div>
+    </div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

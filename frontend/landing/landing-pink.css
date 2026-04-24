@@ -1,0 +1,535 @@
+/*
+ * Landing Page · Pink Glass
+ * 直接取自 docs/mockups/cardnote/Landing Page - Pink.html 的 <style> 块，一比一搬运。
+ * 所有 :root 色彩 / 字体 / 动画保持原样。
+ */
+
+:root {
+  --pink-50: oklch(0.985 0.01 355);
+  --pink-100: oklch(0.96 0.025 355);
+  --pink-200: oklch(0.92 0.055 355);
+  --pink-300: oklch(0.86 0.095 355);
+  --pink-400: oklch(0.78 0.15 355);
+  --pink-500: oklch(0.7 0.19 355);
+  --pink-600: oklch(0.62 0.22 355);
+  --pink-700: oklch(0.5 0.22 355);
+  --pink-ink: oklch(0.25 0.09 355);
+  --accent-500: oklch(0.62 0.22 355);
+  --accent-600: oklch(0.5 0.22 355);
+  --ink: oklch(0.18 0.02 340);
+
+  /* Candy palette (literal hex — multi-color pastel) */
+  --candy-pink: #faa4b5;
+  --candy-fawn: #f8b77c;
+  --candy-maize: #fff183;
+  --candy-sky: #70c1e1;
+  --candy-olive: #82ba88;
+  --candy-pink-deep: #e87a90;
+  --candy-fawn-deep: #e89856;
+  --candy-sky-deep: #4aa2c8;
+  --candy-olive-deep: #5e9a66;
+
+  --font-serif: "Fraunces", "Times New Roman", serif;
+  --font-grotesk: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", "Helvetica Neue", "Noto Sans SC", sans-serif;
+  --font-pixel: "Press Start 2P", monospace;
+  --font-pixel-lg: "VT323", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-cn: "Noto Sans SC", "PingFang SC", sans-serif;
+}
+
+.landing-page-root,
+.landing-page-root * {
+  box-sizing: border-box;
+}
+
+/* 作用域：只在 .landing-page-root 下生效，避免污染主 app */
+.landing-page-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background: var(--pink-100);
+  font-family: var(--font-sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing-page-root .serif {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.landing-page-root .grotesk {
+  font-family: var(--font-grotesk);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+.landing-page-root .pixel {
+  font-family: var(--font-pixel);
+  letter-spacing: 0;
+  line-height: 1.4;
+  image-rendering: pixelated;
+}
+.landing-page-root .pixel-lg {
+  font-family: var(--font-pixel-lg);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.landing-page-root .pixelate,
+.landing-page-root .pixelate * {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.landing-page-root .mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.landing-page-root .cn {
+  font-family: var(--font-cn);
+}
+
+/* Dotted grid background */
+.landing-page-root .dot-grid {
+  background-image: radial-gradient(oklch(0.78 0.1 355) 1.1px, transparent 1.2px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+}
+
+/* Frosted glass surface */
+.landing-page-root .glass {
+  background: linear-gradient(
+    135deg,
+    oklch(0.95 0.06 355 / 0.55) 0%,
+    oklch(0.9 0.09 355 / 0.35) 50%,
+    oklch(0.85 0.12 355 / 0.45) 100%
+  );
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid oklch(1 0 0 / 0.45);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.55),
+    0 20px 60px -20px oklch(0.5 0.2 355 / 0.35),
+    0 2px 8px oklch(0.5 0.2 355 / 0.12);
+}
+
+.landing-page-root .pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei",
+    sans-serif;
+  font-weight: 600;
+  background: oklch(1 0 0 / 0.25);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid oklch(1 0 0 / 0.5);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.5),
+    0 6px 20px -8px oklch(0.5 0.2 355 / 0.25);
+  color: var(--pink-600);
+}
+
+/* Selection rect handle dots */
+.landing-page-root .sel-rect {
+  position: relative;
+  border: 1.5px solid var(--pink-500);
+}
+.landing-page-root .sel-rect::before,
+.landing-page-root .sel-rect::after,
+.landing-page-root .sel-rect > .c1,
+.landing-page-root .sel-rect > .c2 {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: white;
+  border: 1.5px solid var(--pink-500);
+}
+.landing-page-root .sel-rect::before {
+  top: -5px;
+  left: -5px;
+}
+.landing-page-root .sel-rect::after {
+  top: -5px;
+  right: -5px;
+}
+.landing-page-root .sel-rect > .c1 {
+  bottom: -5px;
+  left: -5px;
+}
+.landing-page-root .sel-rect > .c2 {
+  bottom: -5px;
+  right: -5px;
+}
+
+/* Twinkle stars */
+@keyframes landing-pink-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+}
+.landing-page-root .twinkle {
+  position: absolute;
+  opacity: 0;
+  animation: landing-pink-twinkle 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.landing-page-root .twinkle svg {
+  display: block;
+}
+
+@keyframes landing-pink-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.landing-page-root .caret {
+  display: inline-block;
+  width: 0.08em;
+  height: 0.9em;
+  background: currentColor;
+  margin-left: 0.1em;
+  vertical-align: -0.08em;
+  animation: landing-pink-caret-blink 1s step-end infinite;
+}
+
+/* ═══════════ 登录页 Pink Ambient（全屏统一氛围 + 居中玻璃卡） ═══════════ */
+
+/** ambient 登录：整屏一张粉色黄昏画布，中央悬浮一张玻璃登录卡。
+ *  不再左右分栏，不再左侧 hero 搬运。 */
+.auth-modal-backdrop--ambient {
+  position: fixed;
+  inset: 0;
+  padding: 0 !important;
+  background:
+    radial-gradient(ellipse 60% 45% at 18% 22%, oklch(0.93 0.085 350 / 0.85) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 48% at 82% 78%, oklch(0.9 0.08 210 / 0.55) 0%, transparent 72%),
+    radial-gradient(ellipse 48% 36% at 78% 14%, oklch(0.94 0.1 60 / 0.45) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 12% 82%, oklch(0.92 0.08 140 / 0.4) 0%, transparent 70%),
+    linear-gradient(135deg, oklch(0.97 0.03 355) 0%, oklch(0.96 0.04 340) 55%, oklch(0.95 0.045 20) 100%) !important;
+  overflow: hidden;
+}
+
+.auth-modal-backdrop--ambient .auth-modal-backdrop__login-body {
+  position: relative;
+  z-index: 2;
+}
+
+.auth-modal-backdrop--ambient .auth-modal-backdrop__legal {
+  position: relative;
+  z-index: 2;
+  background: oklch(1 0 0 / 0.42);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-top: 1px solid oklch(1 0 0 / 0.55);
+  color: var(--pink-700);
+}
+.auth-modal-backdrop--ambient .auth-modal-backdrop__legal-btn,
+.auth-modal-backdrop--ambient .auth-modal-backdrop__legal-sep {
+  color: var(--pink-700);
+}
+.auth-modal-backdrop--ambient .auth-modal-backdrop__legal-btn:hover {
+  color: var(--pink-ink);
+}
+
+/* ── 登录页专用玻璃卡加强 ─────────────────────────────── */
+.auth-modal-backdrop--ambient .auth-modal {
+  position: relative;
+  z-index: 2;
+  max-width: 440px;
+  padding: 2rem 2rem 1.75rem;
+  border-radius: 26px;
+  background: oklch(1 0 0 / 0.58);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  border: 1px solid oklch(1 0 0 / 0.72);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.7),
+    0 30px 80px -20px oklch(0.5 0.18 355 / 0.28),
+    0 4px 14px oklch(0.5 0.18 355 / 0.12);
+}
+
+/* 卡片四角微 sel-rect 点缀（landing 符号系统呼应） */
+.auth-modal-backdrop--ambient .auth-modal::before,
+.auth-modal-backdrop--ambient .auth-modal::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: oklch(1 0 0 / 0.9);
+  border: 1.5px solid var(--pink-500);
+  pointer-events: none;
+  opacity: 0.85;
+}
+.auth-modal-backdrop--ambient .auth-modal::before {
+  top: -6px;
+  left: -6px;
+}
+.auth-modal-backdrop--ambient .auth-modal::after {
+  bottom: -6px;
+  right: -6px;
+}
+
+.auth-modal-backdrop--ambient .auth-modal__btn--primary {
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid oklch(1 0 0 / 0.5);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(112 193 225 / 0.68) 0%,
+      rgb(74 162 200 / 0.58) 100%
+    );
+  color: #fff;
+  font-family: var(--font-cn);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  backdrop-filter: blur(18px) saturate(1.45);
+  -webkit-backdrop-filter: blur(18px) saturate(1.45);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.58),
+    inset 0 -1px 0 oklch(0.7 0.13 230 / 0.18),
+    0 18px 34px -24px oklch(0.58 0.16 230 / 0.48),
+    0 6px 16px -12px oklch(0.58 0.16 230 / 0.32);
+}
+
+.auth-modal-backdrop--ambient .auth-modal__btn--primary:hover:not(:disabled) {
+  border-color: oklch(1 0 0 / 0.64);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(130 207 236 / 0.74),
+      rgb(82 174 214 / 0.64)
+    );
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.66),
+    inset 0 -1px 0 oklch(0.7 0.13 230 / 0.2),
+    0 20px 42px -24px oklch(0.58 0.16 230 / 0.58),
+    0 8px 20px -14px oklch(0.58 0.16 230 / 0.4);
+}
+
+.auth-modal-backdrop--ambient .auth-modal__btn--primary:active:not(:disabled) {
+  background: rgb(62 145 184 / 0.72);
+  color: #fff;
+}
+
+/* ═══════════ 氛围层 LoginAmbient ═══════════ */
+
+.login-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  font-family: "Inter", "Helvetica Neue", "Noto Sans SC", sans-serif;
+}
+
+/* 巨型色团（真正产生"氛围"的主角） */
+.login-ambient__orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(48px);
+  will-change: transform;
+}
+.login-ambient__orb--a {
+  left: -12%;
+  top: -14%;
+  width: 54vmax;
+  height: 54vmax;
+  background: radial-gradient(circle, oklch(0.9 0.18 350 / 0.5) 0%, transparent 62%);
+  animation: login-amb-breathe 22s ease-in-out infinite;
+}
+.login-ambient__orb--b {
+  right: -16%;
+  bottom: -18%;
+  width: 60vmax;
+  height: 60vmax;
+  background: radial-gradient(circle, oklch(0.85 0.14 210 / 0.42) 0%, transparent 66%);
+  animation: login-amb-drift 32s ease-in-out infinite;
+}
+.login-ambient__orb--c {
+  right: 8%;
+  top: -10%;
+  width: 42vmax;
+  height: 42vmax;
+  background: radial-gradient(circle, oklch(0.94 0.14 60 / 0.4) 0%, transparent 60%);
+  animation: login-amb-breathe 28s 4s ease-in-out infinite reverse;
+}
+
+.login-ambient__dot-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(oklch(0.78 0.1 355 / 0.55) 1px, transparent 1.4px);
+  background-size: 26px 26px;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+}
+
+/* 柔雾：糊化 orb 之间的衔接 */
+.login-ambient__veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.12) 0%, transparent 45%, oklch(1 0 0 / 0.18) 100%);
+}
+
+/* 复用 LandingPink 的 .twinkle 动画 */
+.login-ambient .twinkle {
+  position: absolute;
+  opacity: 0;
+  animation: landing-pink-twinkle 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.login-ambient .twinkle svg {
+  display: block;
+}
+
+/* 漂浮花瓣 / sparkle：慢速 drift + 旋转 */
+.login-ambient__petal {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  will-change: transform;
+}
+.login-ambient__petal--a {
+  animation: login-petal-drift 14s ease-in-out infinite;
+}
+.login-ambient__petal--b {
+  animation: login-petal-drift 18s 2s ease-in-out infinite reverse;
+}
+.login-ambient__petal--c {
+  animation: login-petal-twirl 22s linear infinite;
+}
+
+.login-ambient__cloud {
+  position: absolute;
+  opacity: 0.65;
+  animation: login-amb-drift 40s ease-in-out infinite;
+}
+
+.login-ambient__pixelstar {
+  position: absolute;
+  opacity: 0.8;
+  animation: login-pixel-pulse 4s ease-in-out infinite;
+}
+
+/* ── keyframes（仅 CSS，不接 rAF） ──────────────────────── */
+@keyframes login-amb-breathe {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate3d(14px, -18px, 0) scale(1.06);
+    opacity: 0.92;
+  }
+}
+@keyframes login-amb-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-22px, 16px, 0);
+  }
+}
+@keyframes login-petal-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(18px, -22px, 0) rotate(18deg);
+  }
+}
+@keyframes login-petal-twirl {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(0, 0, 0) rotate(360deg);
+  }
+}
+@keyframes login-pixel-pulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* ── 响应式：< 520px 缩小氛围元素，不隐藏 ──────────── */
+@media (max-width: 520px) {
+  .auth-modal-backdrop--ambient .auth-modal {
+    max-width: calc(100vw - 2rem);
+    padding: 1.5rem 1.25rem 1.35rem;
+    border-radius: 22px;
+  }
+  .login-ambient__orb--a,
+  .login-ambient__orb--b,
+  .login-ambient__orb--c {
+    filter: blur(36px);
+  }
+  .login-ambient__dot-grid {
+    background-size: 32px 32px;
+    opacity: 0.25;
+  }
+  .login-ambient__pixelstar,
+  .login-ambient__cloud {
+    opacity: 0.5;
+  }
+}
+
+/* ── 减少动态：用户偏好 prefers-reduced-motion ───────── */
+@media (prefers-reduced-motion: reduce) {
+  .login-ambient__orb,
+  .login-ambient__petal,
+  .login-ambient__cloud,
+  .login-ambient__pixelstar,
+  .login-ambient .twinkle {
+    animation: none !important;
+  }
+}
+
+/* Speech bubble tail */
+.landing-page-root .bubble {
+  position: relative;
+  background: var(--pink-500);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.landing-page-root .bubble::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  bottom: -6px;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+  border-top-color: var(--pink-500);
+  border-bottom: 0;
+}

@@ -5805,12 +5805,13 @@ export default function App() {
 
   /* flag on 时走 /api/overview/summary（服务端一次聚合所有概览字段）；
      未命中或未就绪时各字段各自 fallback 到本地 useMemo（见下方各处）。
-     refreshKey 组合了 collections.length + rerollKey，保证点"换一条"时
-     重新拉取（服务端返回新的随机卡）。 */
+     refreshKey 加上 remoteLoaded：boot 期 hook 第一发请求时如果 auth
+     还没就绪会失败、state 卡在 null（widget 空白），等 remoteLoaded
+     翻 true 时这里 key 变化会自动重拉一次。 */
   const serverOverview = useServerOverviewSummary({
     todayYmd: overviewTodayYmd,
     weekStartYmd: overviewWeekStartYmd,
-    refreshKey: `${collections.length}:${overviewRandomRerollKey}`,
+    refreshKey: `${remoteLoaded ? 1 : 0}:${collections.length}:${overviewRandomRerollKey}`,
   });
 
   /* 懒加载 typeWidgets 兜底用：收集所有 preset 根合集 id + 收藏合集 id，
@@ -5843,7 +5844,7 @@ export default function App() {
   const subtreeSummaries = useServerSubtreeSummaries({
     colIds: subtreeSummaryColIds,
     weekStartYmd: overviewWeekStartYmd,
-    refreshKey: collections.length,
+    refreshKey: `${remoteLoaded ? 1 : 0}:${collections.length}`,
   });
 
   /** 本周新增卡片总数（全库，addedOn >= 7 天前） */

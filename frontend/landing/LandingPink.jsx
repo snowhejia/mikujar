@@ -1,14 +1,28 @@
 // landing-pink.jsx — pink glass edition
 import React from "react";
 
+const LangCtx = React.createContext({ lang: "zh", setLang: () => {} });
+const useLang = () => React.useContext(LangCtx);
+const useT = () => {
+  const { lang } = useLang();
+  return React.useCallback((zh, en) => (lang === "en" ? en : zh), [lang]);
+};
+
 function TopBar({ onStart }) {
+  const { lang, setLang } = useLang();
+  const t = useT();
+  const toggleLang = () => {
+    const next = lang === "zh" ? "en" : "zh";
+    setLang(next);
+    try { localStorage.setItem("landing.lang", next); } catch {}
+  };
   const nav = [
-    { en: "OVERVIEW", cn: "概览" },
-    { en: "CARDS",    cn: "卡片" },
-    { en: "SETS",     cn: "合集" },
-    { en: "TEMPLATES",cn: "模板" },
-    { en: "PRICING",  cn: "价格" },
-    { en: "CHANGELOG",cn: "更新" },
+    { en: "OVERVIEW",  cn: "概览" },
+    { en: "FEATURES",  cn: "功能" },
+    { en: "TEMPLATES", cn: "模板" },
+    { en: "PRICING",   cn: "价格" },
+    { en: "DOCS",      cn: "文档" },
+    { en: "CHANGELOG", cn: "更新" },
   ];
   return (
     <div className="landing-topbar" style={{
@@ -37,6 +51,28 @@ function TopBar({ onStart }) {
             v0.0.1 · 2026
           </div>
         </div>
+        <button
+          type="button"
+          onClick={toggleLang}
+          aria-label={lang === "zh" ? "Switch to English" : "切换到中文"}
+          title={lang === "zh" ? "EN" : "中文"}
+          style={{
+            display: "inline-flex", alignItems: "center",
+            marginLeft: 4,
+            padding: "5px 10px", borderRadius: 999,
+            border: "1px solid oklch(0.85 0.06 var(--hue) / 0.5)",
+            background: "transparent",
+            cursor: "pointer",
+            fontSize: 12, fontWeight: 600, letterSpacing: "0.06em",
+            color: "var(--pink-ink)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
+            gap: 4,
+          }}
+        >
+          <span style={{ opacity: lang === "zh" ? 1 : 0.45 }}>中</span>
+          <span style={{ opacity: 0.4 }}>/</span>
+          <span style={{ opacity: lang === "en" ? 1 : 0.45 }}>EN</span>
+        </button>
       </div>
 
       {/* Nav */}
@@ -51,7 +87,7 @@ function TopBar({ onStart }) {
           onMouseEnter={e => e.currentTarget.style.background = "oklch(0.94 0.04 var(--hue))"}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
             <span className="cn" style={{ fontSize: 13, fontWeight: 500, color: "var(--pink-ink)" }}>
-              {n.cn}
+              {lang === "en" ? n.en.charAt(0) + n.en.slice(1).toLowerCase() : n.cn}
             </span>
             <span className="mono" style={{ fontSize: 8, color: "var(--pink-600)", letterSpacing: "0.1em", marginTop: 1 }}>
               0{i + 1} · {n.en}
@@ -76,7 +112,7 @@ function TopBar({ onStart }) {
             textDecoration: "none", fontWeight: 500,
             cursor: "pointer",
           }}
-        >注册</a>
+        >{t("注册", "Sign up")}</a>
         <button
           type="button"
           className="cn"
@@ -90,7 +126,7 @@ function TopBar({ onStart }) {
             display: "inline-flex", alignItems: "center", gap: 6,
           }}
         >
-          开始使用
+          {t("开始使用", "Get started")}
           <span style={{ fontSize: 11, opacity: 0.7 }}>→</span>
         </button>
       </div>
@@ -401,6 +437,14 @@ function GlassFolder({ children }) {
 function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
   const [mouse, setMouse] = React.useState({ px: 0, py: 0 });
   const [expanded, setExpanded] = React.useState(false);
+  const [lang, setLang] = React.useState(() => {
+    try {
+      return localStorage.getItem("landing.lang") === "en" ? "en" : "zh";
+    } catch {
+      return "zh";
+    }
+  });
+  const langCtxValue = React.useMemo(() => ({ lang, setLang }), [lang]);
   const heroRef = React.useRef(null);
 
   const onMove = (e) => {
@@ -413,6 +457,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
   };
 
   return (
+    <LangCtx.Provider value={langCtxValue}>
     <div
       style={{
         background: "var(--pink-100)",
@@ -510,29 +555,29 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         {/* Top-right pill */}
         <div className="landing-hero__decor" style={{ position: "absolute", top: 60, right: 40, zIndex: 4, display: "flex", alignItems: "center", gap: 12 }}>
           <PixelHeart scale={3} />
-          <span className="pill cn" style={{ fontSize: 14 }}>卡片库</span>
+          <span className="pill cn" style={{ fontSize: 14 }}>{lang === "en" ? "Card Library" : "卡片库"}</span>
         </div>
 
         {/* Right-side pill — posts */}
         <div className="landing-hero__decor" style={{ position: "absolute", top: 720, right: 60, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 15 }}>帖子</span>
+          <span className="pill cn" style={{ fontSize: 15 }}>{lang === "en" ? "Posts" : "帖子"}</span>
         </div>
 
         {/* Extra pills */}
         <div className="landing-hero__decor" style={{ position: "absolute", top: 100, left: 240, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 14 }}>笔记</span>
+          <span className="pill cn" style={{ fontSize: 14 }}>{lang === "en" ? "Notes" : "笔记"}</span>
         </div>
         <div className="landing-hero__decor" style={{ position: "absolute", top: 360, left: 260, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 13 }}>收藏</span>
+          <span className="pill cn" style={{ fontSize: 13 }}>{lang === "en" ? "Saved" : "收藏"}</span>
         </div>
         <div className="landing-hero__decor" style={{ position: "absolute", top: 420, left: 60, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 14 }}>灵感</span>
+          <span className="pill cn" style={{ fontSize: 14 }}>{lang === "en" ? "Spark" : "灵感"}</span>
         </div>
         <div className="landing-hero__decor" style={{ position: "absolute", top: 620, left: 320, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 13 }}>待办</span>
+          <span className="pill cn" style={{ fontSize: 13 }}>{lang === "en" ? "To-do" : "待办"}</span>
         </div>
         <div className="landing-hero__decor" style={{ position: "absolute", top: 260, right: 360, zIndex: 5 }}>
-          <span className="pill cn" style={{ fontSize: 13 }}>日记</span>
+          <span className="pill cn" style={{ fontSize: 13 }}>{lang === "en" ? "Journal" : "日记"}</span>
         </div>
 
         {/* Bottom pill */}
@@ -685,30 +730,41 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         </>
       )}
     </div>
+    </LangCtx.Provider>
   );
 }
 
 function FeatureSections() {
+  const t = useT();
   const features = [
     {
       kicker: "01 · CARDS",
       title: "Cards.",
       sub: "everything is a card",
-      body: "笔记、文件、链接、任务，全部以统一的卡片承载。属性 · 合集 · 模板 · 关系 — 四件套组合成你自己的思考方式。",
+      body: t(
+        "笔记、文件、链接、任务，全部以统一的卡片承载。属性 · 合集 · 模板 · 关系 — 四件套组合成你自己的思考方式。",
+        "Notes, files, links, tasks — all carried by one unified card. Properties · Sets · Templates · Relations: four pieces that compose your way of thinking."
+      ),
       glyph: <PixelHeart scale={6} />,
     },
     {
       kicker: "02 · SETS",
       title: "Sets.",
       sub: "group, don't file",
-      body: "一张卡片可以同时属于多个合集。不用强行树形结构 — 按项目、按主题、按情绪，任意交叉都可以。",
+      body: t(
+        "一张卡片可以同时属于多个合集。不用强行树形结构 — 按项目、按主题、按情绪，任意交叉都可以。",
+        "A card can live in multiple sets at once. No forced tree — group by project, topic, or mood; cross them however you like."
+      ),
       glyph: <PixelFlower scale={6} />,
     },
     {
       kicker: "03 · LINKS",
       title: "Links.",
       sub: "relations over folders",
-      body: "直接在文本中 @ 引用另一张卡片，双向链接自动建立。图谱视图一眼看清你的知识网络。",
+      body: t(
+        "链接你的卡片，或者设定自动建卡规则，双向链接自动建立。图谱视图一眼看清你的知识网络。",
+        "Link your cards manually, or set rules to auto-create them — bi-directional links happen on their own. The graph view shows your whole knowledge network at a glance."
+      ),
       glyph: <PixelStar scale={6} />,
     },
   ];
@@ -762,6 +818,25 @@ function FeatureSections() {
 }
 
 function CTASection() {
+  const tr = useT();
+  // Chinese name → English label, used for type tabs and sub-template tiles
+  const NAME_EN = {
+    "笔记": "Notes", "文件": "Files", "主题": "Topics", "剪藏": "Clips",
+    "任务": "Tasks", "项目": "Projects", "开支": "Expenses", "账户": "Accounts",
+    "学习": "Study", "读书笔记": "Reading", "视频笔记": "Video", "灵感": "Spark", "日记": "Journal", "摘抄": "Quote",
+    "图片": "Image", "视频": "Video", "音频": "Audio", "文档": "Doc", "其他": "Other",
+    "人物": "People", "组织": "Org", "地点": "Place", "事件": "Event", "概念": "Concept",
+    "书籍": "Book", "影视": "Film/TV", "动漫": "Anime", "音乐": "Music", "游戏": "Game", "课程": "Course", "应用": "App",
+    "网页": "Web", "邮件": "Email", "小红书": "Rednote", "B 站": "Bilibili", "微信公众号": "WeChat",
+    "抖音": "TikTok", "微博": "Weibo", "知乎": "Zhihu", "豆瓣": "Douban",
+    "推特 / X": "Twitter / X",
+    "待办": "To-do", "日程": "Schedule", "习惯": "Habit",
+    "在做": "Doing", "已归档": "Archived",
+    "日常": "Daily", "订阅": "Subscriptions", "报销": "Reimburse",
+    "登录": "Logins", "银行卡": "Bank Card", "证件": "ID",
+  };
+  const dn = (cn) => (NAME_EN[cn] != null ? tr(cn, NAME_EN[cn]) : cn);
+
   // All 8 core types, each with its sub-template list + visual accent
   const TYPES = [
     {
@@ -781,8 +856,8 @@ function CTASection() {
       tint: "#D8D4CC", ink: "#5A5448",
       subs: [
         { name: "图片", tint: "#F4D8D0",            ink: "#9E6B5C",                 icon: "image",  added: true  },
+        { name: "视频", tint: "#D8C8F0",            ink: "#6A4E9A",                 icon: "video",  added: true  },
         { name: "音频", tint: "#E8D4F0",            ink: "#7A5AA6",                 icon: "audio",  added: true  },
-        { name: "总结", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "chart",  added: true  },
         { name: "文档", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "doc",    added: true  },
         { name: "其他", tint: "#DDD8CE",            ink: "#6A6458",                 icon: "more",   added: false },
       ],
@@ -792,39 +867,46 @@ function CTASection() {
       tint: "#E8D9F0", ink: "#7A5AA6",
       subs: [
         { name: "人物", tint: "var(--candy-fawn)",  ink: "var(--candy-fawn-deep)",  icon: "person", added: true  },
+        { name: "组织", tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "org",    added: true  },
         { name: "地点", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "place",  added: true  },
-        { name: "事件", tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "event",  added: true  },
-        { name: "景点", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "pin",    added: true  },
-        { name: "概念", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "idea",   added: false },
-        { name: "书籍", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "book",   added: false },
-        { name: "系统", tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "system", added: false },
-        { name: "记录", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "log",    added: false },
-        { name: "豆列", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "list",   added: false },
-        { name: "话题", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "tag",    added: false },
-        { name: "文集", tint: "#D8D4CC",            ink: "#5A5448",                 icon: "anth",   added: false },
-        { name: "债券", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "bond",   added: false },
+        { name: "事件", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "event",  added: true  },
+        { name: "概念", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "idea",   added: true  },
+        { name: "书籍", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "book",   added: true  },
+        { name: "影视", tint: "var(--candy-fawn)",  ink: "var(--candy-fawn-deep)",  icon: "video",  added: false },
+        { name: "动漫", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "anime",  added: false },
+        { name: "音乐", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "audio",  added: false },
+        { name: "游戏", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "game",   added: false },
+        { name: "课程", tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "study",  added: false },
+        { name: "应用", tint: "#D8D4CC",            ink: "#5A5448",                 icon: "app",    added: false },
       ],
     },
     {
       key: "clip", name: "剪藏", icon: "clip",
       tint: "var(--candy-sky)", ink: "var(--candy-sky-deep)",
       subs: [
-        { name: "网页剪藏", tint: "var(--candy-fawn)", ink: "var(--candy-fawn-deep)", icon: "web",    added: true  },
-        { name: "小红书",   tint: "var(--candy-pink)", ink: "var(--candy-pink-deep)", icon: "rednote",added: true  },
-        { name: "B 站",     tint: "var(--candy-sky)",  ink: "var(--candy-sky-deep)",  icon: "bili",   added: true  },
-        { name: "微信公众号", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "wechat", added: true  },
-        { name: "抖音",     tint: "#C8C4CC",           ink: "#3A3838",                icon: "tiktok", added: false },
-        { name: "微博",     tint: "var(--candy-fawn)", ink: "var(--candy-fawn-deep)", icon: "weibo",  added: false },
-        { name: "推特 / X", tint: "#D8D4CC",           ink: "#3A3838",                icon: "x",      added: false },
-        { name: "其他剪藏", tint: "#DDD8CE",           ink: "#6A6458",                icon: "clipmore",added: false },
+        { name: "网页",      tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "web",       added: true  },
+        { name: "邮件",      tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "mail",      added: true  },
+        { name: "小红书",    tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "rednote",   added: true  },
+        { name: "B 站",      tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "bili",      added: true  },
+        { name: "微信公众号", tint: "var(--candy-fawn)",  ink: "var(--candy-fawn-deep)",  icon: "wechat",    added: true  },
+        { name: "抖音",      tint: "#D8D4CC",            ink: "#3A3838",                 icon: "tiktok",    added: true  },
+        { name: "微博",      tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "weibo",     added: true  },
+        { name: "知乎",      tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "zhihu",     added: true  },
+        { name: "豆瓣",      tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "douban",    added: false },
+        { name: "Github",   tint: "#E8D9F0",            ink: "#7A5AA6",                 icon: "github",    added: false },
+        { name: "推特 / X",  tint: "var(--candy-maize)", ink: "#8A6B1A",                 icon: "x",         added: false },
+        { name: "Instagram", tint: "var(--candy-fawn)", ink: "var(--candy-fawn-deep)",  icon: "instagram", added: false },
+        { name: "Reddit",   tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "reddit",    added: false },
+        { name: "App Store", tint: "var(--candy-sky)",  ink: "var(--candy-sky-deep)",   icon: "appstore",  added: false },
       ],
     },
     {
       key: "task", name: "任务", icon: "task",
       tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)",
       subs: [
-        { name: "待办",   tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "todo", added: true },
-        { name: "已完成", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "done", added: true },
+        { name: "待办", tint: "var(--candy-pink)",  ink: "var(--candy-pink-deep)",  icon: "todo",     added: true },
+        { name: "日程", tint: "var(--candy-sky)",   ink: "var(--candy-sky-deep)",   icon: "schedule", added: true },
+        { name: "习惯", tint: "var(--candy-olive)", ink: "var(--candy-olive-deep)", icon: "habit",    added: true },
       ],
     },
     {
@@ -928,6 +1010,10 @@ function CTASection() {
       tag:     <g fill={color}><path d="M4 4 h11 l9 9 l-11 11 l-9 -9 z"/><circle cx="10" cy="10" r="2" fill="white"/></g>,
       anth:    <g fill={color}><rect x="4" y="5" width="8" height="18"/><rect x="13" y="5" width="4" height="18" opacity="0.7"/><rect x="18" y="7" width="6" height="16" opacity="0.5"/></g>,
       bond:    <g fill="none" stroke={color} strokeWidth="2"><rect x="4" y="7" width="20" height="14" rx="1.5"/><circle cx="14" cy="14" r="3.5"/><path d="M14 11 v6 M11 14 h6" strokeWidth="1.5"/></g>,
+      org:     <g fill={color}><rect x="11" y="3" width="6" height="6"/><rect x="3" y="19" width="6" height="6"/><rect x="11" y="19" width="6" height="6"/><rect x="19" y="19" width="6" height="6"/><path d="M14 9 v4 M6 19 v-3 h16 v3 M14 16 v3" stroke={color} strokeWidth="1.5" fill="none"/></g>,
+      anime:   <g fill={color}><circle cx="14" cy="14" r="10"/><circle cx="10" cy="13" r="2.2" fill="white"/><circle cx="18" cy="13" r="2.2" fill="white"/><circle cx="10" cy="13" r="1" fill={color}/><circle cx="18" cy="13" r="1" fill={color}/><path d="M10 19 q4 2 8 0" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></g>,
+      game:    <g fill={color}><path d="M6 9 h16 a4 4 0 0 1 4 4 v4 a4 4 0 0 1 -4 4 h-1 l-3 -3 h-8 l-3 3 h-1 a4 4 0 0 1 -4 -4 v-4 a4 4 0 0 1 4 -4 z"/><circle cx="9" cy="15" r="1.5" fill="white"/><circle cx="19" cy="13" r="1.2" fill="white"/><circle cx="22" cy="16" r="1.2" fill="white"/><circle cx="19" cy="17" r="1.2" fill="white"/></g>,
+      app:     <g fill={color}><rect x="3" y="3" width="9" height="9" rx="1.5"/><rect x="16" y="3" width="9" height="9" rx="1.5"/><rect x="3" y="16" width="9" height="9" rx="1.5"/><rect x="16" y="16" width="9" height="9" rx="4.5"/></g>,
       // Clip subs
       web:     <g fill="none" stroke={color} strokeWidth="2"><circle cx="14" cy="14" r="10"/><path d="M4 14 h20 M14 4 c3 3 5 7 5 10 s-2 7 -5 10 M14 4 c-3 3 -5 7 -5 10 s2 7 5 10"/></g>,
       rednote: <g fill={color}><rect x="4" y="4" width="20" height="20" rx="5"/><path d="M10 11 v8 l4 -3 l4 3 v-8 z" fill="white"/></g>,
@@ -935,11 +1021,20 @@ function CTASection() {
       wechat:  <g fill={color}><ellipse cx="11" cy="12" rx="7" ry="6"/><circle cx="9" cy="11" r="1" fill="white"/><circle cx="13" cy="11" r="1" fill="white"/><ellipse cx="19" cy="17" rx="5.5" ry="4.5"/><circle cx="18" cy="16" r="0.8" fill="white"/><circle cx="21" cy="16" r="0.8" fill="white"/></g>,
       tiktok:  <g fill={color}><path d="M17 4 v13 a4 4 0 1 1 -4 -4 v-3 a7 7 0 1 0 7 7 v-8 a7 7 0 0 0 4 1.5 v-3 a4 4 0 0 1 -4 -3.5 z"/></g>,
       weibo:   <g fill={color}><ellipse cx="14" cy="15" rx="10" ry="7"/><circle cx="11" cy="15" r="2.5" fill="white"/><circle cx="12" cy="14.5" r="1" fill={color}/></g>,
-      x:       <path d="M5 5 l7 9 l-7 9 h3 l5 -7 l5 7 h4 l-8 -11 l7 -7 h-3 l-5 6 l-4 -6 z" fill={color}/>,
-      clipmore:<g fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round"><path d="M10 6 l10 10 a4 4 0 0 1 -5.6 5.6 l-10 -10 a6 6 0 0 1 8.5 -8.5 l8 8"/></g>,
+      x:        <path d="M5 5 l7 9 l-7 9 h3 l5 -7 l5 7 h4 l-8 -11 l7 -7 h-3 l-5 6 l-4 -6 z" fill={color}/>,
+      clipmore: <g fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round"><path d="M10 6 l10 10 a4 4 0 0 1 -5.6 5.6 l-10 -10 a6 6 0 0 1 8.5 -8.5 l8 8"/></g>,
+      mail:     <g><rect x="3" y="6" width="22" height="16" rx="2" fill={color}/><path d="M3 8 l11 8 l11 -8" fill="none" stroke="white" strokeWidth="1.6" strokeLinejoin="round"/></g>,
+      zhihu:    <text x="14" y="23" textAnchor="middle" fontSize="22" fontFamily="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" fontWeight="700" fill={color}>知</text>,
+      douban:   <g fill={color}><rect x="4" y="4" width="20" height="20" rx="3"/><rect x="7" y="9" width="14" height="2" fill="white"/><rect x="9" y="14" width="10" height="2" fill="white"/><rect x="7" y="19" width="14" height="2" fill="white"/></g>,
+      github:   <g fill={color}><path d="M14 3 a11 11 0 0 0 -3.5 21.4 c0.55 0.1 0.75 -0.24 0.75 -0.53 v-1.85 c-3.05 0.66 -3.7 -1.47 -3.7 -1.47 c-0.5 -1.27 -1.22 -1.6 -1.22 -1.6 c-1 -0.68 0.08 -0.67 0.08 -0.67 c1.1 0.08 1.68 1.13 1.68 1.13 c0.98 1.68 2.58 1.2 3.21 0.92 c0.1 -0.71 0.39 -1.2 0.7 -1.48 c-2.43 -0.28 -4.99 -1.22 -4.99 -5.42 c0 -1.2 0.43 -2.18 1.13 -2.94 c-0.11 -0.28 -0.49 -1.4 0.11 -2.92 c0 0 0.92 -0.3 3 1.13 a10.4 10.4 0 0 1 5.46 0 c2.08 -1.43 3 -1.13 3 -1.13 c0.6 1.52 0.22 2.64 0.11 2.92 c0.7 0.76 1.13 1.74 1.13 2.94 c0 4.21 -2.57 5.13 -5.01 5.41 c0.4 0.34 0.75 1.02 0.75 2.05 v3.04 c0 0.3 0.2 0.64 0.76 0.53 a11 11 0 0 0 -3.5 -21.4 z"/></g>,
+      instagram:<g fill="none" stroke={color} strokeWidth="2"><rect x="4" y="4" width="20" height="20" rx="5"/><circle cx="14" cy="14" r="5"/><circle cx="20" cy="8" r="1.2" fill={color}/></g>,
+      reddit:   <g fill={color}><circle cx="14" cy="16" r="9"/><circle cx="22" cy="6" r="2"/><path d="M14 7 l1 -3 l5 1" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round"/><circle cx="11" cy="15" r="1.4" fill="white"/><circle cx="17" cy="15" r="1.4" fill="white"/><path d="M10 19 q4 2.5 8 0" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></g>,
+      appstore: <g fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round"><path d="M7 22 l6 -12"/><path d="M21 22 l-6 -12"/><path d="M11 18 h6"/><path d="M8 22 h2"/></g>,
       // Task
       todo:    <g fill="none" stroke={color} strokeWidth="2.2"><rect x="5" y="5" width="18" height="18" rx="3"/></g>,
       done:    <g><rect x="5" y="5" width="18" height="18" rx="3" fill={color}/><path d="M9 14 l4 4 l7 -8" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></g>,
+      schedule:<g><rect x="4" y="6" width="20" height="18" rx="2" fill={color}/><rect x="4" y="6" width="20" height="5" fill={color}/><rect x="8" y="3" width="2" height="6" fill="white"/><rect x="18" y="3" width="2" height="6" fill="white"/><rect x="8" y="14" width="3" height="3" fill="white"/><rect x="13" y="14" width="3" height="3" fill="white"/><rect x="18" y="14" width="3" height="3" fill="white"/><rect x="8" y="19" width="3" height="3" fill="white"/><rect x="13" y="19" width="3" height="3" fill="white"/></g>,
+      habit:   <g fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4 c-2 4 -7 6 -7 12 a7 7 0 0 0 14 0 c0 -3 -2 -5 -3 -7"/><path d="M14 14 c-1 1.5 -3 3 -3 5 a3 3 0 0 0 6 0 c0 -2 -2 -3 -3 -5 z" fill={color}/></g>,
       // Project / cost / acc
       doing:   <g fill="none" stroke={color} strokeWidth="2.2"><circle cx="14" cy="14" r="10"/><path d="M14 8 v6 l4 3"/></g>,
       archive: <g fill={color}><rect x="4" y="6" width="20" height="5" rx="1"/><rect x="5" y="12" width="18" height="12" rx="1" opacity="0.7"/><rect x="11" y="16" width="6" height="2" fill="white"/></g>,
@@ -971,7 +1066,7 @@ function CTASection() {
       }}>
         <TemplateIcon kind={t.icon} color={t.ink} />
       </div>
-      <div className="cn" style={{ fontSize: 13, fontWeight: 500, color: "var(--pink-ink)" }}>{t.name}</div>
+      <div className="cn" style={{ fontSize: 13, fontWeight: 500, color: "var(--pink-ink)" }}>{dn(t.name)}</div>
     </div>
   );
 
@@ -995,7 +1090,7 @@ function CTASection() {
             color: "var(--candy-pink-deep)",
             letterSpacing: "-0.04em",
             fontWeight: 500,
-          }}>合集</span>
+          }}>{tr("合集", "Set")}</span>
           <span className="serif" style={{
             fontSize: 88,
             color: "var(--candy-olive-deep)",
@@ -1003,7 +1098,7 @@ function CTASection() {
             fontWeight: 500,
             letterSpacing: "0em",
           }}>
-            模板.
+            {tr("模板.", "templates.")}
           </span>
         </div>
 
@@ -1068,7 +1163,7 @@ function CTASection() {
                   fontWeight: isActive ? 700 : 500,
                   color: isActive ? "oklch(0.22 0.05 var(--hue))" : "var(--pink-ink)",
                   transition: "color 0.3s ease, font-weight 0.3s ease",
-                }}>{t.name}</span>
+                }}>{dn(t.name)}</span>
                 <span className="mono" style={{
                   fontSize: 10,
                   color: isActive ? "oklch(0.3 0.08 var(--hue))" : "var(--pink-600)",
@@ -1090,7 +1185,7 @@ function CTASection() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <div className="cn" style={{ fontSize: 18, fontWeight: 600, color: "var(--pink-ink)" }}>
-                {current.name}
+                {dn(current.name)}
               </div>
               <span className="mono" style={{ fontSize: 10, color: "var(--pink-600)", letterSpacing: "0.1em" }}>
                 .{current.key.toUpperCase()} / .{String(current.subs.length).padStart(2, "0")}
@@ -1113,32 +1208,33 @@ function CTASection() {
 }
 
 function PropsSection() {
+  const t = useT();
   // Property types available
   const PROP_TYPES = [
-    { key: "text",    cn: "文本",   icn: "T",  color: "var(--candy-sky-deep)" },
-    { key: "tag",     cn: "标签",   icn: "#",  color: "var(--candy-pink-deep)" },
-    { key: "select",  cn: "选项",   icn: "▾",  color: "var(--candy-olive-deep)" },
-    { key: "rating",  cn: "评分",   icn: "★",  color: "var(--candy-fawn-deep)" },
-    { key: "date",    cn: "日期",   icn: "◷",  color: "var(--candy-maize)" },
-    { key: "number",  cn: "数字",   icn: "0",  color: "var(--candy-pink-deep)" },
-    { key: "check",   cn: "复选",   icn: "✓",  color: "var(--candy-olive-deep)" },
-    { key: "color",   cn: "颜色",   icn: "●",  color: "var(--candy-sky-deep)" },
-    { key: "url",     cn: "链接",   icn: "↗",  color: "var(--candy-fawn-deep)" },
-    { key: "relation",cn: "关系",   icn: "↔",  color: "var(--candy-pink-deep)" },
-    { key: "file",    cn: "文件",   icn: "◨",  color: "var(--candy-sky-deep)" },
-    { key: "person",  cn: "人",     icn: "◉",  color: "var(--candy-olive-deep)" },
+    { key: "text",    cn: "文本", en: "Text",     icn: "T",  color: "var(--candy-sky-deep)" },
+    { key: "tag",     cn: "标签", en: "Tag",      icn: "#",  color: "var(--candy-pink-deep)" },
+    { key: "select",  cn: "选项", en: "Select",   icn: "▾",  color: "var(--candy-olive-deep)" },
+    { key: "rating",  cn: "评分", en: "Rating",   icn: "★",  color: "var(--candy-fawn-deep)" },
+    { key: "date",    cn: "日期", en: "Date",     icn: "◷",  color: "var(--candy-maize)" },
+    { key: "number",  cn: "数字", en: "Number",   icn: "0",  color: "var(--candy-pink-deep)" },
+    { key: "check",   cn: "复选", en: "Check",    icn: "✓",  color: "var(--candy-olive-deep)" },
+    { key: "color",   cn: "颜色", en: "Color",    icn: "●",  color: "var(--candy-sky-deep)" },
+    { key: "url",     cn: "链接", en: "URL",      icn: "↗",  color: "var(--candy-fawn-deep)" },
+    { key: "relation",cn: "关系", en: "Relation", icn: "↔",  color: "var(--candy-pink-deep)" },
+    { key: "file",    cn: "文件", en: "File",     icn: "◨",  color: "var(--candy-sky-deep)" },
+    { key: "person",  cn: "作者", en: "Author",   icn: "◉",  color: "var(--candy-olive-deep)" },
   ];
 
   // Mocked card props, each row shows a different property type
   const cardProps = [
-    { type: "tag",     name: "标签",   value: ["灵感", "设计"] },
-    { type: "select",  name: "状态",   value: { label: "进行中", color: "var(--candy-sky-deep)" } },
-    { type: "rating",  name: "评分",   value: 4 },
-    { type: "date",    name: "创建于", value: "2026·03·21" },
-    { type: "color",   name: "颜色",   value: "var(--candy-pink-deep)" },
-    { type: "relation",name: "相关",   value: "@ 产品设计 · 第 0.5 版" },
-    { type: "number",  name: "阅读",   value: "12 min" },
-    { type: "person",  name: "作者",   value: "@you" },
+    { type: "tag",     name: t("标签", "Tags"),       value: t(["灵感", "设计"], ["Spark", "Design"]) },
+    { type: "select",  name: t("状态", "Status"),     value: { label: t("进行中", "In progress"), color: "var(--candy-sky-deep)" } },
+    { type: "rating",  name: t("评分", "Rating"),     value: 4 },
+    { type: "date",    name: t("创建于", "Created"),  value: "2026·03·21" },
+    { type: "color",   name: t("颜色", "Color"),      value: "var(--candy-pink-deep)" },
+    { type: "relation",name: t("相关", "Related"),    value: t("@ 产品设计 · 第 0.5 版", "@ Product design · v0.5") },
+    { type: "number",  name: t("阅读", "Read"),       value: "12 min" },
+    { type: "person",  name: t("作者", "Author"),     value: "@you" },
   ];
 
   return (
@@ -1162,13 +1258,13 @@ function PropsSection() {
             color: "var(--candy-sky-deep)",
             letterSpacing: "-0.04em",
             fontWeight: 500,
-          }}>自定义</span>
+          }}>{t("自定义", "Custom")}</span>
           <span className="serif" style={{
             fontSize: 88,
             color: "var(--candy-pink-deep)",
             fontWeight: 500,
           }}>
-            属性.
+            {t("属性.", "properties.")}
           </span>
         </div>
 
@@ -1186,13 +1282,14 @@ function PropsSection() {
               marginBottom: 32,
               maxWidth: 520,
             }}>
-              给卡片加上它需要的<span style={{ color: "var(--candy-pink-deep)", fontWeight: 600 }}>任何字段</span>——
-              标签、评分、日期、颜色、关系……
-              你定义一次，整个合集都自动继承。
+              {t(
+                <>给卡片加上它需要的<span style={{ color: "var(--candy-pink-deep)", fontWeight: 600 }}>任何字段</span>——标签、评分、日期、颜色、关系……你定义一次，整个合集都自动继承。</>,
+                <>Give a card <span style={{ color: "var(--candy-pink-deep)", fontWeight: 600 }}>any field</span> it needs — tags, ratings, dates, colors, relations… Define it once and the whole set inherits it.</>
+              )}
             </div>
 
             <div className="cn" style={{ fontSize: 14, color: "var(--pink-600)", marginBottom: 16 }}>
-              十二种属性类型
+              {t("十二种属性类型", "Twelve property types")}
             </div>
             <div style={{
               display: "flex", flexWrap: "wrap", gap: 10,
@@ -1215,7 +1312,7 @@ function PropsSection() {
                     lineHeight: 1,
                   }}>{p.icn}</span>
                   <span className="cn" style={{ fontSize: 13, color: "var(--pink-ink)", fontWeight: 500 }}>
-                    {p.cn}
+                    {t(p.cn, p.en)}
                   </span>
                 </div>
               ))}
@@ -1239,10 +1336,10 @@ function PropsSection() {
               }}>＋</div>
               <div>
                 <div className="cn" style={{ fontSize: 15, color: "var(--pink-ink)", fontWeight: 600 }}>
-                  或者，写一个公式字段
+                  {t("或者，写一个公式字段", "Or write a formula field")}
                 </div>
                 <div className="cn" style={{ fontSize: 13, color: "var(--pink-600)", marginTop: 2 }}>
-                  引用其他属性，自动计算。
+                  {t("引用其他属性，自动计算。", "Reference other properties; computed automatically.")}
                 </div>
               </div>
             </div>
@@ -1274,17 +1371,20 @@ function PropsSection() {
                 </span>
                 <span style={{ flex: 1 }}></span>
                 <span className="cn" style={{ fontSize: 11, color: "var(--pink-600)" }}>
-                  最后编辑 · 2 分钟前
+                  {t("最后编辑 · 2 分钟前", "Edited · 2 min ago")}
                 </span>
               </div>
 
               {/* card title */}
               <div style={{ padding: "24px 28px 8px" }}>
                 <div className="cn" style={{ fontSize: 24, fontWeight: 600, color: "var(--pink-ink)", marginBottom: 8 }}>
-                  给粉色版本做落地页
+                  {t("给粉色版本做落地页", "Build a landing page for the pink edition")}
                 </div>
                 <div className="cn" style={{ fontSize: 14, color: "var(--pink-600)", lineHeight: 1.6 }}>
-                  卡片不只是一段文字——它是一个可以带属性的对象。下面这些都是这张卡片身上的字段。
+                  {t(
+                    "卡片不只是一段文字——它是一个可以带属性的对象。下面这些都是这张卡片身上的字段。",
+                    "A card is more than text — it's an object that can carry properties. Everything below is a field on this card."
+                  )}
                 </div>
               </div>
 
@@ -1345,7 +1445,7 @@ function PropsSection() {
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
                     lineHeight: 1,
                   }}>＋</span>
-                  <span className="cn" style={{ fontSize: 13 }}>添加属性</span>
+                  <span className="cn" style={{ fontSize: 13 }}>{t("添加属性", "Add property")}</span>
                 </div>
               </div>
             </div>
@@ -1363,7 +1463,7 @@ function PropsSection() {
               boxShadow: "0 10px 30px -10px oklch(0.5 0.2 355 / 0.5)",
               transform: "rotate(4deg)",
             }}>
-              <span className="cn">八个字段，一张卡片</span>
+              <span className="cn">{t("八个字段，一张卡片", "Eight fields, one card")}</span>
             </div>
 
             <div style={{
@@ -1463,6 +1563,8 @@ function PropValue({ prop }) {
 }
 
 function Footer() {
+  const t = useT();
+  const { lang } = useLang();
   const cols = [
     {
       title: "产品",
@@ -1501,11 +1603,11 @@ function Footer() {
       title: "社交",
       titleEn: "ELSEWHERE",
       links: [
-        { cn: "小红书",     en: "@cardnote" },
-        { cn: "微博",       en: "@cardnote" },
-        { cn: "X / Twitter",en: "@cardnote_app" },
-        { cn: "GitHub",     en: "/cardnote" },
-        { cn: "邮件订阅",   en: "newsletter" },
+        { cn: "小红书",     en: "@cardnote",      nameEn: "Rednote" },
+        { cn: "微博",       en: "@cardnote",      nameEn: "Weibo" },
+        { cn: "X / Twitter",en: "@cardnote_app",  nameEn: "Twitter / X" },
+        { cn: "GitHub",     en: "/cardnote",      nameEn: "GitHub" },
+        { cn: "邮件订阅",   en: "newsletter",     nameEn: "Newsletter" },
       ],
     },
   ];
@@ -1538,11 +1640,14 @@ function Footer() {
               </div>
             </div>
             <div className="cn" style={{ fontSize: 13, color: "var(--pink-ink)", lineHeight: 1.7, maxWidth: 320, marginBottom: 24 }}>
-              一张卡片，一刻时间，一个合集。为喜欢整理、喜欢回看、喜欢把日常放进盒子的人做的。
+              {t(
+                "一张卡片，一刻时间，一个合集。为喜欢整理、喜欢回看、喜欢把日常放进盒子的人做的。",
+                "One card, one moment, one set — for people who like to organize, revisit, and tuck the everyday into boxes."
+              )}
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
-                placeholder="你的邮箱"
+                placeholder={t("你的邮箱", "Your email")}
                 className="cn"
                 style={{
                   flex: 1, maxWidth: 220,
@@ -1561,7 +1666,7 @@ function Footer() {
                 fontSize: 12, fontWeight: 600,
                 fontFamily: "var(--font-cn)",
               }}>
-                订阅 →
+                {t("订阅 →", "Subscribe →")}
               </button>
             </div>
           </div>
@@ -1570,7 +1675,7 @@ function Footer() {
             <div key={col.title}>
               <div style={{ marginBottom: 20 }}>
                 <div className="cn" style={{ fontSize: 13, fontWeight: 700, color: "var(--pink-ink)", marginBottom: 2 }}>
-                  {col.title}
+                  {t(col.title, col.titleEn.charAt(0) + col.titleEn.slice(1).toLowerCase())}
                 </div>
                 <div className="mono" style={{ fontSize: 9, color: "var(--pink-600)", letterSpacing: "0.12em" }}>
                   .{col.titleEn}
@@ -1582,10 +1687,12 @@ function Footer() {
                     display: "flex", alignItems: "baseline", gap: 8,
                     textDecoration: "none",
                   }}>
-                    <span className="cn" style={{ fontSize: 13, color: "var(--pink-ink)" }}>{l.cn}</span>
-                    <span className="mono" style={{ fontSize: 9, color: "var(--pink-600)", opacity: 0.7 }}>
-                      {l.en}
-                    </span>
+                    <span className="cn" style={{ fontSize: 13, color: "var(--pink-ink)" }}>{t(l.cn, l.nameEn ?? l.en)}</span>
+                    {lang === "en" ? null : (
+                      <span className="mono" style={{ fontSize: 9, color: "var(--pink-600)", opacity: 0.7 }}>
+                        {l.en}
+                      </span>
+                    )}
                   </a>
                 ))}
               </div>
@@ -1603,7 +1710,7 @@ function Footer() {
               © 2026 CARDNOTE
             </div>
             <div className="mono" style={{ fontSize: 10, color: "var(--pink-600)", letterSpacing: "0.1em" }}>
-              MADE IN SYDNEY · 悉尼
+              {t("MADE IN SYDNEY · 悉尼", "MADE IN SYDNEY")}
             </div>
             <div className="mono" style={{ fontSize: 10, color: "var(--pink-600)", letterSpacing: "0.1em" }}>
               YOUR EDITION · v0.0.1
@@ -1611,7 +1718,7 @@ function Footer() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             <span className="serif" style={{ fontSize: 12, fontStyle: "italic", color: "var(--pink-600)" }}>
-              一张卡片 · 一刻时间 · 一个合集
+              {t("一张卡片 · 一刻时间 · 一个合集", "one card · one moment · one set")}
             </span>
             <div style={{ display: "flex", gap: 6 }}>
               {[

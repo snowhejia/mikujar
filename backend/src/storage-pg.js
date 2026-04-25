@@ -2984,16 +2984,11 @@ export async function getEffectiveSchemaForCard(userIdIn, cardId) {
       }
     }
   }
-  // 按 order 排序，使前端展示稳定
-  // 兼容历史数据：旧版 work 父类型 schema 可能未含“标题”，这里兜底补齐。
-  if (lastKind === "work" && !fieldsById.has("sf-work-title")) {
-    fieldsById.set("sf-work-title", {
-      id: "sf-work-title",
-      name: "标题",
-      type: "text",
-      order: -1,
-    });
-  }
+  // 按 order 排序，使前端展示稳定。
+  // 注:旧版本曾在此兜底补齐 work 类的 sf-work-title schema 字段,但卡片标题
+  // 现在已经独立成 cards.title 列(由 renderCardTitleRow 在前端渲染),不应
+  // 再作为 schema 字段重复出现 → 已删除该兜底。同名旧数据由
+  // backend/scripts/dedupe-work-title.mjs 一次性迁移清掉。
   const fields = [...fieldsById.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const autoLinkRules = mergeAutoLinkRulesFromChain(chain.rows);
   return {

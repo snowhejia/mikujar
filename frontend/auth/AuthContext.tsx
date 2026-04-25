@@ -533,11 +533,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshSession]);
 
   const applyAuthSuccess = useCallback((token: string, user: AuthUser) => {
-    if (authUsesHttpOnlyCookie()) {
-      clearAdminToken();
-    } else {
-      setAdminToken(token);
-    }
+    /* 始终把 JWT 存进 localStorage：cookie 模式下当 Bearer 兜底（iOS Safari ITP
+       把跨站 cookie 当 3rd-party 屏蔽，cardnote.io ↔ api.cardnote.hejiac.com
+       不同 eTLD+1，真机登录后 cookie 不发 → 401 全军覆没）。
+       后端 getJwtSession 同时接 Bearer 和 cookie，二选一通过即可。 */
+    setAdminToken(token);
     setCurrentUser(user);
     setIsAdmin(user.role === "admin");
     setLoginOpen(false);

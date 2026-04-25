@@ -1,8 +1,12 @@
 // landing-pink.jsx — pink glass edition
 import React from "react";
+import { useAppUiLang } from "../appUiLang";
 
-const LangCtx = React.createContext({ lang: "zh", setLang: () => {} });
-const useLang = () => React.useContext(LangCtx);
+/** 落地页与登录页共用 AppUiLang，避免点 CTA 后语言被重置 */
+const useLang = () => {
+  const { lang, setLang } = useAppUiLang();
+  return { lang, setLang };
+};
 const useT = () => {
   const { lang } = useLang();
   return React.useCallback((zh, en) => (lang === "en" ? en : zh), [lang]);
@@ -12,9 +16,7 @@ function TopBar({ onStart }) {
   const { lang, setLang } = useLang();
   const t = useT();
   const toggleLang = () => {
-    const next = lang === "zh" ? "en" : "zh";
-    setLang(next);
-    try { localStorage.setItem("landing.lang", next); } catch {}
+    setLang(lang === "zh" ? "en" : "zh");
   };
   const nav = [
     { en: "OVERVIEW",  cn: "概览" },
@@ -437,14 +439,7 @@ function GlassFolder({ children }) {
 function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
   const [mouse, setMouse] = React.useState({ px: 0, py: 0 });
   const [expanded, setExpanded] = React.useState(false);
-  const [lang, setLang] = React.useState(() => {
-    try {
-      return localStorage.getItem("landing.lang") === "en" ? "en" : "zh";
-    } catch {
-      return "zh";
-    }
-  });
-  const langCtxValue = React.useMemo(() => ({ lang, setLang }), [lang]);
+  const { lang } = useLang();
   const heroRef = React.useRef(null);
 
   const onMove = (e) => {
@@ -457,7 +452,6 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
   };
 
   return (
-    <LangCtx.Provider value={langCtxValue}>
     <div
       style={{
         background: "var(--pink-100)",
@@ -730,7 +724,6 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         </>
       )}
     </div>
-    </LangCtx.Provider>
   );
 }
 

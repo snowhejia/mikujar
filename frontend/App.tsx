@@ -539,11 +539,50 @@ export default function App() {
     authReady,
     writeRequiresLogin,
     openLogin,
+    setLoginOpen,
     logout,
     currentUser,
     refreshMe,
     loginWallBlocking,
   } = useAuth();
+
+  /** 浅路由：登录走 /login（可选 ?mode=register），登录成功后由 AuthContext
+     重置回 "/"。整个 SPA 没有路由库，只用 history + popstate 同步 pathname。 */
+  const [pathname, setPathname] = useState<string>(() =>
+    typeof window === "undefined" ? "/" : window.location.pathname
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const navigateTo = useCallback((path: string) => {
+    if (typeof window === "undefined") return;
+    if (window.location.pathname + window.location.search === path) return;
+    window.history.pushState(null, "", path);
+    setPathname(window.location.pathname);
+  }, []);
+  const goLogin = useCallback(
+    (panel?: "login" | "register") => {
+      navigateTo(panel === "register" ? "/login?mode=register" : "/login");
+    },
+    [navigateTo]
+  );
+
+  /** /login 路径自动唤起登录模态；离开则关掉 */
+  useEffect(() => {
+    if (!loginWallBlocking) return;
+    if (pathname === "/login") {
+      const params = new URLSearchParams(
+        typeof window === "undefined" ? "" : window.location.search
+      );
+      const panel = params.get("mode") === "register" ? "register" : "login";
+      openLogin(panel);
+    } else {
+      setLoginOpen(false);
+    }
+  }, [loginWallBlocking, pathname, openLogin, setLoginOpen]);
 
   const { dataMode, setDataMode } = useAppDataMode();
   const c = useAppChrome();
@@ -7176,9 +7215,11 @@ export default function App() {
     );
   }
 
-  /** 未登录：渲染粉色 Landing，点 CTA 才唤起 AuthProvider 里的登录模态 */
+  /** 未登录：/login 直接渲染登录页（由 AuthProvider 顶层弹出全屏模态），
+     其它路径渲染粉色 Landing；CTA 跳到 /login 走真正的路由。 */
   if (loginWallBlocking) {
-    return <LandingPage onStart={openLogin} />;
+    if (pathname === "/login") return null;
+    return <LandingPage onStart={goLogin} />;
   }
 
   return (
@@ -7265,7 +7306,7 @@ export default function App() {
                 <button
                   type="button"
                   className="sidebar__admin-icon-btn sidebar__admin-icon-btn--mobile-browse"
-                  onClick={() => openLogin()}
+                  onClick={() => goLogin()}
                   aria-label={c.login}
                   title={c.loginTitle}
                 >
@@ -7330,7 +7371,7 @@ export default function App() {
                 <button
                   type="button"
                   className="sidebar__admin-icon-btn"
-                  onClick={() => openLogin()}
+                  onClick={() => goLogin()}
                   aria-label={c.login}
                   title={c.loginTitle}
                 >
@@ -9258,7 +9299,7 @@ export default function App() {
           onClick={() => {
             if (remindersViewActive) {
               if (writeRequiresLogin && !getAdminToken() && !isTauri()) {
-                openLogin();
+                goLogin();
                 return;
               }
               openNewTaskReminderPicker();
@@ -9272,7 +9313,7 @@ export default function App() {
               return;
             }
             if (writeRequiresLogin && !getAdminToken() && !isTauri()) {
-              openLogin();
+              goLogin();
               return;
             }
             if (

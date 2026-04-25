@@ -541,6 +541,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(user);
     setIsAdmin(user.role === "admin");
     setLoginOpen(false);
+    /* 登录/注册成功后从 /login 路由回到根；不在 /login 时不动 URL，避免误清查询 */
+    if (typeof window !== "undefined" && window.location.pathname === "/login") {
+      window.history.replaceState(null, "", "/");
+    }
   }, []);
 
   const login = useCallback(
